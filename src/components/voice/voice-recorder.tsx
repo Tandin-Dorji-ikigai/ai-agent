@@ -24,8 +24,16 @@ export interface VoiceRecorderProps {
   recordLabel?: string;
 }
 
-/** WAV is about 1.9 MB a minute at 16 kHz; stay under Groq's 25 MB upload limit. */
-const WAV_MAX_SECONDS = 12 * 60;
+/**
+ * WAV is about 1.9 MB a minute at 16 kHz. Hosted on Vercel, a request can carry
+ * at most 4.5 MB, so only recordings up to 2 minutes are converted; longer ones
+ * go in their (much smaller) original format.
+ */
+const WAV_MAX_SECONDS = 120;
+/** Vercel's request limit is 4.5 MB; leave room for the form fields. */
+export const MAX_UPLOAD_BYTES = 4.4 * 1024 * 1024;
+/** Speech quality: plenty for transcription, about 0.24 MB a minute. */
+export const SPEECH_BITS_PER_SECOND = 32_000;
 
 /**
  * Browser recordings (webm/mp4) often fail on Groq; 16 kHz WAV is reliable.
@@ -72,6 +80,11 @@ export function VoiceRecorder({
   }, [phase, maxSeconds]);
 
   async function upload(blob: Blob, name: string) {
+    if (blob.size > MAX_UPLOAD_BYTES) {
+      setError("That file is too big to upload (over 4 MB). Record instead, or use a shorter clip.");
+      setPhase("idle");
+      return;
+    }
     setPhase("transcribing");
     setError(null);
     const form = new FormData();
@@ -95,7 +108,7 @@ export function VoiceRecorder({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const rec = new MediaRecorder(stream, { mimeType: mime });
+      const rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: SPEECH_BITS_PER_SECOND });
       const startedAt = Date.now();
       chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);

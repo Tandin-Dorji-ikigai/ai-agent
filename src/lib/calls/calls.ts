@@ -34,8 +34,12 @@ export interface CallRow {
   ended_at: string | null;
 }
 
-/** Suggested length of each uploaded part: long calls never hit the 25 MB limit, and a dropped connection loses at most one part. */
-export const PART_SECONDS = 300;
+/**
+ * Length of each uploaded part: small enough for the hosted 4.5 MB request
+ * limit (about 0.7 MB at speech quality), and a dropped connection loses at
+ * most one part.
+ */
+export const PART_SECONDS = 180;
 /** How long a room and its links stay valid after the first join. */
 const ROOM_HOURS = 6;
 const TRANSCRIBE_TIMEOUT_MS = 60_000;

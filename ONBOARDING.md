@@ -172,6 +172,10 @@ Then walk through the demo yourself (section 6).
 
 Tip: narrow your browser window, or use the browser's mobile view, to see Pema's screen as it looks on a phone.
 
+## 6b. Testing on phones (the hosted test version)
+
+The team's test version runs on Vercel at an `https://….vercel.app` address (ask Tandin for it and for the **demo password**). Enter the password once per device. Open `/entrepreneur/connect` on one phone (Pema) and `/mentor/dashboard` on another (Deki) to try a real call. It uses the same demo data as everyone's laptop, so the rules below apply there too. Setup steps are in the README ("Deploy a test version").
+
 ## 7. Shared database: team rules
 
 All three of us use **one** Supabase database, and there is only **one Pema**. That means:

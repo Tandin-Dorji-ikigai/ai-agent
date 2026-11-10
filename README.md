@@ -163,7 +163,21 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
 
-The demo endpoints have no authentication. **Do not deploy this publicly as it is**: anyone could reset the data.
+The demo endpoints have no user accounts. **Do not deploy publicly without `DEMO_PASSWORD`** (see "Deploy a test version"): without it, anyone could reset the data.
+
+## Deploy a test version (Vercel, free)
+
+For testing on real phones: browsers only allow the microphone and camera over HTTPS, which Vercel provides.
+
+1. At vercel.com, sign in with the GitHub account that owns the repo, then **Add New → Project** and **Import** `ai-agent`. Vercel detects Next.js; keep the defaults.
+2. Under **Environment Variables**, add: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_MODE=live`, `GROQ_API_KEY`, `GROQ_TRANSCRIBE_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and **`DEMO_PASSWORD`** (pick one and share it with the team). Never put these in the repo.
+3. **Deploy.** Open the `https://….vercel.app` address, enter the demo password once per device, and follow the demo script. Every push to `main` redeploys.
+
+What to know:
+- **The password is not accounts.** Everyone types the same one; it keeps strangers from resetting the demo, using the AI and call quotas, or joining calls. Who you are still comes from the page you open (`/entrepreneur/…` = Pema, `/mentor/…` = her mentor). Do not enter real personal details.
+- **Same demo data as the laptops:** the hosted app uses the shared Supabase project, so a **Reset demo** anywhere resets it for everyone.
+- **Limits on the free plan:** a request may run up to 5 minutes (enough for transcription and long calls; keep Fluid compute on, the default), and may carry at most 4.5 MB. The app records speech at 32 kbps, sends calls in 3-minute parts, and refuses bigger uploads with a clear message.
+- `npm run demo:e2e` is for local or test databases; it does not send the demo password.
 
 ## Responsibility boundaries
 

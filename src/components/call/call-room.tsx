@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { CallView } from "@/lib/state-types";
+import { SPEECH_BITS_PER_SECOND } from "@/components/voice/voice-recorder";
 
 type Role = "mentor" | "entrepreneur";
 
@@ -231,7 +232,8 @@ export function CallRoom({
       // One part at a time; every `seconds` the part is closed (and uploaded) and the next begins.
       function begin() {
         const { mimeType, ext } = recorderType();
-        const rec = new MediaRecorder(stream, { mimeType });
+        // Speech quality keeps each part well under the hosted 4.5 MB request limit.
+        const rec = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: SPEECH_BITS_PER_SECOND });
         const chunks: Blob[] = [];
         const part = partRef.current++;
         const startedAt = Date.now() + offsetRef.current;
