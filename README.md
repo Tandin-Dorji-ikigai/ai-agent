@@ -70,7 +70,7 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 2. **Pema → Needs assessment.** Press **Use a sample intro** (or record one, with live AI): "Here is what I understood" shows each answer as heard, suggested or assumed, and after a 5-second countdown the agent saves it, finds the matches and asks the best one, with no further clicks. (Or press **Save needs & find mentor** on the pre-filled form.) On **Connect**: the agent has already asked Deki, with the reply deadline, how it is paid and who is next; below, the top three with their scores, **See the score breakdown**, and the note that the most-booked mentor ranks 13th of 13. Nothing is booked or paid yet.
 3. **Deki → Mentor requests.** Only need-to-know details (no budget), and why the agent picked Deki (88/100). Pick one of Deki's times and press **Accept**. (To show a no: press **Decline** with a reason; the agent asks Sonam next, and Pema's **My bookings** shows who said no and why.)
 4. **Pema → My bookings.** The session time and the preparation brief appear; YDF shows Nu. 1,500 of credit used.
-5. **The session.** On two devices, both press **Join session**, both agree to recording, talk, then both press **Leave**: each phone records only its own microphone, so the agent knows exactly who said what. (Or, on **Deki → Session workspace**, write quick notes and press **Complete session & save notes**.)
+5. **The session.** On two devices, both press **Join session** (recording starts on its own once both are in; either can tap **Stop recording**), talk, then both press **Leave**: each phone records only its own microphone, so the agent knows exactly who said what. (Or, on **Deki → Session workspace**, write quick notes and press **Complete session & save notes**.)
 6. **Deki → Session workspace.** Review the agent's draft actions and press **Confirm selected actions**.
 7. **YDF → Fast-forward 5 days.** The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
 8. **Pema → Notifications.** The replies start pre-filled. Send the interviews check-in reply first ("going well"): the agent confirms the next check-in. Then send the permits follow-up reply (stuck on which permit the walk needs): the agent escalates to YDF, **ESC-101**.
@@ -157,7 +157,7 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/agent/run` | Retry a failed event |
 | POST | `/api/calls/join` | Join the call for a confirmed booking: `{ booking_id, role }` → `livekit: { url, token }` (a personal pass), `call_id`, `server_time_ms` |
 | POST | `/api/mentors/availability` | The mentor's usual weekly times: `{ mentor_id, weekly_slots: [{ day, time }] }`. New requests offer the next of these |
-| POST | `/api/calls/consent` | `{ call_id, role, consent }`. Recording only when both agree |
+| POST | `/api/calls/consent` | `{ call_id, role, consent }`. Joining already agrees, so this is **Stop recording** (`false`: stops it for both, deletes that person's parts) / **Record again** (`true`). Recording needs both people in the call |
 | POST | `/api/calls/track` | Multipart: one part of ONE person's microphone (`call_id, role, part, started_at_ms, file`). Transcribed, audio discarded |
 | POST | `/api/calls/end` | `{ call_id, role, force? }`. When both end: merged transcript with certain speakers → session completed → agent drafts actions |
 | POST | `/api/transcribe` | Audio to text (Whisper); live AI only. `mode=voice_note` (default, optional `language=en`) or `mode=call_recording` (speaker-labelled when the guess finishes safely: `labeled: true`) |
@@ -174,16 +174,16 @@ For testing on real phones: browsers only allow the microphone and camera over H
 2. Under **Environment Variables**, add: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_MODE=live`, `GROQ_API_KEY`, `GROQ_TRANSCRIBE_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and the four sign-in passwords below (all different). Never put these in the repo.
 3. **Deploy.** Open the `https://….vercel.app` address, sign in once per device, and follow the demo script. Every push to `main` redeploys; a changed password applies after the next deploy.
 
-Sign-in is by role, not by person. The password a device types decides what it may open and do; the server checks it on every page and API call, not the page you happen to be on:
+Sign-in is by role, not by person, on **one page for everyone: `/login`**. The password decides the role and where you land; the server checks it on every page and API call, not the page you happen to be on. Use four different passwords:
 
-| Password | Signs in as | Starts at | May open and do |
+| Password | Signs in as | Lands on | May open and do |
 | --- | --- | --- | --- |
-| `ENTREPRENEUR_PASSWORD` | the entrepreneur (Pema) | `/entrepreneur/login` → `/entrepreneur/connect` | entrepreneur screens, needs assessment, mentor requests, replies, the entrepreneur side of calls |
-| `MENTOR_PASSWORD` | the mentor | `/mentor/login` → `/mentor/dashboard` | mentor workspace, accept/decline, availability, session notes, confirming actions, the mentor side of calls |
-| `YDF_PASSWORD` | YDF staff | `/access` → `/ydf` | the YDF page and the demo controls (reset, fast-forward, agent retries) |
-| `DEMO_PASSWORD` | the team | any sign-in page | everything (building, presenting) |
+| `ENTREPRENEUR_PASSWORD` | the entrepreneur (Pema) | `/entrepreneur/connect` | entrepreneur screens, needs assessment, mentor requests, replies, the entrepreneur side of calls |
+| `MENTOR_PASSWORD` | the mentor | `/mentor/dashboard` | mentor workspace, accept/decline, availability, session notes, confirming actions, the mentor side of calls |
+| `YDF_PASSWORD` | YDF staff | `/ydf` | the YDF page and the demo controls (reset, fast-forward, agent retries) |
+| `DEMO_PASSWORD` | the team | `/` | everything (building, presenting) |
 
-Opening another role's page sends you to that role's sign-in page with a note saying who you are signed in as; another role's API answers `403 WRONG_ROLE`. **Sign out** is in the entrepreneur top bar and the mentor sidebar. The cookie (a keyed hash bound to the role, never the password) lasts 30 days; changing a role's password signs that role out everywhere.
+Signed out, any page sends you to `/login` and back to that page afterwards if your role may open it (otherwise to your workspace). Opening another role's page while signed in also goes to `/login`, with a note saying who you are signed in as; another role's API answers `403 WRONG_ROLE`. The old addresses `/entrepreneur/login`, `/mentor/login` and `/access` forward to `/login`. **Sign out** is in the entrepreneur top bar and the mentor sidebar. The cookie (a keyed hash bound to the role, never the password) lasts 30 days; changing a role's password signs that role out everywhere.
 
 What to know:
 - **Roles, not accounts.** Everyone with the mentor password is "the mentor" (who answers for whichever mentor the agent is asking), and everyone with the entrepreneur password is Pema. It keeps strangers out and the two sides apart; it does not tell people apart. Do not enter real personal details.

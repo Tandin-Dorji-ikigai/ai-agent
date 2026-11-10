@@ -107,9 +107,15 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
     call = must(await db().from("calls").update({ room_url: url }).eq("id", call.id).select("*").single(), "save room") as CallRow;
   }
   const joinedField = role === "mentor" ? "mentor_joined_at" : "entrepreneur_joined_at";
+  const consentField = role === "mentor" ? "mentor_consent_at" : "entrepreneur_consent_at";
   if (!call[joinedField]) {
+    // Joining is agreeing to recording: the call screen says the call is
+    // recorded, before and during it, and either person can stop it
+    // (setConsent false, which deletes their recorded parts). Only the FIRST
+    // join agrees, so rejoining never switches a stopped recording back on.
+    // Nothing is recorded until both people have joined.
     call = must(
-      await db().from("calls").update({ [joinedField]: now.toISOString() }).eq("id", call.id).select("*").single(),
+      await db().from("calls").update({ [joinedField]: now.toISOString(), [consentField]: now.toISOString() }).eq("id", call.id).select("*").single(),
       "record join",
     ) as CallRow;
   }
@@ -140,7 +146,11 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
   };
 }
 
-/** Recording needs both people's agreement. Withdrawing deletes that person's recorded parts. */
+/**
+ * Stop (consent false) or turn back on (true) recording for one person.
+ * Joining already agrees (see joinCall). Recording needs both people;
+ * stopping deletes that person's recorded parts.
+ */
 export async function setConsent(callId: string, role: CallRole, consent: boolean, now: Date) {
   let call = await loadCall(callId);
   requireOpen(call);
@@ -148,8 +158,10 @@ export async function setConsent(callId: string, role: CallRole, consent: boolea
   if (consent && !call[field]) {
     call = must(await db().from("calls").update({ [field]: now.toISOString() }).eq("id", callId).select("*").single(), "save consent") as CallRow;
   } else if (!consent) {
-    must(await db().from("call_track_parts").delete().eq("call_id", callId).eq("role", role).select("id"), "delete recordings");
+    // Switch it off first, then delete: a part saved in between is caught by
+    // this delete, and one saved after it sees the switch and removes itself.
     call = must(await db().from("calls").update({ [field]: null }).eq("id", callId).select("*").single(), "withdraw consent") as CallRow;
+    must(await db().from("call_track_parts").delete().eq("call_id", callId).eq("role", role).select("id"), "delete recordings");
   }
   return { call_id: callId, recording: recordingState(call) };
 }
@@ -194,6 +206,11 @@ export async function uploadPart(input: { callId: string; role: CallRole; part: 
     .single();
   if (res.error?.code === "23505") return uploadPart(input); // the same part arrived twice at once: return the first
   const row = must(res, "save part") as { id: string };
+  // Transcribing takes a while: if this person stopped the recording meanwhile, keep nothing.
+  if (!recordingState(await loadCall(input.callId)).allowed) {
+    must(await db().from("call_track_parts").delete().eq("id", row.id).select("id"), "discard part");
+    throw new ToolError("RECORDING_NOT_ALLOWED", "The recording was stopped, so this part was not kept.");
+  }
   return { part_id: row.id, segments: segments.length, source, reused: false };
 }
 

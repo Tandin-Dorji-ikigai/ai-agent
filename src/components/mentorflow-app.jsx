@@ -109,8 +109,8 @@ export default function App({ children }) {
   const supportNeeds = supportDraft ?? (state?.entrepreneur?.assessment_completed_at ? state.entrepreneur.expertise_needs : null) ?? (signupPath === "exploring" || page === "register-without-idea" ? ["idea_development"] : PEMA_ASSESSMENT_ANSWERS.expertise_needs);
   const drafts = state?.actions.filter(item => item.status === "draft") ?? [];
   const role = pagePaths[page]?.startsWith("/mentor/") ? "mentor" : "entrepreneur";
-  const isPublic = ["welcome", "signup-choice", "register-entrepreneur", "register-without-idea", "register-mentor", "mentor-submitted", "login", "mentor-login"].includes(page);
-  const isLogin = page === "login" || page === "mentor-login";
+  const isPublic = ["welcome", "signup-choice", "register-entrepreneur", "register-without-idea", "register-mentor", "mentor-submitted", "login"].includes(page);
+  const isLogin = page === "login";
   const isCall = page === "video-call" || page === "mentor-call";
   // The mentor's usual weekly times (requests offer the next of these).
   const savedWeekly = (mentorRecord?.weekly_slots ?? []).map((slot, index) => ({ id: `${slot.day}-${slot.time}-${index}`, day: slot.day, time: slot.time }));
@@ -414,11 +414,11 @@ export default function App({ children }) {
   } else if (isLogin) {
     content = <div className="login-screen">
       <Button variant="ghost" className="self-start mb-5" onClick={() => go("welcome")}><ArrowLeft className="size-4" />Back</Button>
-      <div className="page-header"><div><p className="kicker">{role === "mentor" ? "MENTOR SIGN IN" : "YOUR NEXT STEP IS WAITING"}</p><h1>Welcome back.</h1><p className="subtitle">{role === "mentor" ? "A little of your experience can make a big difference." : "Pick up your journey, one conversation at a time."}</p></div></div>
-      <Card><CardHeader><CardTitle>Sign in as {role === "mentor" ? "the mentor" : "the entrepreneur"}</CardTitle><CardDescription>Enter the {role === "mentor" ? "mentor" : "entrepreneur"} password the team gave you. This test version has no personal accounts, so please don’t enter real personal details anywhere in it.</CardDescription></CardHeader><CardContent>
-        <SignInForm role={role} label={role === "mentor" ? "Mentor password" : "Entrepreneur password"} />
+      <div className="page-header"><div><p className="kicker">SIGN IN</p><h1>Welcome back.</h1><p className="subtitle">One sign-in for everyone. Your password opens your workspace.</p></div></div>
+      <Card><CardHeader><CardTitle>Sign in</CardTitle><CardDescription>Enter the password the team gave you. It takes you to your workspace: entrepreneur, mentor or YDF staff. This test version has no personal accounts, so please don’t enter real personal details anywhere in it.</CardDescription></CardHeader><CardContent>
+        <SignInForm />
       </CardContent></Card>
-      {role === "entrepreneur" ? <div className="login-footer"><p className="subtitle">New here? There’s a place for you.</p><Button variant="link" onClick={() => go("signup-choice")}>Start your journey<ArrowRight className="size-3.5" /></Button></div> : <p className="subtitle text-center mt-6">Your mentor account is provided by the programme.</p>}
+      <div className="login-footer"><p className="subtitle">New here? There’s a place for you.</p><Button variant="link" onClick={() => go("signup-choice")}>Start your journey<ArrowRight className="size-3.5" /></Button></div>
     </div>;
   } else if (isCall) {
     const otherName = role === "mentor" ? (state?.entrepreneur?.full_name ?? "Your mentee") : mentor.name;
@@ -475,14 +475,14 @@ export default function App({ children }) {
 
   return isPublic ? (
     <div className="public">
-      <header className="public-top">{page !== "welcome" && <Button variant="ghost" className="brand-button" onClick={() => go("welcome")} aria-label="MentorFlow home">{brand}</Button>}{!isLogin && <nav aria-label="Public navigation"><Button variant="ghost" size="sm" onClick={() => go(role === "mentor" ? "mentor-login" : "login")}>Sign in<ArrowRight className="size-3.5" /></Button></nav>}</header>
+      <header className="public-top">{page !== "welcome" && <Button variant="ghost" className="brand-button" onClick={() => go("welcome")} aria-label="MentorFlow home">{brand}</Button>}{!isLogin && <nav aria-label="Public navigation"><Button variant="ghost" size="sm" onClick={() => go("login")}>Sign in<ArrowRight className="size-3.5" /></Button></nav>}</header>
       <main className="public-main">{children}{notices}{content}</main>
     </div>
   ) : role === "entrepreneur" ? (
     <div className="entrepreneur-app">
       <header className="entrepreneur-topbar">
         <span className="app-area-label">Entrepreneur</span>
-        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar>{viewer.signed_in && <SignOutButton area="entrepreneur" iconOnly />}</div>
+        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar>{viewer.signed_in && <SignOutButton iconOnly />}</div>
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
@@ -498,7 +498,7 @@ export default function App({ children }) {
         </nav>
         <div className="side-bottom">
           <Button variant="ghost" className="nav-item" onClick={() => go("welcome")}><ArrowLeft className="size-[18px]" /><span>Back to welcome</span></Button>
-          {viewer.signed_in && <SignOutButton area="mentor" className="nav-item" iconClassName="size-[18px]" />}
+          {viewer.signed_in && <SignOutButton className="nav-item" iconClassName="size-[18px]" />}
           <Separator className="my-3" />
           <div className="user-chip"><Avatar className="size-8"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar><div><strong>{mentor.name}</strong><p>Mentor</p></div></div>
         </div>

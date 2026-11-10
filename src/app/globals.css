@@ -366,7 +366,7 @@ h3 { font-weight: 650; font-size: 13px; }
 
 /* Live call (LiveKit): video fills the stage and the self-view, behind the existing layers. */
 .call-remote-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.call-self-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.call-self-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; transform: scaleX(-1); /* your own preview reads like a mirror */ }
 .call-recording-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--destructive); }
 .call-consent-note { position: absolute; left: 16px; right: 16px; bottom: 44px; color: var(--call-muted); font-size: 12px; text-align: center; }
 
@@ -383,3 +383,6 @@ h3 { font-weight: 650; font-size: 13px; }
 .match-score { font-size: 22px; }
 .progress-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
 @media (max-width: 640px) { .score-breakdown { grid-template-columns: 1fr; } }
+.call-stage-status { display: flex; align-items: center; gap: 7px; }
+.call-room .call-record-toggle { height: 26px; padding-inline: 10px; font-size: 11px; color: var(--call-foreground); background: transparent; border-color: var(--call-border); }
+.call-room .call-record-toggle:hover { background: var(--call-surface); color: var(--call-foreground); }

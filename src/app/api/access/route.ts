@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { ACCESS_COOKIE, ACCESS_DAYS, VIEWER_ROLES, accessCookieValue, gateOn, nextAfterSignIn, roleForPassword, rolePasswords } from "@/lib/access";
+import { ACCESS_COOKIE, ACCESS_DAYS, accessCookieValue, gateOn, nextAfterSignIn, roleForPassword, rolePasswords } from "@/lib/access";
 import { fail, ok, parseBody } from "@/lib/http";
 
-// POST /api/access { password, role?, next? }: sign in with a role password
-// (see src/lib/access.ts). The password decides the role; `role` (the sign-in
-// page it was typed on) only breaks a tie. Sets an httpOnly cookie (a keyed
-// hash, not the password) for 30 days and answers { role, next }.
+// POST /api/access { password, next? }: sign in with a role password (see
+// src/lib/access.ts). The password decides the role; `next` is the page they
+// were trying to open, used only if that role may open it (else the role's
+// workspace). Sets an httpOnly cookie (a keyed hash, not the password) for 30
+// days and answers { role, next }.
 // DELETE /api/access: sign out on this device.
 const Body = z.object({
   password: z.string().min(1).max(200),
-  role: z.enum(VIEWER_ROLES).optional(),
   next: z.string().max(500).optional(),
 });
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const passwords = rolePasswords();
   if (!gateOn(passwords)) return ok({ role: null, next: nextAfterSignIn(null, body.data.next) });
 
-  const role = await roleForPassword(body.data.password, passwords, body.data.role);
+  const role = await roleForPassword(body.data.password, passwords);
   if (!role) {
     await new Promise((r) => setTimeout(r, 800)); // slows down guessing
     return fail(401, "WRONG_PASSWORD", "That password is not right.");

@@ -3,7 +3,9 @@
 // The real call screen (replaces PR #2's preview). Same layout and controls,
 // now with:
 //   - live video/audio through LiveKit (a personal pass from /api/calls/join);
-//   - consent: nothing is recorded until BOTH people agree;
+//   - recording starts on its own once BOTH people are in the call: joining
+//     is agreeing (the screen says so before and during the call), and either
+//     person can stop it, which deletes what their microphone recorded;
 //   - each browser records ONLY its own microphone, in parts, and uploads
 //     them (/api/calls/track), so the transcript's speakers are certain;
 //   - Leave uploads the last part and ends the call (/api/calls/end); when both
@@ -88,7 +90,6 @@ export function CallRoom({
   const [remotePresent, setRemotePresent] = useState(false);
   const [remoteVideo, setRemoteVideo] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
-  const [consentHidden, setConsentHidden] = useState(false);
   const [recording, setRecording] = useState(false);
   const [pendingUploads, setPendingUploads] = useState(0);
   const [uploadProblem, setUploadProblem] = useState<string | null>(null);
@@ -270,6 +271,11 @@ export function CallRoom({
     };
   }, [phase, info, bothAgreed, micStream, startPart]);
 
+  // Someone stopped the recording: stop this microphone too (the server refuses further parts anyway).
+  useEffect(() => {
+    if (!bothAgreed && recorderRef.current) void stopRecording();
+  });
+
   function stopRecording(): Promise<void> {
     if (rotateTimer.current) clearTimeout(rotateTimer.current);
     const rec = recorderRef.current;
@@ -299,7 +305,8 @@ export function CallRoom({
     if (!room) return;
     const next = !cameraOn;
     try {
-      await room.localParticipant.setCameraEnabled(next);
+      // Front camera; the small preview of yourself is mirrored (CSS), like a mirror. Others see you unmirrored.
+      await room.localParticipant.setCameraEnabled(next, { facingMode: "user" });
       const track = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
       if (next && track && localVideoEl.current) track.attach(localVideoEl.current);
       setCameraOn(next);
@@ -308,10 +315,12 @@ export function CallRoom({
     }
   }
 
-  async function agree() {
+  /** Stop recording (deletes what this microphone recorded) or turn it back on. */
+  async function setRecordingOn(on: boolean) {
     if (!info) return;
-    const res = await post("/api/calls/consent", { call_id: info.call_id, role, consent: true });
+    const res = await post("/api/calls/consent", { call_id: info.call_id, role, consent: on });
     if (!res.ok) setProblem(res.message);
+    else if (!on) await stopRecording();
     onRefresh();
   }
 
@@ -425,33 +434,25 @@ export function CallRoom({
             {micOn ? <Mic className="size-3" /> : <MicOff className="size-3" />}
           </div>
         </Card>
-        <div className="call-stage-caption" role="status">
-          {recording ? <span className="call-recording-dot" aria-hidden /> : <ShieldCheck className="size-3.5" />}
-          <span>{recording ? "Recording your microphone for the agent's notes" : bothAgreed ? "Starting the recording…" : "Not recording"}</span>
+        <div className="call-stage-caption">
+          <span className="call-stage-status" role="status">
+            {recording ? <span className="call-recording-dot" aria-hidden /> : <ShieldCheck className="size-3.5" />}
+            <span>{recording ? "Recording for the agent's notes" : bothAgreed ? "Starting the recording…" : "Not recording"}</span>
+          </span>
+          {phase === "ready" && info && (
+            <Button type="button" size="sm" variant="outline" className="call-record-toggle" onClick={() => void setRecordingOn(!myConsent)}>
+              {myConsent ? "Stop recording" : "Record again"}
+            </Button>
+          )}
         </div>
 
-        {phase === "ready" && !myConsent && !consentHidden && !chatOpen && (
-          <Card className="call-chat" role="dialog" aria-label="Recording consent">
-            <CardHeader>
-              <CardTitle>Record this call for the agent&apos;s notes?</CardTitle>
-              <CardDescription>
-                Both of you must agree. Each person&apos;s microphone is recorded separately and turned into text; the audio is deleted after that. The
-                agent drafts the agreed actions, and the mentor checks them.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="row wrap">
-              <Button size="sm" onClick={() => void agree()}>
-                I agree
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConsentHidden(true)}>
-                Not now
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-        {phase === "ready" && myConsent && !otherConsent && !chatOpen && (
+        {phase === "ready" && !chatOpen && !recording && (
           <p className="call-consent-note" role="status">
-            Waiting for {otherFirst} to agree to recording.
+            {!myConsent
+              ? "You stopped the recording. What your microphone recorded was deleted."
+              : call?.joined && (role === "mentor" ? call.joined.entrepreneur : call.joined.mentor)
+                ? `${otherFirst} stopped the recording.`
+                : `This call is recorded for the agent's notes. Recording starts when ${otherFirst} joins.`}
           </p>
         )}
         {(problem || uploadProblem) && phase !== "error" && (
@@ -550,7 +551,7 @@ export function CallRoom({
           </div>
         </div>
         <p className="call-preview-note">
-          {video ? "Audio-only works too: keep your camera off on a weak connection." : "No video in this session."} Recording only when both agree.
+          {video ? "Audio-only works too: keep your camera off on a weak connection." : "No video in this session."} This call is recorded for the agent&apos;s notes; the audio is deleted once it is turned into text. Either of you can stop it.
         </p>
       </footer>
     </main>

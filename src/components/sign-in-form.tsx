@@ -7,20 +7,21 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_LABEL, VIEWER_ROLES, homeFor, type ViewerRole } from "@/lib/access";
+import { ROLE_LABEL, SIGN_IN_PATH, VIEWER_ROLES, type ViewerRole } from "@/lib/access";
 
 /**
- * Sign in with a role password (see src/lib/access.ts). The password decides
- * who you are; `role` is the sign-in page it was typed on and only breaks a tie.
+ * The one sign-in form for every role (see src/lib/access.ts): the password
+ * decides who you are, and the server sends you to your workspace (or to the
+ * page you were trying to open, if your role may open it).
  */
-export function SignInForm({ role, label = "Password", submitLabel = "Sign in" }: { role?: ViewerRole; label?: string; submitLabel?: string }) {
+export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { label?: string; submitLabel?: string }) {
   const params = useSearchParams();
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const signedInAs = params.get("signed_in_as") as ViewerRole | null;
-  const wrongRole = signedInAs && VIEWER_ROLES.includes(signedInAs) && signedInAs !== role ? signedInAs : null;
+  const wrongRole = signedInAs && VIEWER_ROLES.includes(signedInAs) ? signedInAs : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -30,7 +31,7 @@ export function SignInForm({ role, label = "Password", submitLabel = "Sign in" }
       const res = await fetch("/api/access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, role, next: params.get("next") ?? (role ? homeFor(role) : undefined) }),
+        body: JSON.stringify({ password, next: params.get("next") ?? undefined }),
       });
       const json = (await res.json()) as { ok: boolean; next?: string; message?: string };
       if (json.ok) {
@@ -49,7 +50,7 @@ export function SignInForm({ role, label = "Password", submitLabel = "Sign in" }
       {wrongRole && (
         <Alert>
           <AlertTitle>You are signed in as {ROLE_LABEL[wrongRole]}</AlertTitle>
-          <AlertDescription>That page belongs to {role ? ROLE_LABEL[role] : "another role"}. Sign in with that password to switch on this device.</AlertDescription>
+          <AlertDescription>The page you opened needs a different password. Sign in with it to switch this device.</AlertDescription>
         </Alert>
       )}
       <div className="field">
@@ -81,15 +82,15 @@ export function SignInForm({ role, label = "Password", submitLabel = "Sign in" }
   );
 }
 
-/** Signs this device out and goes to the sign-in page for `area`. */
-export function SignOutButton({ area, className = "", iconClassName = "size-4", iconOnly = false }: { area: "entrepreneur" | "mentor"; className?: string; iconClassName?: string; iconOnly?: boolean }) {
+/** Signs this device out and goes to the sign-in page. */
+export function SignOutButton({ className = "", iconClassName = "size-4", iconOnly = false }: { className?: string; iconClassName?: string; iconOnly?: boolean }) {
   const [busy, setBusy] = useState(false);
   async function signOut() {
     setBusy(true);
     try {
       await fetch("/api/access", { method: "DELETE" });
     } finally {
-      window.location.assign(area === "mentor" ? "/mentor/login" : "/entrepreneur/login");
+      window.location.assign(SIGN_IN_PATH);
     }
   }
   return (

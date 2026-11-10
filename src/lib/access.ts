@@ -7,6 +7,9 @@
 //   YDF_PASSWORD           the YDF staff page and the demo controls
 //   DEMO_PASSWORD          the team: everything, for building and presenting
 //
+// Everyone signs in on the same page (/login); the password alone decides the
+// role and where they land. Use four different passwords.
+//
 // With none of them set (local development) there is no sign-in at all.
 // Works in the proxy and in route handlers (Web Crypto only, no Node APIs).
 
@@ -71,13 +74,12 @@ export async function roleFromCookie(value: string | undefined, passwords: RoleP
 }
 
 /**
- * Which role a typed password belongs to. If two roles share a password,
- * `prefer` (the sign-in page it was typed on) wins.
+ * Which role a typed password belongs to. If two roles were given the same
+ * password by mistake, the one with the fewest rights wins (the order of VIEWER_ROLES).
  */
-export async function roleForPassword(given: string, passwords: RolePasswords, prefer?: ViewerRole): Promise<ViewerRole | null> {
-  const order = prefer ? [prefer, ...VIEWER_ROLES.filter((r) => r !== prefer)] : [...VIEWER_ROLES];
+export async function roleForPassword(given: string, passwords: RolePasswords): Promise<ViewerRole | null> {
   let found: ViewerRole | null = null;
-  for (const role of order) {
+  for (const role of VIEWER_ROLES) {
     const password = passwords[role];
     if (!password) continue;
     // Compare keyed hashes (same length) and check every role, so timing says nothing.
@@ -99,8 +101,12 @@ export function sameText(a: string, b: string): boolean {
 // Who may open what. The team (DEMO_PASSWORD) may open everything.
 // ---------------------------------------------------------------------------
 
-/** Pages and endpoints anyone may open: the sign-in pages and the sign-in endpoint. */
-export const SIGN_IN_PAGES = ["/access", "/entrepreneur/login", "/mentor/login"] as const;
+/** The one sign-in page, for every role. */
+export const SIGN_IN_PATH = "/login";
+/** Earlier sign-in addresses: the proxy forwards them to /login so old links keep working. */
+export const OLD_SIGN_IN_PATHS = ["/access", "/entrepreneur/login", "/mentor/login"] as const;
+/** Pages anyone may open without signing in. */
+export const SIGN_IN_PAGES = [SIGN_IN_PATH, ...OLD_SIGN_IN_PATHS] as const;
 
 type Rule = "public" | "any" | readonly ViewerRole[];
 
@@ -161,13 +167,6 @@ export function mayOpen(role: ViewerRole | null, pathname: string): boolean {
   if (rule === "public") return true;
   if (!role) return false;
   return role === "team" || rule === "any" || rule.includes(role);
-}
-
-/** The sign-in page for a part of the app. */
-export function signInPathFor(pathname: string): string {
-  if (under(pathname, "/mentor")) return "/mentor/login";
-  if (under(pathname, "/ydf")) return "/access";
-  return "/entrepreneur/login";
 }
 
 /** Where a role starts after signing in. */

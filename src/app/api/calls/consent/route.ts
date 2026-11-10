@@ -5,8 +5,10 @@ import { handleError, ok, parseBody } from "@/lib/http";
 import { wrongSide } from "@/lib/viewer";
 
 // POST /api/calls/consent { call_id, role, consent: true | false }
-// Recording starts only when BOTH people agree. consent: false withdraws it
-// and deletes that person's recorded parts. Returns { recording: { allowed, ... } }.
+// Joining the call already agrees to recording (see joinCall), so this is the
+// Stop / Record again button: consent false stops it for both and deletes that
+// person's recorded parts; true turns it back on. Recording needs both.
+// Returns { recording: { allowed, ... } }.
 export async function POST(req: Request) {
   const body = await parseBody(req, CallConsentInputSchema);
   if ("error" in body) return body.error;

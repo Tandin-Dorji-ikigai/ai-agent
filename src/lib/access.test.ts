@@ -13,7 +13,6 @@ import {
   rolePasswords,
   safeNext,
   sameText,
-  signInPathFor,
 } from "./access";
 
 const PASSWORDS = { entrepreneur: "pema-2026", mentor: "deki-2026", ydf: "ydf-2026", team: "team-2026" } as const;
@@ -34,14 +33,18 @@ describe("role passwords", () => {
     expect(await accessToken("mentor", "another")).not.toBe(a);
   });
 
-  it("the password decides the role; the page only breaks a tie", async () => {
+  it("the password alone decides the role", async () => {
+    expect(await roleForPassword("pema-2026", PASSWORDS)).toBe("entrepreneur");
     expect(await roleForPassword("deki-2026", PASSWORDS)).toBe("mentor");
-    expect(await roleForPassword("deki-2026", PASSWORDS, "entrepreneur")).toBe("mentor");
-    expect(await roleForPassword("team-2026", PASSWORDS, "mentor")).toBe("team");
+    expect(await roleForPassword("ydf-2026", PASSWORDS)).toBe("ydf");
+    expect(await roleForPassword("team-2026", PASSWORDS)).toBe("team");
     expect(await roleForPassword("wrong", PASSWORDS)).toBeNull();
-    const shared = { entrepreneur: "same", mentor: "same" };
-    expect(await roleForPassword("same", shared, "mentor")).toBe("mentor");
-    expect(await roleForPassword("same", shared, "entrepreneur")).toBe("entrepreneur");
+    expect(await roleForPassword("Deki-2026", PASSWORDS)).toBeNull(); // case matters
+  });
+
+  it("if two roles were given the same password by mistake, the one with fewer rights wins", async () => {
+    expect(await roleForPassword("same", { team: "same", mentor: "same" })).toBe("mentor");
+    expect(await roleForPassword("same", { mentor: "same", entrepreneur: "same" })).toBe("entrepreneur");
   });
 
   it("a cookie proves its role only while that role's password is unchanged", async () => {
@@ -69,7 +72,7 @@ describe("role passwords", () => {
 
 describe("who may open what", () => {
   it("everyone may reach the sign-in pages; nothing else without signing in", () => {
-    for (const path of ["/access", "/entrepreneur/login", "/mentor/login", "/api/access"]) expect(mayOpen(null, path)).toBe(true);
+    for (const path of ["/login", "/access", "/entrepreneur/login", "/mentor/login", "/api/access"]) expect(mayOpen(null, path)).toBe(true);
     for (const path of ["/", "/entrepreneur/connect", "/mentor/dashboard", "/ydf", "/api/state", "/api/demo/reset"]) expect(mayOpen(null, path)).toBe(false);
   });
 
@@ -120,13 +123,6 @@ describe("who may open what", () => {
 });
 
 describe("where people are sent", () => {
-  it("each part of the app has its sign-in page", () => {
-    expect(signInPathFor("/mentor/requests")).toBe("/mentor/login");
-    expect(signInPathFor("/entrepreneur/bookings")).toBe("/entrepreneur/login");
-    expect(signInPathFor("/")).toBe("/entrepreneur/login");
-    expect(signInPathFor("/ydf")).toBe("/access");
-  });
-
   it("only sends people back to a page on this site", () => {
     expect(safeNext("/mentor/requests?x=1")).toBe("/mentor/requests?x=1");
     expect(safeNext("https://evil.example")).toBe("/");
@@ -134,10 +130,13 @@ describe("where people are sent", () => {
     expect(safeNext("/\\evil.example")).toBe("/");
     expect(safeNext("/access")).toBe("/");
     expect(safeNext("/mentor/login?next=/x")).toBe("/");
+    expect(safeNext("/login")).toBe("/");
     expect(safeNext(undefined)).toBe("/");
   });
 
-  it("after signing in: the asked-for page if allowed, else the role's start page", () => {
+  it("one sign-in page: each role lands in its own workspace, or on the page it asked for if allowed", () => {
+    expect(nextAfterSignIn("entrepreneur", undefined)).toBe("/entrepreneur/connect");
+    expect(nextAfterSignIn("mentor", undefined)).toBe("/mentor/dashboard");
     expect(nextAfterSignIn("mentor", "/mentor/requests")).toBe("/mentor/requests");
     expect(nextAfterSignIn("mentor", "/entrepreneur/connect")).toBe("/mentor/dashboard");
     expect(nextAfterSignIn("entrepreneur", "/")).toBe("/entrepreneur/connect");
