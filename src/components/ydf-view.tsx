@@ -7,17 +7,18 @@ import type { AgentRunView, DemoState } from "@/lib/state-types";
 import { DemoGate, LastError } from "./demo-gate";
 import { useDemo } from "./demo-state";
 import { Badge, Button, Card, SectionTitle, SourceBadge, StatusBadge } from "./ui";
+import { FRONTEND_PREVIEW } from "@/lib/frontend-api";
 
 // YDF: sponsorship, outcomes, escalations and full visibility of what the
 // agent did and why. Every number here is read from the database.
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-card p-4">
+    <Card className="p-4">
       <p className="text-sm text-muted">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
       {detail && <p className="text-xs text-muted">{detail}</p>}
-    </div>
+    </Card>
   );
 }
 
@@ -33,7 +34,7 @@ export function DemoControls({ state }: { state: DemoState }) {
         {state.clock.offset_days > 0 ? ` (+${state.clock.offset_days} days)` : " (today)"}. The real clock is never changed.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button busy={busy === "fast-forward"} onClick={() => act("fast-forward", "/api/demo/fast-forward", { days: DEMO_FAST_FORWARD_DAYS })}>
+        <Button disabled={FRONTEND_PREVIEW} busy={busy === "fast-forward"} onClick={() => act("fast-forward", "/api/demo/fast-forward", { days: DEMO_FAST_FORWARD_DAYS })}>
           Fast-forward {DEMO_FAST_FORWARD_DAYS} days
         </Button>
         {!confirmReset ? (

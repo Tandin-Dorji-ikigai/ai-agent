@@ -22,6 +22,8 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 
 ## Quick start
 
+**Frontend (MentorFlow UI, merged from PR #2):** the entrepreneur screens start at `/entrepreneur/connect` and the mentor screens at `/mentor/dashboard`; YDF stays at `/ydf`. By default the UI runs in **preview mode**, on sample data in the browser, and does not call the backend. Setting `NEXT_PUBLIC_MENTORFLOW_API_MODE=server` (then rebuilding) makes it call the real API. Connecting each screen to the real endpoints is in progress, starting with the call screen. See `docs/ui-integration.md`.
+
 ```bash
 npm install
 cp .env.example .env.local      # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY

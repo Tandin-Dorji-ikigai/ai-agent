@@ -91,9 +91,9 @@ export function LastError() {
     <div className="mb-4">
       <Notice tone="danger" title="That did not work">
         <p>{lastError.message}</p>
-        <button className="mt-1 text-sm font-semibold underline" onClick={clearLastError}>
+        <Button variant="ghost" className="mt-1" onClick={clearLastError}>
           Dismiss
-        </button>
+        </Button>
       </Notice>
     </div>
   );

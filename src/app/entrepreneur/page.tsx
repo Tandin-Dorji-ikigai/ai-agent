@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { EntrepreneurView } from "@/components/entrepreneur-view";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Entrepreneur | Mentoring Agent" };
 
 export default function EntrepreneurPage() {
-  return <EntrepreneurView />;
+  redirect("/entrepreneur/connect");
 }
