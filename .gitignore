@@ -49,3 +49,6 @@ supabase/.branches/
 .pnp.js
 .env*.local
 .env
+
+# extraction eval results
+evals/results/

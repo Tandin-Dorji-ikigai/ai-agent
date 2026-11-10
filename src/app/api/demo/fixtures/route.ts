@@ -6,6 +6,7 @@ import {
   DEMO_OBSTACLE_REPLY,
   DEMO_ON_TRACK_REPLY,
   DEMO_SESSION_NOTES,
+  buildDemoLongTranscript,
   PEMA_ASSESSMENT_ANSWERS,
 } from "@/lib/demo/fixtures";
 import { DEMO_IDS } from "@/lib/demo/ids";
@@ -17,6 +18,7 @@ export async function GET() {
     assessment: PEMA_ASSESSMENT_ANSWERS,
     session_notes: DEMO_SESSION_NOTES,
     call_transcript: DEMO_CALL_TRANSCRIPT,
+    long_call_transcript: buildDemoLongTranscript(),
     blocker_reply: DEMO_BLOCKER_REPLY,
     on_track_reply: DEMO_ON_TRACK_REPLY,
     obstacle_reply: DEMO_OBSTACLE_REPLY,

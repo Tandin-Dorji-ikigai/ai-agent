@@ -254,7 +254,10 @@ const sessionCompleted: Handler = async ({ event, tools }) => {
   const label = { typed: "typed notes", voice_note: "voice note", call_recording: "call transcript" }[source];
   return {
     input_summary: `Mentor session ${label} (${notes.length.toLocaleString("en-IN")} characters)`,
-    output: `${out.actions.length} draft SMART actions extracted. Waiting for a human to confirm them.`,
+    output:
+      `${out.actions.length} draft SMART actions extracted` +
+      (out.parts > 1 ? ` from a ${out.parts}-part transcript (${out.liveParts} part${out.liveParts === 1 ? "" : "s"} read by live AI)` : "") +
+      ". Waiting for a human to confirm them.",
     source: out.source,
   };
 };

@@ -45,6 +45,48 @@ export const DEMO_CALL_TRANSCRIPT = [
   "Okay, I can do that. Thank you, Deki.",
 ].join(" ");
 
+/**
+ * A long (about 30 minutes) call transcript for testing long-call handling:
+ * small talk and discussion, four agreements spread through the call (one
+ * owned by the mentor), and one idea they decided NOT to pursue.
+ */
+export function buildDemoLongTranscript(targetChars = 30_000): string {
+  const filler = [
+    "We talked about how the season went. October was busy with guests from the city, but November has been quiet so far and the rooms were empty for most of last week.",
+    "Most guests found the homestay through friends or through the guide in the next village. A few came after seeing photos that a guest shared online, which was a nice surprise.",
+    "The walk goes past the old water mill and the temple, and guests always ask about the history of the village. Pema's uncle tells the stories, and guests remember that part most.",
+    "Food is a strong point. Guests like the red rice and the ema datshi, and one family asked if they could join in the cooking. That could become part of the experience later.",
+    "Other homestays nearby charge between one thousand and one thousand eight hundred ngultrum a night, but most of them do not offer a guided walk, so there is room to stand out.",
+    "Transport is a challenge. The road is fine in winter but the last part becomes muddy in the monsoon, and some guests have arrived late because of that.",
+    "We discussed what kind of guest enjoys the walk most. Families and older couples seem happiest. Younger backpackers often want something cheaper and shorter.",
+    "Payments are mostly cash at the moment. A few guests asked to pay by phone, and that might be worth looking at once there are more bookings.",
+  ];
+  const inserts: Array<[number, string]> = [
+    [0.1, "So the first thing we agree: within five days, call the three guides you worked with last year and ask each of them for two guest referrals."],
+    [0.4, "I'll send you the customer interview starter kit tomorrow, so you have the questions ready."],
+    [0.55, "Okay, second agreement. Within a week, take photos of both rooms and the walk route in daylight, so you can use them on your page."],
+    [0.7, "We talked about building a full website, but we decided not to do that now. The Facebook page is enough for this season."],
+    [0.92, "And finally, let's agree that within ten days you draft a simple low-season price list for the rooms and the walk, and send it to me."],
+  ];
+  const parts: string[] = [];
+  let length = 0;
+  let i = 0;
+  let next = 0;
+  while (length < targetChars) {
+    while (next < inserts.length && length >= inserts[next][0] * targetChars) {
+      parts.push(inserts[next][1]);
+      length += inserts[next][1].length + 1;
+      next += 1;
+    }
+    const sentence = filler[i % filler.length];
+    parts.push(sentence);
+    length += sentence.length + 1;
+    i += 1;
+  }
+  while (next < inserts.length) parts.push(inserts[next++][1]);
+  return ["Kuzu zangpo la, Pema. Thank you for making time for this call.", ...parts, "Thank you, Deki. Talk soon."].join(" ");
+}
+
 /** What the agent extracts from DEMO_SESSION_NOTES (saved fallback). */
 export const DEMO_EXTRACTED_ACTIONS = {
   summary:

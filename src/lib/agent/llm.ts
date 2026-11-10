@@ -28,6 +28,72 @@ export class RateLimitError extends Error {
 
 export class ProviderError extends Error {}
 
+// ---------------------------------------------------------------------------
+// Free-tier pacing: tokens per minute, tracked per model (AI_TPM_LIMIT, default
+// 8,000). Before each call we wait, if needed, until the last minute's usage
+// leaves room. This avoids 429s instead of reacting to them.
+// ---------------------------------------------------------------------------
+
+const WINDOW_MS = 60_000;
+const HEADROOM = 0.85;
+
+export interface UsageEntry {
+  at: number;
+  tokens: number;
+}
+
+const recentUsage = new Map<string, UsageEntry[]>();
+
+export function tpmLimit(): number {
+  return Number(process.env.AI_TPM_LIMIT ?? 8000);
+}
+
+/** Pure: milliseconds to wait before spending `estimate` tokens (0 = go now). */
+export function budgetWaitMs(entries: UsageEntry[], now: number, estimate: number, limit: number): number {
+  const live = entries.filter((e) => now - e.at < WINDOW_MS).sort((a, b) => a.at - b.at);
+  const used = live.reduce((sum, e) => sum + e.tokens, 0);
+  const allowed = limit * HEADROOM;
+  if (live.length === 0 || used + estimate <= allowed) return 0;
+  let excess = used + estimate - allowed;
+  for (const e of live) {
+    excess -= e.tokens;
+    if (excess <= 0) return Math.max(0, e.at + WINDOW_MS - now) + 50;
+  }
+  return WINDOW_MS;
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new Error("aborted"));
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(t);
+      reject(new Error("aborted"));
+    }, { once: true });
+  });
+}
+
+async function reserveTokens(model: string, estimate: number, signal: AbortSignal): Promise<UsageEntry> {
+  for (;;) {
+    const entries = (recentUsage.get(model) ?? []).filter((e) => Date.now() - e.at < WINDOW_MS);
+    recentUsage.set(model, entries);
+    const wait = budgetWaitMs(entries, Date.now(), estimate, tpmLimit());
+    if (wait === 0) {
+      const entry = { at: Date.now(), tokens: estimate };
+      entries.push(entry);
+      return entry;
+    }
+    await sleep(Math.min(wait, 5_000), signal);
+  }
+}
+
+function settleUsage(entry: UsageEntry, data: Record<string, unknown>) {
+  const u = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+  if (u?.prompt_tokens !== undefined) entry.tokens = (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0);
+}
+
+const approxTokens = (s: string) => Math.ceil(s.length / 4);
+
 /** Low-level POST to the provider. Shared by the agent (here) and audio (src/lib/audio). */
 export async function providerPost(path: string, body: BodyInit, signal: AbortSignal, json = true): Promise<Record<string, unknown>> {
   const key = apiKey();
@@ -75,6 +141,12 @@ export async function structured(opts: {
     { role: "system", content: opts.system },
     { role: "user", content: opts.user },
   ];
+  const strictSchema = toStrictJsonSchema(opts.schema);
+  const usage = await reserveTokens(
+    model,
+    approxTokens(opts.system + opts.user + JSON.stringify(strictSchema)) + Math.round((opts.maxTokens ?? 1200) / 2),
+    opts.signal,
+  );
   const data = await providerPost(
     "/chat/completions",
     JSON.stringify({
@@ -85,11 +157,12 @@ export async function structured(opts: {
       max_completion_tokens: opts.maxTokens ?? 1200,
       response_format: {
         type: "json_schema",
-        json_schema: { name: opts.task, strict: true, schema: toStrictJsonSchema(opts.schema) },
+        json_schema: { name: opts.task, strict: true, schema: strictSchema },
       },
     }),
     opts.signal,
   );
+  settleUsage(usage, data);
   logUsage(opts.task, model, data);
   const content = (data.choices as Array<{ message?: { content?: string } }> | undefined)?.[0]?.message?.content;
   if (!content) throw new ProviderError("Empty response.");
@@ -112,6 +185,11 @@ export async function chooseTool(opts: {
   signal: AbortSignal;
 }): Promise<{ name: string; args: unknown }> {
   const model = opts.model ?? MODELS.main;
+  const usage = await reserveTokens(
+    model,
+    approxTokens(opts.system + opts.user + JSON.stringify(opts.tools)) + 450,
+    opts.signal,
+  );
   const data = await providerPost(
     "/chat/completions",
     JSON.stringify({
@@ -129,6 +207,7 @@ export async function chooseTool(opts: {
     }),
     opts.signal,
   );
+  settleUsage(usage, data);
   logUsage(opts.task, model, data);
   const call = (data.choices as Array<{ message?: { tool_calls?: Array<{ function: { name: string; arguments: string } }> } }> | undefined)?.[0]
     ?.message?.tool_calls?.[0];

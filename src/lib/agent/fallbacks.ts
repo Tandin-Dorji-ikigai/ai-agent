@@ -7,6 +7,7 @@
 import { DEMO_CALL_TRANSCRIPT, DEMO_EXTRACTED_ACTIONS, DEMO_SESSION_NOTES } from "../demo/fixtures";
 import type { ScoredMentor } from "../matching/score-mentor";
 import type { AgendaItem } from "../progress";
+import { heuristicExtraction } from "./transcripts";
 import {
   LANGUAGE_LABEL,
   expertiseLabel,
@@ -166,6 +167,8 @@ export function fallbackExtraction(notes: string): Extraction {
     .map((l) => l.replace(/^([-*•]|\d+[.)])\s+/, "").trim())
     .filter((l) => l.length > 0)
     .slice(0, 8);
+  // No bullet points (for example a spoken transcript): use the rule-based reader.
+  if (bullets.length === 0) return heuristicExtraction(notes);
   const prose = lines.filter((l) => l && !/^([-*•]|\d+[.)])\s+/.test(l) && !/^agreed:?$/i.test(l));
   return {
     summary: (prose.join(" ") || "Session notes recorded.").slice(0, 800),

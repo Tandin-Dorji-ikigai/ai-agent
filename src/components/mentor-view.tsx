@@ -192,6 +192,31 @@ function Agenda({ state }: { state: DemoState }) {
   );
 }
 
+/** Shown after a session ends until its draft actions appear (long calls are read in the background). */
+function ReadingNotice({ state }: { state: DemoState }) {
+  const run = state.runs.find((r) => r.trigger === "session.completed");
+  if (run?.status === "running" || !run) {
+    return (
+      <Notice tone="info" title="The agent is reading the session">
+        Long call transcripts are read in parts to stay within the free AI limits, so this can take a minute or two. Draft actions
+        will appear here.
+      </Notice>
+    );
+  }
+  if (run.status === "failed") {
+    return (
+      <Notice tone="danger" title="The agent could not read the session">
+        Retry it from the agent activity log in the YDF view.
+      </Notice>
+    );
+  }
+  return (
+    <Notice tone="warning" title="No clear actions found">
+      {state.session?.agent_summary ?? "The agent found no agreed actions. Add them by hand if the session agreed any."}
+    </Notice>
+  );
+}
+
 export function MentorView() {
   return (
     <DemoGate>
@@ -253,6 +278,9 @@ export function MentorView() {
                 </Card>
 
                 {!state.session?.completed_at && <NotesForm state={state} />}
+                {state.session?.completed_at && !state.actions.some((a) => a.session_id === state.session?.id) && (
+                  <ReadingNotice state={state} />
+                )}
                 {hasDrafts && <DraftReview key={state.session?.id} state={state} />}
 
                 {confirmed.length > 0 && (

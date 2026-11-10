@@ -60,7 +60,9 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Getting help | The AI picks one tool (approved resource, own mentor, another mentor, or YDF escalation), and our rules double-check its choice | `agent/live.ts`, `agent/policy.ts` |
 | Mentor progress | Progress feed and next-session agenda | `progress.ts`, `mentor-view.tsx` |
 | YDF dashboard | Metrics from the database, escalation queue, agent activity log, demo controls | `ydf-view.tsx` |
-| Live AI | Groq `gpt-oss-120b` and `gpt-oss-20b`, with timeouts, a pause after rate limits, a daily cap, and a check that blocks gender guessing | `agent/ai.ts`, `agent/llm.ts`, `agent/live.ts` |
+| Live AI | Groq `gpt-oss-120b` and `gpt-oss-20b`, with timeouts, pacing under the free limits, a daily cap, and a check that blocks gender guessing | `agent/ai.ts`, `agent/llm.ts`, `agent/live.ts` |
+| Long call transcripts | Calls of any length are read in parts in the background (a 30-minute call takes about a minute); only real agreements become actions | `agent/extract.ts`, `agent/transcripts.ts` |
+| Extraction test set | `npm run eval:extraction` scores the agent on 5 sample cases. Live AI: 100% found, no extras, due dates and owners right | `evals/extraction-cases.json`, `scripts/eval-extraction.mjs` |
 | Voice notes (**basic version**) | Record or upload audio in the mentor view; Whisper turns it into text for the mentor to check. See section 9 | `mentor-view.tsx` (`VoiceNote`), `/api/transcribe` |
 | Tests | 57 unit tests. `npm run demo:e2e` runs the whole demo in both modes | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
 
@@ -71,7 +73,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Any fluent speaker on the team |
 | Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Audio-to-text teammate |
 | Calls | No call yet. Plan: a "Join call" link to a hosted meeting, with an audio-only option | Calls teammate |
-| Long call transcripts | The agent reads up to about 20 to 25 minutes of speech at once; longer is refused clearly (`TRANSCRIPT_TOO_LONG`) | Agent (Tandin) |
+| Real transcripts in the test set | The 5 test cases are written by us. Real (anonymised, consented) transcripts would give honest accuracy numbers | Agent (Tandin), with audio-to-text |
 | YDF acting on escalations | The queue is read-only. **Deferred** by team decision | Nobody for now |
 | UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Frontend teammate |
 | Reliability target | The plan asks for 5 reset-to-finish runs in a row; 2 done so far | Agent (Tandin) |
@@ -221,8 +223,8 @@ If you change seed data, fixtures or ranking, run `npm test`. Some tests check t
 | | Agent (Tandin) | Frontend | Calls | Audio to text |
 |---|---|---|---|---|
 | **Owns** | `src/lib/agent`, `src/lib/matching`, `src/lib/progress.ts`, `src/app/api` (except `transcribe`), `supabase/` | `src/components` (except the two folders on the right), `src/app/*/page.tsx`, `globals.css` | New `src/components/call/` (plus one line in each view to show it) | `src/components/mentor/voice-note.tsx`, `src/lib/audio/`, `src/app/api/transcribe/` |
-| **Next task** | Long transcripts within the free tier (split and summarise); 3 to 5 sample transcripts to measure extraction quality | Polish the three views; check the phone layout on a real phone | A "Join call" button on each booking for Pema and the mentor, opening a hosted meeting; offer audio-only | Test voice notes on real phones and microphones; turn a call recording into a transcript |
-| **Then** | 5 reset-to-finish runs in a row; tune prompts | Backup demo video (Day 2 evening) | Recording consent: both people agree before anything is recorded | Long recordings (over 25 MB): split, transcribe, join; delete audio after use |
+| **Next task** | Add real transcripts to `evals/extraction-cases.json` and keep `npm run eval:extraction` at 100%; 5 reset-to-finish demo runs | Polish the three views; check the phone layout on a real phone | A "Join call" button on each booking for Pema and the mentor, opening a hosted meeting; offer audio-only | Test voice notes on real phones and microphones; turn a call recording into a transcript |
+| **Then** | Tune prompts with real transcripts; watch the `[ai] ... failed validation` lines in the terminal | Backup demo video (Day 2 evening) | Recording consent: both people agree before anything is recorded | Long recordings (over 25 MB): split, transcribe, join; delete audio after use |
 
 If you need to change a file someone else owns, say so at check-in first.
 
@@ -241,9 +243,10 @@ POST /api/session/complete
 ```
 
 - Send `notes`, a `transcript`, or both. If neither is sent, you get `400 INVALID_INPUT`.
-- The agent reads up to about 18,000 characters of transcript at once (20 to 25 minutes of speech). Longer gets `422 TRANSCRIPT_TOO_LONG` until the agent splits long calls itself; until then, send the most important part.
+- Short text is read straight away, and the response includes the result.
+- **Long transcripts** (over about 22,000 characters, or 25 minutes of speech) get `202 { "processing": true }`. The agent reads them in the background, and the drafts appear in the Mentor view when ready (a 30-minute call takes about a minute). The hard limit is 200,000 characters, about four hours.
 - The agent then extracts SMART draft actions, and the mentor confirms them in the Mentor view, exactly as with typed notes. The Mentor view shows where the text came from.
-- To test your part without any AI key, run `E2E_SOURCE=call_recording npm run demo:e2e`. It sends a sample call transcript through the whole demo. Announce the reset first (section 7).
+- To test your part without any AI key, run `E2E_SOURCE=call_recording npm run demo:e2e`. It sends a sample call transcript through the whole demo, plus a 30-minute call through the background flow. Announce the reset first (section 7).
 - Need a new database field (for example a meeting link on a booking)? Ask the agent owner for a migration. Never change tables in the dashboard.
 
 ### Notes per role

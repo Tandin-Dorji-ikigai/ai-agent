@@ -1,0 +1,61 @@
+{
+  "about": "Test set for the agent's extraction (session text -> SMART actions). Each expected action is found if all its regexes match the action's title, description or success measure. 'due' is checked within +/- 1 day. 'must_not' lists things that must never become an action (ideas they decided against, or invented work).",
+  "cases": [
+    {
+      "id": "demo-call",
+      "description": "Short, clean call transcript (the demo)",
+      "source": "call_recording",
+      "text_from_fixture": "call_transcript",
+      "expected": [
+        { "match": ["permit|licen"], "due": 4, "owner": "entrepreneur" },
+        { "match": ["interview|guest|guide"], "due": 7, "owner": "entrepreneur" },
+        { "match": ["position|statement|one.line"], "due": 10, "owner": "entrepreneur" }
+      ],
+      "must_not": []
+    },
+    {
+      "id": "voice-note-corrections",
+      "description": "Dictated voice note with filler words and a corrected deadline",
+      "source": "voice_note",
+      "text": "Quick notes after the session with Dorji from the dairy. Um, we talked mostly about pricing for the cheese. We agreed Dorji will ask three shops in town what they pay per kilo, within four days. Also set up a simple cash book, within a week, no wait, make that two weeks, it's festival time. I'll send the bookkeeping guide tomorrow.",
+      "expected": [
+        { "match": ["shop|kilo|what they pay"], "due": 4, "owner": "entrepreneur" },
+        { "match": ["cash"], "due": 14, "owner": "entrepreneur" },
+        { "match": ["guide"], "due": 1, "owner": "mentor" }
+      ],
+      "must_not": []
+    },
+    {
+      "id": "long-call-30-min",
+      "description": "About 30 minutes of conversation: small talk, four agreements spread through the call (one by the mentor), one idea decided against",
+      "source": "call_recording",
+      "text_from_fixture": "long_call_transcript",
+      "expected": [
+        { "match": ["referral"], "due": 5, "owner": "entrepreneur" },
+        { "match": ["kit"], "due": 1, "owner": "mentor" },
+        { "match": ["photo"], "due": 7, "owner": "entrepreneur" },
+        { "match": ["price list|pricing|prices"], "due": 10, "owner": "entrepreneur" }
+      ],
+      "must_not": ["website"]
+    },
+    {
+      "id": "mentor-owned",
+      "description": "The mentor commits to something; an idea is postponed",
+      "source": "call_recording",
+      "text": "Thanks for the update on the tours. I'll introduce you to a tour operator in Paro by next week. You send me your current price sheet within two days so I can look at it before we talk. We also discussed hiring a second guide, but decided not now, maybe after the season.",
+      "expected": [
+        { "match": ["introduc|tour operator"], "due": 7, "owner": "mentor" },
+        { "match": ["price"], "due": 2, "owner": "entrepreneur" }
+      ],
+      "must_not": ["hir(e|ing)|second guide"]
+    },
+    {
+      "id": "no-agreements",
+      "description": "A friendly catch-up with nothing agreed: the agent must not invent actions",
+      "source": "call_recording",
+      "text": "We caught up about the festival and how busy the village has been. Business has been steady and the guests in October were happy with the food. Pema shared some photos of the new garden. It was a good chat.",
+      "expected": [],
+      "must_not": []
+    }
+  ]
+}

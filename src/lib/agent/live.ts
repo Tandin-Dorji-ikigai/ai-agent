@@ -16,6 +16,7 @@ import { AGENT_BOUNDARIES, MATCH_EXPLANATION_RULE, NO_GENDER_RULE } from "./prom
 import {
   AssessmentSummarySchema,
   BriefsSchema,
+  ChunkNotesSchema,
   ExtractionSchema,
   FollowUpSchema,
   MatchExplanationsSchema,
@@ -142,7 +143,7 @@ export const live = {
       }),
 
   extraction:
-    (notes: string, source: "typed" | "voice_note" | "call_recording" = "typed"): Live =>
+    (notes: string, source: "typed" | "voice_note" | "call_recording" = "typed", condensed = false): Live =>
     (signal) =>
       structured({
         task: "extract_action_items",
@@ -156,8 +157,15 @@ export const live = {
             "For each action: title starts with a verb and is specific (under 100 characters); description is one sentence; " +
             "success_measure says how we will know it is done, in measurable terms; " +
             "due_in_days uses the timeframe in the notes (a week = 7), or 7 if none is given; " +
-            "owner is entrepreneur unless the notes say the mentor will do it. summary: 1 to 2 sentences." +
-            (source === "call_recording"
+            "Owner: in the mentor's own notes, I/I'll/I will means the mentor. In a call transcript, an offer like " +
+            "\"I'll send you\" or \"I'll introduce you\" from the adviser is the mentor's; tasks for the business owner " +
+            "(\"you will\", or the owner by name, e.g. \"Dorji will\") are the entrepreneur's. " +
+            "Only explicit commitments become actions: never possibilities (\"might be worth\", \"maybe later\") " +
+            "or decisions not to do something. summary: 1 to 2 sentences." +
+            (condensed
+              ? " The input is the list of actions agreed in a long call. Turn exactly these into SMART actions, one each, " +
+                "keeping each one's owner. Merge duplicates. Add nothing else."
+              : source === "call_recording"
               ? " The input includes a transcript of the mentoring call: speakers are not labelled and it may contain " +
                 "transcription errors. Only extract actions both people clearly agreed on."
               : source === "voice_note"
@@ -165,6 +173,27 @@ export const live = {
                 : ""),
         ),
         user: notes,
+      }),
+
+  condenseChunk:
+    (chunk: string, part: number, parts: number, model: string): Live =>
+    (signal) =>
+      structured({
+        task: "condense_transcript_part",
+        model,
+        maxTokens: 900,
+        schema: ChunkNotesSchema,
+        signal,
+        system: sys(
+          `This is part ${part} of ${parts} of a mentoring call transcript (speakers are not labelled; it may contain transcription errors). ` +
+            "agreements: only explicit commitments that someone will do something. what: the commitment in the speaker's own words, " +
+            "keeping \"you\" or \"I'll\" (e.g. \"you call the three guides for referrals\", \"I'll send you the kit\"); who; and the timeframe in their words. " +
+            "Not possibilities (\"might be worth\", \"maybe later\") and not decisions to NOT do something. " +
+            "who: an offer like \"I'll send you\" or \"I'll introduce you\" from the adviser is the mentor; tasks for the business owner are the entrepreneur. " +
+            "If someone corrects a timeframe, keep the corrected one. Keep each item under 200 characters. " +
+            "context: up to 5 key facts or decisions, including ideas they decided NOT to pursue. Never invent anything.",
+        ),
+        user: chunk,
       }),
 
   checkIn:

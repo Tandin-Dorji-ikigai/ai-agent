@@ -55,6 +55,11 @@ function takeDailySlot(): boolean {
   return true;
 }
 
+/** How long live calls are paused after a rate-limit refusal (0 = not paused). */
+export function aiCooldownRemainingMs(): number {
+  return Math.max(0, cooldownUntil - Date.now());
+}
+
 /** For tests only. */
 export function _resetAiGuards() {
   cooldownUntil = 0;
@@ -103,7 +108,12 @@ export async function aiStep<S extends z.ZodType>(opts: {
       }),
     ]);
     const parsed = opts.schema.safeParse(raw);
-    if (!parsed.success) return fallbackResult("invalid_output");
+    if (!parsed.success) {
+      // Field and rule only, never the content.
+      const issue = parsed.error.issues[0];
+      console.warn(`[ai] ${opts.task}: output failed validation at "${issue?.path.join(".") || "root"}" (${issue?.code})`);
+      return fallbackResult("invalid_output");
+    }
     const rejected = opts.validate?.(parsed.data as z.infer<S>);
     if (rejected) {
       console.warn(`[ai] ${opts.task}: live output rejected (${rejected})`);

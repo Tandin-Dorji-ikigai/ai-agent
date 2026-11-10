@@ -14,6 +14,7 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 | 1. End-to-end skeleton, all 14 steps on saved responses | **Done.** `npm run demo:e2e` passes twice in a row on a local database, and the full flow was clicked through in a headless browser |
 | 1b. Team workflow: check-in loop (on track / obstacle / needs help / done), SMART actions, mentor progress, next session | **Done.** Migration 003; every branch is covered by `npm run demo:e2e` |
 | 2. Live AI | **Done.** Groq free tier: `gpt-oss-120b` and `gpt-oss-20b` (strict JSON output and real tool calling), plus Whisper for voice notes. Every step falls back to its saved response |
+| 2b. Long call transcripts and an extraction test set | **Done.** Calls of any length are read in parts, paced to the free tier, in the background. `npm run eval:extraction` scores the agent on 5 sample cases |
 | 3. Reliability | Partly done: idempotent booking, confirmation and replies; no negative credit; one open escalation per action |
 | 4. Freeze | Not started |
 
@@ -49,6 +50,8 @@ npm run lint
 npm run typecheck
 npm run demo:e2e     # all 14 demo steps plus every check-in branch, twice. RESETS THE DEMO DATA
 PACE_MS=3000 RUNS=1 npm run demo:e2e   # with AI_MODE=live: stays under the free tier, prints live vs saved counts
+E2E_SOURCE=call_recording npm run demo:e2e   # the same demo from a call transcript, plus a 30-minute call read in the background
+npm run eval:extraction   # scores extraction on evals/extraction-cases.json (rule-based with AI_MODE=fixture, live AI with AI_MODE=live)
 ```
 
 ## Demo script (about 3 minutes)
@@ -122,7 +125,7 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/assessment` | 1 |
 | POST | `/api/matches` | 2-4 |
 | POST | `/api/booking` | 5-8 (idempotent on `idempotency_key`) |
-| POST | `/api/session/complete` | 9-10. Handover contract: `{ booking_id, notes?, transcript?, source: typed \| voice_note \| call_recording }`; `422 TRANSCRIPT_TOO_LONG` above about 18,000 characters |
+| POST | `/api/session/complete` | 9-10. Handover contract: `{ booking_id, notes?, transcript?, source: typed \| voice_note \| call_recording }`. Long transcripts return `202 { processing: true }` and are read in the background; over 200,000 characters returns `400` |
 | POST | `/api/actions/confirm` | 11 (idempotent) |
 | POST | `/api/actions/status` | Pema marks an action done |
 | POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins) |
@@ -207,6 +210,25 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
   - live text that guesses anyone's gender (he/she) is rejected and the saved response is used
 - The server terminal shows token usage per call, plus why any saved response was used (`[ai] ...` lines). Prompts and keys are never logged.
 - To switch to OpenAI or another compatible provider, change `AI_BASE_URL`, the key and the model names. Nothing else changes.
+- **Pacing:** before each call, `llm.ts` waits if needed so each model stays under its tokens-per-minute limit (`AI_TPM_LIMIT`, default 8,000). This avoids rate-limit errors instead of reacting to them.
+
+**Long call transcripts (`src/lib/agent/extract.ts`, `transcripts.ts`):**
+- Text up to about 22,000 characters is read in one pass.
+- Longer transcripts:
+  1. are split into parts of about 6,000 characters at sentence boundaries;
+  2. each part's agreements are pulled out by alternating the two models;
+  3. the final step sees only the agreed actions, and its output is **grounded**: any action that matches no agreement is dropped.
+- Owners come from the speaker's words ("I'll" = mentor, "you" = entrepreneur), not the AI's guess.
+- It runs in the background with `after()`. The mentor view says "the agent is reading the session" until drafts appear. A 30-minute call takes about a minute on the free tier.
+- Every step has a rule-based fallback that only keeps sentences where people agreed something, so it never invents tasks.
+
+**Extraction quality** (`npm run eval:extraction`, 5 cases: short call, voice note with a corrected deadline, 30-minute call, mentor-owned actions, a chat with nothing agreed):
+- **Live AI, final version:** 100% of expected actions found, no extra actions, due dates and owners 100%, no forbidden actions.
+- Earlier runs caught two weaknesses, now fixed in code rather than prompts:
+  - owners guessed wrongly (75%); now decided by the speaker's words
+  - "possibilities" turned into tasks; the final step is now grounded on the real agreements
+- **Rule-based fallback:** also 100%, but it was tuned on these same cases, so treat that number as optimistic.
+- Add real transcripts to the set to get honest numbers.
 
 ## Dzongkha moment
 

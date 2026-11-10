@@ -4,11 +4,8 @@ import { loadActionItem, loadEntrepreneur, loadMentor, loadMentors } from "../da
 import { isEligible, topMatches } from "../matching/score-mentor";
 import { db, DbError, must } from "../supabase/server";
 import type { ActionItemRecord, ActionStatus, ResourceRecord } from "../types";
-import { aiStep } from "./ai";
-import { live } from "./live";
-import { rejectGenderedText } from "./prompts";
-import { fallbackExtraction } from "./fallbacks";
-import { ExtractionSchema, ToolInputs, type ToolName } from "./schemas";
+import { extractFromText } from "./extract";
+import { ToolInputs, type ToolName } from "./schemas";
 
 // The agent's controlled tools (CLAUDE_WORKING_PLAN.md, "Agent tools").
 // Rules enforced here, not in prompts:
@@ -144,18 +141,14 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
   ) as ActionItemRecord[];
   if (existing.length > 0) {
     return {
-      result: { summary: null as string | null, actions: existing, source: "fallback" as const, reused: true },
+      result: { summary: null as string | null, actions: existing, source: "fallback" as const, reused: true, parts: 0, liveParts: 0 },
       summary: `Reused ${existing.length} existing actions.`,
     };
   }
 
-  const step = await aiStep({
-    task: "extract_action_items",
-    schema: ExtractionSchema,
-    fallback: () => fallbackExtraction(input.notes),
-    live: live.extraction(input.notes, input.source),
-    validate: rejectGenderedText,
-  });
+  // Short text: one pass. Long call transcripts: split, read each part, combine.
+  const out = await extractFromText(input.notes, input.source);
+  const step = { value: out.extraction, source: out.source };
 
   const rows = step.value.actions.map((a) => ({
     session_id: input.session_id,
@@ -182,8 +175,11 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
   );
 
   return {
-    result: { summary: step.value.summary, actions: inserted, source: step.source, reused: false },
-    summary: `${inserted.length} draft actions extracted (${step.source}); waiting for human confirmation.`,
+    result: { summary: step.value.summary, actions: inserted, source: step.source, reused: false, parts: out.parts, liveParts: out.liveParts },
+    summary:
+      `${inserted.length} draft actions extracted (${step.source})` +
+      (out.parts > 1 ? ` from ${out.parts} transcript parts (${out.liveParts} read by live AI)` : "") +
+      "; waiting for human confirmation.",
   };
 }
 

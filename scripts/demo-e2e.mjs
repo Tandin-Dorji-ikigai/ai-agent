@@ -91,10 +91,10 @@ async function runOnce(n, fx) {
   check("   contract: notes or transcript required", bad1.status === 400 && bad1.json.code === "INVALID_INPUT", bad1.json);
   const bad2 = await call("POST", "/api/session/complete", {
     booking_id: b1.json.booking_id,
-    transcript: "word ".repeat(6000),
+    transcript: "word ".repeat(42_000),
     source: "call_recording",
   });
-  check("   contract: over-long transcript refused clearly", bad2.status === 422 && bad2.json.code === "TRANSCRIPT_TOO_LONG", bad2.json);
+  check("   contract: transcripts over the hard cap are refused", bad2.status === 400 && bad2.json.code === "INVALID_INPUT", bad2.json);
 
   // 9-10. Session notes (or call transcript) and extraction
   const completeBody = VIA_CALL
@@ -181,6 +181,31 @@ async function runOnce(n, fx) {
       : s.booking?.mentor_brief?.headline?.startsWith("Follow-up session") && s.booking.mentor_brief.focus.some((x) => x.includes("ESC-101")),
     s.booking?.mentor_brief,
   );
+  // Long call: read in the background, in parts
+  const followUpBooking = s.booking;
+  const lt = await call("POST", "/api/session/complete", {
+    booking_id: followUpBooking?.id,
+    transcript: fx.long_call_transcript,
+    source: "call_recording",
+  });
+  check("   long call transcript accepted for background reading", lt.status === 202 && lt.json.processing === true, lt.json);
+  let longDrafts = [];
+  let longRun;
+  for (let t = 0; t < 120; t++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    s = await state();
+    longDrafts = s.actions.filter((a) => a.session_id === s.session?.id && a.status === "draft");
+    longRun = s.runs.find((r) => r.trigger === "session.completed");
+    if (longRun && longRun.status !== "running") break;
+  }
+  check("   long transcript: draft actions extracted in the background", longDrafts.length >= 3, { run: longRun, drafts: longDrafts });
+  check(
+    "   long transcript: the idea they decided against is not an action",
+    !longDrafts.some((a) => /website/i.test(`${a.title} ${a.description ?? ""}`)),
+    longDrafts.map((a) => a.title),
+  );
+  check("   long transcript was read in parts", /-part transcript/.test(longRun?.final_output ?? ""), longRun?.final_output);
+
   if (s.ai_mode === "live") {
     const bySource = {};
     for (const r of s.runs) if (r.source) bySource[r.source] = (bySource[r.source] ?? 0) + 1;

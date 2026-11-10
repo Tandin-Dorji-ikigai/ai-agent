@@ -42,13 +42,16 @@ export type NotesSource = (typeof NOTES_SOURCES)[number];
  */
 export const SINGLE_PASS_MAX_CHARS = 18_000;
 
+/** Hard cap on what the agent accepts (about four hours of speech). */
+export const MAX_TRANSCRIPT_CHARS = 200_000;
+
 export const SessionCompleteInputSchema = z
   .object({
     booking_id: z.uuid(),
     /** The mentor's typed or voice-note notes. */
     notes: z.string().trim().max(4000).optional(),
     /** The full call transcript (from the call / audio-to-text work). */
-    transcript: z.string().trim().max(200_000).optional(),
+    transcript: z.string().trim().max(MAX_TRANSCRIPT_CHARS).optional(),
     source: z.enum(NOTES_SOURCES).default("typed"),
   })
   .refine((v) => !!v.notes || !!v.transcript, { message: "Send notes, a transcript, or both." });
@@ -134,6 +137,22 @@ export const FollowUpSchema = z.object({
 });
 export type FollowUp = z.infer<typeof FollowUpSchema>;
 
+/** What the agent keeps from one part of a long call transcript. */
+export const ChunkNotesSchema = z.object({
+  agreements: z
+    .array(
+      z.object({
+        what: shortText(400),
+        who: z.enum(["entrepreneur", "mentor", "unclear"]),
+        timeframe: z.string().trim().max(160).optional(),
+      }),
+    )
+    .max(12),
+  /** Key facts and decisions, including ideas they decided NOT to pursue. */
+  context: z.array(shortText(400)).max(8),
+});
+export type ChunkNotes = z.infer<typeof ChunkNotesSchema>;
+
 /** How the agent reads a mentee's reply to a check-in ("progress status?"). */
 export const ReplyClassificationSchema = z.object({
   status: z.enum(["done", "on_track", "stuck"]),
@@ -190,7 +209,7 @@ export const ToolInputs = {
   create_session_brief: z.object({ booking_id: z.uuid() }),
   extract_action_items: z.object({
     session_id: z.uuid(),
-    notes: shortText(SINGLE_PASS_MAX_CHARS + 4100),
+    notes: z.string().trim().min(1).max(MAX_TRANSCRIPT_CHARS + 4100),
     source: z.enum(NOTES_SOURCES).default("typed"),
   }),
   update_action_status: z.object({
