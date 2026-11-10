@@ -158,6 +158,7 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
     entrepreneur_id: session.bookings.entrepreneur_id,
     title: a.title,
     description: a.description ?? null,
+    success_measure: a.success_measure ?? null,
     owner: a.owner,
     due_in_days: a.due_in_days,
     status: "draft",
@@ -293,6 +294,87 @@ async function send_inbox_message(input: In<"send_inbox_message">, env: ToolEnv)
   return { result: row, summary: `Sent ${input.kind} message.` };
 }
 
+async function loadOwnedAction(entrepreneurId: string, actionId: string): Promise<ActionItemRecord> {
+  const action = await loadActionItem(actionId);
+  if (!action || action.entrepreneur_id !== entrepreneurId) {
+    throw new ToolError("NOT_FOUND", "Action not found for this entrepreneur.");
+  }
+  return action;
+}
+
+/** "Add to mentor progress": one entry in the mentor's progress feed. */
+async function record_progress(input: In<"record_progress">, env: ToolEnv) {
+  const action = await loadOwnedAction(input.entrepreneur_id, input.action_id);
+  const row = must(
+    await db()
+      .from("progress_updates")
+      .insert({
+        entrepreneur_id: input.entrepreneur_id,
+        action_item_id: action.id,
+        kind: input.kind,
+        note: input.note ?? null,
+        agenda: input.agenda,
+        source: input.source,
+        created_at: iso(env.now),
+      })
+      .select("id")
+      .single(),
+    "record progress",
+  ) as { id: string };
+  return { result: row, summary: `Progress on "${action.title}": ${input.kind.replaceAll("_", " ")}${input.agenda ? " (on next agenda)" : ""}.` };
+}
+
+/** "Confirm next check-in": the scheduling agent will ask again on this date. */
+async function schedule_check_in(input: In<"schedule_check_in">, env: ToolEnv) {
+  const action = await loadOwnedAction(input.entrepreneur_id, input.action_id);
+  if (!["pending", "overdue", "blocked"].includes(action.status)) {
+    throw new ToolError("INVALID_TRANSITION", `No check-in needed for a ${action.status} action.`);
+  }
+  const at = new Date(env.now.getTime() + input.in_days * 86_400_000);
+  must(
+    await db().from("action_items").update({ next_check_in_at: iso(at), updated_at: iso(env.now) }).eq("id", action.id).select("id"),
+    "schedule check-in",
+  );
+  return { result: { action_id: action.id, at: iso(at) }, summary: `Next check-in on "${action.title}" in ${input.in_days} day(s).` };
+}
+
+/**
+ * "Request to human mentor": only the mentee's own mentor (someone they have
+ * booked), verified and active. Lands on the next session's agenda.
+ */
+async function request_mentor_help(input: In<"request_mentor_help">, env: ToolEnv) {
+  const action = await loadOwnedAction(input.entrepreneur_id, input.action_id);
+  const mentor = await loadMentor(input.mentor_id);
+  if (!mentor || !isEligible(mentor)) throw new ToolError("NOT_ELIGIBLE", "Mentor is not verified and active.");
+  const relation = must(
+    await db()
+      .from("bookings")
+      .select("id")
+      .eq("entrepreneur_id", input.entrepreneur_id)
+      .eq("mentor_id", input.mentor_id)
+      .neq("status", "cancelled")
+      .limit(1),
+    "check mentor relationship",
+  ) as Array<{ id: string }>;
+  if (relation.length === 0) throw new ToolError("NOT_ELIGIBLE", "Help requests go only to the mentee's own mentor.");
+  must(
+    await db()
+      .from("progress_updates")
+      .insert({
+        entrepreneur_id: input.entrepreneur_id,
+        action_item_id: action.id,
+        kind: "mentor_requested",
+        note: input.summary,
+        agenda: true,
+        source: "system",
+        created_at: iso(env.now),
+      })
+      .select("id"),
+    "request mentor help",
+  );
+  return { result: mentor, summary: `Asked ${mentor.full_name} for help; added to the next session's agenda.` };
+}
+
 const IMPLEMENTATIONS = {
   get_entrepreneur_context,
   find_matching_mentors,
@@ -304,6 +386,9 @@ const IMPLEMENTATIONS = {
   suggest_mentor_session,
   create_escalation,
   send_inbox_message,
+  record_progress,
+  schedule_check_in,
+  request_mentor_help,
 } satisfies Record<ToolName, (input: never, env: ToolEnv) => Promise<{ result: unknown; summary: string }>>;
 
 export type ToolResult<N extends ToolName> = Awaited<ReturnType<(typeof IMPLEMENTATIONS)[N]>>["result"];

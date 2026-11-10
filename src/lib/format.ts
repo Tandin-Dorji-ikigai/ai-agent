@@ -44,8 +44,9 @@ export const TRIGGER_LABEL: Record<string, string> = {
   "mentor.selected": "Mentor selected",
   "booking.confirmed": "Booking confirmed",
   "session.completed": "Session completed",
-  "action.due_soon": "Action due soon",
+  "action.due_soon": "Scheduled check-in",
   "action.overdue": "Action overdue",
   "entrepreneur.blocked": "Entrepreneur reported a blocker",
+  "checkin.replied": "Mentee replied to a check-in",
   "escalation.requested": "Escalation requested",
 };

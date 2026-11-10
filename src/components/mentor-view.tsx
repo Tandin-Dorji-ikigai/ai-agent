@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { DEMO_SESSION_NOTES } from "@/lib/demo/fixtures";
-import { formatDay, formatNu, relativeDue } from "@/lib/format";
-import type { DemoState } from "@/lib/state-types";
+import { formatDay, formatDayTime, formatNu, relativeDue } from "@/lib/format";
+import type { AgendaItem, DemoState, ProgressView } from "@/lib/state-types";
 import { expertiseLabel, LANGUAGE_LABEL } from "@/lib/types";
 import { DemoGate, LastError } from "./demo-gate";
 import { useDemo } from "./demo-state";
@@ -63,6 +63,13 @@ function DraftReview({ state }: { state: DemoState }) {
               <span className="text-sm">
                 <span className="font-medium">{d.title}</span>
                 {d.description && <span className="block text-muted">{d.description}</span>}
+                {d.success_measure ? (
+                  <span className="block text-muted">Done when: {d.success_measure}</span>
+                ) : (
+                  <Badge tone="warning" className="mt-1">
+                    No measure of success yet
+                  </Badge>
+                )}
                 <span className="block text-xs text-muted">
                   Owner: {d.owner}, due {d.due_in_days} days after confirmation
                 </span>
@@ -78,6 +85,89 @@ function DraftReview({ state }: { state: DemoState }) {
       >
         Confirm {selected.size} action{selected.size === 1 ? "" : "s"}
       </Button>
+    </Card>
+  );
+}
+
+const PROGRESS_LABEL: Record<ProgressView["kind"], [string, "success" | "info" | "warning" | "danger" | "accent" | "neutral"]> = {
+  on_track: ["On track", "info"],
+  done: ["Done", "success"],
+  obstacle: ["Obstacle", "warning"],
+  help_requested: ["Needs help", "warning"],
+  resource_recommended: ["Resource sent", "neutral"],
+  mentor_requested: ["Asked you for help", "accent"],
+  mentor_session_suggested: ["Other mentor suggested", "neutral"],
+  escalated: ["Escalated to YDF", "danger"],
+};
+
+const AGENDA_TONE: Record<AgendaItem["kind"], "success" | "info" | "warning" | "danger" | "accent" | "neutral"> = {
+  help: "accent",
+  escalated: "danger",
+  obstacle: "warning",
+  overdue: "danger",
+  blocked: "warning",
+  on_track: "info",
+  done: "success",
+};
+
+const AGENDA_LABEL: Record<AgendaItem["kind"], string> = {
+  help: "Help asked",
+  escalated: "With YDF",
+  obstacle: "Obstacle",
+  overdue: "Overdue",
+  blocked: "Blocked",
+  on_track: "On track",
+  done: "Done",
+};
+
+/** "Add to mentor progress": what happened between sessions, newest first. */
+function ProgressFeed({ state }: { state: DemoState }) {
+  const items = [...state.progress].reverse();
+  return (
+    <Card>
+      <SectionTitle>Progress since your session</SectionTitle>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">Nothing yet. The agent checks in before each due date and records every reply here.</p>
+      ) : (
+        <ol className="space-y-3">
+          {items.map((p) => {
+            const [label, tone] = PROGRESS_LABEL[p.kind];
+            return (
+              <li key={p.id} className="rounded-lg border border-line p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge tone={tone}>{label}</Badge>
+                  <span className="text-xs text-muted">{formatDayTime(p.created_at)}</span>
+                </div>
+                {p.action_title && <p className="mt-1 text-sm font-medium">{p.action_title}</p>}
+                {p.note && <p className="text-sm text-muted">{p.note}</p>}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </Card>
+  );
+}
+
+/** "Next session": what to cover, built from progress. */
+function Agenda({ state }: { state: DemoState }) {
+  return (
+    <Card>
+      <SectionTitle>Agenda for your next session</SectionTitle>
+      {state.agenda.length === 0 ? (
+        <p className="text-sm text-muted">Items appear here as the agent checks in with {state.entrepreneur?.full_name.split(" ")[0] ?? "your mentee"}.</p>
+      ) : (
+        <ul className="space-y-2">
+          {state.agenda.map((a, i) => (
+            <li key={`${a.kind}-${a.action_id}-${i}`} className="flex items-start gap-2 text-sm">
+              <Badge tone={AGENDA_TONE[a.kind]} className="mt-0.5 shrink-0">
+                {AGENDA_LABEL[a.kind]}
+              </Badge>
+              <span>{a.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -153,6 +243,7 @@ export function MentorView() {
                         <li key={a.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
                           <div>
                             <p className="text-sm font-medium">{a.title}</p>
+                            {a.success_measure && <p className="text-xs text-muted">Done when: {a.success_measure}</p>}
                             <p className="text-xs text-muted">{a.status === "completed" ? "Done" : relativeDue(a.due_at, state.clock.now)}</p>
                             {a.blocker && <p className="mt-1 text-xs text-muted">Blocker: {a.blocker}</p>}
                           </div>
@@ -161,6 +252,13 @@ export function MentorView() {
                       ))}
                     </ul>
                   </Card>
+                )}
+
+                {confirmed.length > 0 && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Agenda state={state} />
+                    <ProgressFeed state={state} />
+                  </div>
                 )}
               </>
             )}

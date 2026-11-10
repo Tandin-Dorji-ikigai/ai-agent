@@ -8,6 +8,7 @@ import {
   explainMatch,
   fallbackAssessmentSummary,
   fallbackBriefs,
+  fallbackCheckIn,
   fallbackExtraction,
   fallbackFollowUp,
   fallbackMatchExplanations,
@@ -44,6 +45,15 @@ describe("fallbacks match the live-AI schemas", () => {
   it("action extraction", () => {
     expect(ExtractionSchema.safeParse(fallbackExtraction(DEMO_SESSION_NOTES)).success).toBe(true);
   });
+  it("scheduled check-in", () => {
+    expect(FollowUpSchema.safeParse(fallbackCheckIn(pema, "Interview five past guests", new Date("2026-11-17T00:00:00Z"))).success).toBe(true);
+  });
+  it("follow-up session briefs built from progress", () => {
+    const agenda = [{ kind: "escalated" as const, text: 'YDF is handling "Permits" (ESC-101).', action_id: "a1" }];
+    const out = fallbackBriefs(pema, SEED_MENTORS[0], new Date("2026-11-17T10:00:00Z"), agenda);
+    expect(BriefsSchema.safeParse(out).success).toBe(true);
+    expect(out.mentor.headline).toMatch(/^Follow-up session/);
+  });
   it("overdue follow-up", () => {
     expect(FollowUpSchema.safeParse(fallbackFollowUp(pema, "Confirm permits", 1)).success).toBe(true);
   });
@@ -72,6 +82,10 @@ describe("match explanations use only supplied evidence", () => {
 describe("action extraction fallback", () => {
   it("returns the saved demo actions for the demo notes", () => {
     expect(fallbackExtraction(DEMO_SESSION_NOTES)).toEqual(DEMO_EXTRACTED_ACTIONS);
+  });
+
+  it("gives every demo action a SMART measure of success", () => {
+    expect(DEMO_EXTRACTED_ACTIONS.actions.every((a) => !!a.success_measure && a.due_in_days > 0)).toBe(true);
   });
 
   it("makes exactly one demo action overdue after fast-forward", () => {

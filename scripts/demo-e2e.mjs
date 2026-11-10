@@ -94,22 +94,32 @@ async function runOnce(n, fx) {
   s = await state();
   check("   confirming twice changes nothing", k2.json.actions?.length === 3 && s.messages.length === msgsBefore, { k2: k2.json, msgsBefore, after: s.messages.length });
 
-  // 12. Fast-forward
+  // 12. Fast-forward: the scheduling agent follows up and checks in
   const f = await call("POST", "/api/demo/fast-forward", { days: fx.fast_forward_days });
   check("12 fast-forward makes exactly one action overdue", f.status === 200 && f.json.overdue_action_ids?.length === 1, f.json);
+  check("   and sends one scheduled check-in", f.json.check_in_action_ids?.length === 1, f.json);
   s = await state();
+  const titleOf = (id) => s.actions.find((x) => x.id === id)?.title;
   const overdue = s.actions.find((x) => x.status === "overdue");
-  check("   it is the permits action", overdue?.title === "Confirm which permits the guided village walk needs", overdue);
+  check("   the overdue one is the permits action", overdue?.title === "Confirm which permits the guided village walk needs", overdue);
   const followUp = s.messages.find((x) => x.kind === "follow_up" && x.awaiting_reply);
+  const checkIn = s.messages.find((x) => x.kind === "check_in" && x.awaiting_reply);
   check("   agent asks about the blocker", !!followUp, s.messages.map((x) => x.kind));
+  check("   agent checks in on the interviews before they are due", titleOf(checkIn?.related_action_id) === "Interview five past guests or local guides", checkIn);
 
-  // 13. Reply and decision
+  // 13a. On track -> confirm next check-in
+  const t1 = await call("POST", "/api/inbox/reply", { message_id: checkIn?.id, body: fx.on_track_reply });
+  check("13 on-track reply: agent confirms the next check-in", t1.status === 200 && t1.json.outcome?.decision === "On track: confirm next check-in", t1.json);
+  s = await state();
+  check("   next check-in is scheduled", !!s.actions.find((x) => x.id === checkIn?.related_action_id)?.next_check_in_at, s.actions);
+
+  // 13b. Stuck, needs help, agent cannot resolve -> human (YDF for permits)
   const r1 = await call("POST", "/api/inbox/reply", { message_id: followUp?.id, body: fx.blocker_reply });
-  check("13 agent decides: escalate to YDF", r1.status === 200 && r1.json.outcome?.decision === "Escalate to YDF", r1.json);
+  check("   stuck reply: agent decides to escalate to YDF", r1.status === 200 && r1.json.outcome?.decision === "Escalate to YDF", r1.json);
   const r2 = await call("POST", "/api/inbox/reply", { message_id: followUp?.id, body: fx.blocker_reply });
   check("   a second reply cannot trigger a second decision", r2.status === 409 && r2.json.code === "ALREADY_ANSWERED", r2.json);
 
-  // 14. Dashboard
+  // 14. Dashboard and mentor progress
   s = await state();
   check("14 one open escalation, ESC-101", s.escalations.length === 1 && s.escalations[0].code === "ESC-101" && s.escalations[0].status === "open", s.escalations);
   check(
@@ -117,9 +127,34 @@ async function runOnce(n, fx) {
     s.metrics.credits_used === 1500 && s.metrics.sessions_completed === 1 && s.metrics.actions_total === 3 && s.metrics.open_escalations === 1,
     s.metrics,
   );
-  const decisionRun = s.runs.find((x) => x.trigger === "entrepreneur.blocked");
+  const decisionRun = s.runs.find((x) => x.trigger === "checkin.replied" && x.decision === "Escalate to YDF");
   check("   activity log shows decision factors and tools", decisionRun?.decision_factors?.length > 0 && decisionRun?.tools_called?.some((t) => t.tool === "create_escalation"), decisionRun);
+  check("   mentor progress has the on-track and escalated updates", ["on_track", "escalated"].every((k) => s.progress.some((p) => p.kind === k)), s.progress);
+  check("   next-session agenda leads with the escalation", s.agenda[0]?.kind === "escalated" && s.agenda[0]?.text.includes("ESC-101"), s.agenda);
   check("   all 14 steps are done", s.steps.every((x) => x.done), s.steps.filter((x) => !x.done));
+
+  // Remaining workflow branches: record obstacle, mark done, next session
+  const f2 = await call("POST", "/api/demo/fast-forward", { days: fx.fast_forward_days });
+  check("   second fast-forward: interviews and positioning now overdue", f2.json.overdue_action_ids?.length === 2, f2.json);
+  s = await state();
+  const waiting = s.messages.filter((x) => x.awaiting_reply);
+  const msgFor = (title) => waiting.find((x) => titleOf(x.related_action_id) === title);
+  const o1 = await call("POST", "/api/inbox/reply", { message_id: msgFor("Interview five past guests or local guides")?.id, body: fx.obstacle_reply });
+  check("   'sick, will catch up' reply: agent records the obstacle", o1.json.outcome?.decision === "Record obstacle", o1.json);
+  const d1 = await call("POST", "/api/inbox/reply", { message_id: msgFor("Write a one-line positioning statement")?.id, body: fx.done_reply });
+  check("   'done' reply: agent marks the action done", d1.json.outcome?.decision === "Mark done", d1.json);
+  s = await state();
+  check("   dashboard shows 1 of 3 actions completed", s.metrics.actions_completed === 1 && s.metrics.actions_total === 3, s.metrics);
+  check("   agenda includes the obstacle and the done action", s.agenda.some((a) => a.kind === "obstacle") && s.agenda.some((a) => a.kind === "done"), s.agenda);
+
+  const nb = await call("POST", "/api/booking", { mentor_id: deki, funding_type: "ydf_credit", idempotency_key: `${key}-followup` });
+  s = await state();
+  check("   next session: follow-up booked with YDF credit", nb.status === 200 && s.credit?.amount_remaining === 0, { nb: nb.json, credit: s.credit });
+  check(
+    "   follow-up brief is built from progress",
+    s.booking?.mentor_brief?.headline?.startsWith("Follow-up session") && s.booking.mentor_brief.focus.some((x) => x.includes("ESC-101")),
+    s.booking?.mentor_brief,
+  );
   check("   no agent run failed", s.runs.every((x) => x.status === "completed"), s.runs.filter((x) => x.status !== "completed"));
 
   // Reset again (KEEP_END_STATE=1 leaves the last run finished, for inspection)
@@ -128,7 +163,7 @@ async function runOnce(n, fx) {
   s = await state();
   check(
     "reset restores the starting state",
-    reset2.status === 200 && !s.booking && s.actions.length === 0 && s.escalations.length === 0 && s.messages.length === 0 && s.runs.length === 0 && s.clock.offset_days === 0 && s.credit?.amount_remaining === 3000,
+    reset2.status === 200 && !s.booking && s.actions.length === 0 && s.escalations.length === 0 && s.messages.length === 0 && s.runs.length === 0 && s.progress.length === 0 && s.clock.offset_days === 0 && s.credit?.amount_remaining === 3000,
     { booking: s.booking, actions: s.actions.length, escalations: s.escalations.length, offset: s.clock.offset_days },
   );
 }

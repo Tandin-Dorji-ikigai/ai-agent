@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_BLOCKER_REPLY } from "../demo/fixtures";
+import { DEMO_BLOCKER_REPLY, DEMO_DONE_REPLY, DEMO_OBSTACLE_REPLY, DEMO_ON_TRACK_REPLY } from "../demo/fixtures";
 import { DEMO_IDS } from "../demo/ids";
 import { SEED_MENTORS, SEED_RESOURCES } from "../demo/seed-data";
-import { classifyBlocker, decideNextStep, validateDecision, type DecisionContext } from "./policy";
+import { classifyBlocker, classifyReply, decideNextStep, validateDecision, type DecisionContext } from "./policy";
 
 const M = DEMO_IDS.mentors;
 const unapproved = SEED_RESOURCES.find((r) => !r.approved)!;
@@ -86,5 +86,49 @@ describe("validateDecision guards what the AI may choose", () => {
     const permits = ctx(DEMO_BLOCKER_REPLY);
     const approved = SEED_RESOURCES.find((r) => r.approved)!;
     expect(validateDecision({ action: "recommend_resource", resource_id: approved.id, factors: ["x"] }, permits)).toMatch(/qualified person/);
+  });
+});
+
+describe("progress status: reading a mentee's reply", () => {
+  it("reads the demo replies into the four workflow branches", () => {
+    expect(classifyReply(DEMO_ON_TRACK_REPLY)).toMatchObject({ status: "on_track", needs_help: false });
+    expect(classifyReply(DEMO_DONE_REPLY)).toMatchObject({ status: "done", needs_help: false });
+    expect(classifyReply(DEMO_OBSTACLE_REPLY)).toMatchObject({ status: "stuck", needs_help: false });
+    expect(classifyReply(DEMO_BLOCKER_REPLY)).toMatchObject({ status: "stuck", needs_help: true });
+  });
+
+  it("treats a stuck reply with no explanation as needing help", () => {
+    expect(classifyReply("I'm stuck on the pricing.")).toMatchObject({ status: "stuck", needs_help: true });
+  });
+
+  it("handles curly apostrophes from phone keyboards", () => {
+    expect(classifyReply("I don\u2019t know which form to use")).toMatchObject({ status: "stuck", needs_help: true });
+  });
+
+  it("does not read 'will' as 'ill'", () => {
+    expect(classifyReply("I will finish it tomorrow.")).toMatchObject({ status: "on_track" });
+  });
+});
+
+describe("request to the mentee's own mentor", () => {
+  it("asks the current mentor when no approved resource covers a topic they list", () => {
+    const d = decideNextStep(ctx("I can't find guests willing to talk to me.", { resources: [] }));
+    expect(d).toMatchObject({ action: "request_mentor_help", mentor_id: M.dekiWangmo });
+    expect(validateDecision(d, ctx("I can't find guests willing to talk to me.", { resources: [] }))).toBeNull();
+  });
+
+  it("asks the current mentor about an unclear blocker", () => {
+    const d = decideNextStep(ctx("Something came up with my cousin and the house."));
+    expect(d).toMatchObject({ action: "request_mentor_help", mentor_id: M.dekiWangmo });
+  });
+
+  it("only allows requests to the mentee's own mentor", () => {
+    const c = ctx("I am stuck.");
+    expect(validateDecision({ action: "request_mentor_help", mentor_id: M.sonamChoden, factors: ["x"] }, c)).toMatch(/own mentor/);
+  });
+
+  it("does not send a sensitive topic to a mentor who does not list it", () => {
+    const c = ctx(DEMO_BLOCKER_REPLY);
+    expect(validateDecision({ action: "request_mentor_help", mentor_id: M.dekiWangmo, factors: ["x"] }, c)).toMatch(/sensitive/);
   });
 });

@@ -5,8 +5,9 @@ import { DEMO_IDS } from "@/lib/demo/ids";
 import { fail, handleError, ok, parseBody } from "@/lib/http";
 import { db, must } from "@/lib/supabase/server";
 
-// POST /api/inbox/reply: Pema answers the agent's follow-up (demo step 13).
-// The reply is claimed atomically, so a double click cannot trigger two decisions.
+// POST /api/inbox/reply: Pema answers a check-in or follow-up (demo step 13).
+// The agent reads the reply (done / on track / stuck) and acts on it.
+// The message is claimed atomically, so a double click cannot trigger two decisions.
 export async function POST(req: Request) {
   const body = await parseBody(req, InboxReplyInputSchema);
   if ("error" in body) return body.error;
@@ -43,12 +44,12 @@ export async function POST(req: Request) {
     if (!claimed[0].related_action_id) return ok({ outcome: null });
 
     const outcome = await emitAndRun({
-      event_type: "entrepreneur.blocked",
+      event_type: "checkin.replied",
       entity_type: "action_item",
       entity_id: claimed[0].related_action_id,
       entrepreneur_id: DEMO_IDS.pema,
-      payload: { action_id: claimed[0].related_action_id, blocker: body.data.body, reply_to: body.data.message_id },
-      dedupe_key: `entrepreneur.blocked:${body.data.message_id}`,
+      payload: { action_id: claimed[0].related_action_id, reply: body.data.body, reply_to: body.data.message_id },
+      dedupe_key: `checkin.replied:${body.data.message_id}`,
     });
     return ok({ outcome });
   } catch (err) {

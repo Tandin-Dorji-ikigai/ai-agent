@@ -1,7 +1,22 @@
 // The JSON returned by GET /api/state. Shared by server and client code.
 
 import type { ScoreBreakdown } from "./matching/score-mentor";
-import type { ActionItemRecord, EntrepreneurRecord, MentorRecord } from "./types";
+import type { AgendaItem } from "./progress";
+import type { ActionItemRecord, EntrepreneurRecord, MentorRecord, ProgressKind } from "./types";
+
+export type { AgendaItem };
+
+/** One entry in the mentor's progress feed. */
+export interface ProgressView {
+  id: string;
+  action_item_id: string | null;
+  action_title: string | null;
+  kind: ProgressKind;
+  note: string | null;
+  agenda: boolean;
+  source: "live_ai" | "fallback" | "human" | "system" | null;
+  created_at: string;
+}
 
 export interface MatchView {
   rank: number;
@@ -50,7 +65,7 @@ export interface SessionView {
 export interface MessageView {
   id: string;
   sender: "agent" | "entrepreneur" | "mentor" | "ydf";
-  kind: "info" | "follow_up" | "reply" | "recommendation" | "escalation_notice";
+  kind: "info" | "follow_up" | "check_in" | "reply" | "recommendation" | "escalation_notice";
   body: string;
   body_dz: string | null;
   dz_verified: boolean;
@@ -116,6 +131,10 @@ export interface DemoState {
   messages: MessageView[];
   escalations: EscalationView[];
   runs: AgentRunView[];
+  /** "Add to mentor progress": every reply outcome, newest last. */
+  progress: ProgressView[];
+  /** What the mentor should cover in the next session. */
+  agenda: AgendaItem[];
   metrics: {
     credits_used: number;
     credits_granted: number;

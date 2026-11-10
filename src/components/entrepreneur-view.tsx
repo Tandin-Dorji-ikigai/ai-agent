@@ -1,12 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { formatDay, formatNu, relativeDue } from "@/lib/format";
 import type { DemoState } from "@/lib/state-types";
 import { DemoGate, LastError } from "./demo-gate";
 import { useDemo } from "./demo-state";
 import { AssessmentForm } from "./entrepreneur/assessment-form";
 import { Inbox } from "./entrepreneur/inbox";
-import { MentorCard } from "./entrepreneur/mentor-card";
+import { MentorCard, newIdempotencyKey } from "./entrepreneur/mentor-card";
 import { Badge, Button, Card, SectionTitle, SourceBadge, StatusBadge } from "./ui";
 
 // Pema's phone. Mobile-first: one narrow column.
@@ -45,6 +46,39 @@ function Recommendations({ state }: { state: DemoState }) {
         </p>
       )}
     </section>
+  );
+}
+
+/** "Next session": book a follow-up with the same mentor, briefed from progress. */
+function FollowUpBooking({ state }: { state: DemoState }) {
+  const { act, busy } = useDemo();
+  const [key, setKey] = useState(newIdempotencyKey);
+  const b = state.booking!;
+  const m = b.mentor;
+  const useCredit = !!state.credit && state.credit.status === "active" && state.credit.amount_remaining >= m.fee;
+  if (m.slots_remaining < 1) return <p className="mt-3 text-sm text-muted">{m.full_name} has no open sessions right now.</p>;
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <p className="text-sm text-muted">
+        {m.full_name.split(" ")[0]} will be briefed with your progress since this session.{" "}
+        {useCredit ? `Uses ${formatNu(m.fee)} of your YDF credit.` : `Self-paid (simulated), ${formatNu(m.fee)}.`}
+      </p>
+      <Button
+        className="mt-2 w-full"
+        variant="secondary"
+        busy={busy === "follow-up"}
+        onClick={async () => {
+          const res = await act("follow-up", "/api/booking", {
+            mentor_id: m.id,
+            funding_type: useCredit ? "ydf_credit" : "self_paid",
+            idempotency_key: key,
+          });
+          if (!res.ok) setKey(newIdempotencyKey());
+        }}
+      >
+        Book a follow-up with {m.full_name.split(" ")[0]}
+      </Button>
+    </div>
   );
 }
 
@@ -89,6 +123,7 @@ function SessionCard({ state }: { state: DemoState }) {
       {b.status === "completed" && state.actions.some((a) => a.status === "draft") && (
         <p className="mt-3 text-sm text-muted">{b.mentor.full_name.split(" ")[0]} is reviewing the actions from your session.</p>
       )}
+      {b.status === "completed" && state.session?.summary_confirmed && <FollowUpBooking state={state} />}
     </Card>
   );
 }
@@ -105,7 +140,11 @@ function Actions({ state }: { state: DemoState }) {
           <li key={a.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
             <div>
               <p className="text-sm font-medium">{a.title}</p>
-              <p className="text-xs text-muted">{a.status === "completed" ? "Done" : relativeDue(a.due_at, state.clock.now)}</p>
+              {a.success_measure && <p className="text-xs text-muted">Done when: {a.success_measure}</p>}
+              <p className="text-xs text-muted">
+                {a.status === "completed" ? "Done" : relativeDue(a.due_at, state.clock.now)}
+                {a.next_check_in_at && a.status !== "completed" ? `. Next check-in ${formatDay(a.next_check_in_at)}` : ""}
+              </p>
               {a.blocker && <p className="mt-1 text-xs text-muted">Blocked: {a.blocker}</p>}
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1.5">

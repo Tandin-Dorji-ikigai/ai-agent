@@ -33,7 +33,7 @@ export async function POST(req: Request) {
         {
           entrepreneur_id: DEMO_IDS.pema,
           kind: "info",
-          body: `Your actions from the session are confirmed:\n${list}\nI will check in if anything slips.`,
+          body: `Your actions from the session are confirmed:\n${list}\nI will check in on each one before it is due.`,
           source: "system",
         },
         { now },

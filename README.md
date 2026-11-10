@@ -12,7 +12,8 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 |---|---|
 | 0. Repository audit | Done (empty repository) |
 | 1. End-to-end skeleton, all 14 steps on saved responses | **Done.** `npm run demo:e2e` passes twice in a row on a local database, and the full flow was clicked through in a headless browser |
-| 2. Replace saved responses with live AI | Next. Needs an AI provider and an API key |
+| 1b. Team workflow: check-in loop (on track / obstacle / needs help / done), SMART actions, mentor progress, next session | **Done.** Migration 003; every branch is covered by `npm run demo:e2e` |
+| 2. Replace saved responses with live AI | Next. Provider: **OpenAI** (LLM with structured output and tool calling; Whisper for audio notes). Needs `OPENAI_API_KEY` |
 | 3. Reliability | Partly done: idempotent booking, confirmation and replies; no negative credit; one open escalation per action |
 | 4. Freeze | Not started |
 
@@ -41,10 +42,10 @@ Open the app and click **Load demo data**, or go to the YDF view and press **Res
 ### Checks
 
 ```bash
-npm test             # 34 unit tests: ranking, fallbacks, decision rules, AI timeout handling
+npm test             # 47 unit tests: ranking, fallbacks, reply reading, decision rules, agenda, AI timeout handling
 npm run lint
 npm run typecheck
-npm run demo:e2e     # runs all 14 demo steps against the running app, twice. RESETS THE DEMO DATA
+npm run demo:e2e     # all 14 demo steps plus every check-in branch, twice. RESETS THE DEMO DATA
 ```
 
 ## Demo script (about 3 minutes)
@@ -53,9 +54,9 @@ npm run demo:e2e     # runs all 14 demo steps against the running app, twice. RE
 2. Three ranked mentors appear, each with a score breakdown and an explanation built from evidence. Point out that the most-booked mentor ranks 13th of 13.
 3. **Choose Deki**, keep **Use my YDF credit**, then **Book session**. Pema's preparation checklist appears.
 4. **Mentor view**. Show the brief, press **Complete session**, review the three draft actions, then **Confirm 3 actions**.
-5. **YDF view**. Press **Fast-forward 5 days**. One action becomes overdue, and the agent messages Pema.
-6. **Entrepreneur view**. Show the follow-up message, then **Send reply** (pre-filled with the permits blocker).
-7. The agent decides **Escalate to YDF**. On the **YDF view**, show ESC-101, the metrics, and the activity log with its decision factors and tool calls.
+5. **YDF view**. Press **Fast-forward 5 days**. The scheduling agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
+6. **Entrepreneur view**. Two messages need a reply. Reply to the interviews check-in first (pre-filled "going well"): the agent confirms the next check-in. Then reply to the permits follow-up (pre-filled with the blocker).
+7. The agent decides **Escalate to YDF**. On the **Mentor view**, show the agenda for the next session and the progress feed. On the **YDF view**, show ESC-101, the metrics, and the activity log with its decision factors and tool calls.
 8. Press **Reset demo** before the next rehearsal.
 
 ## Architecture
@@ -82,6 +83,7 @@ npm run demo:e2e     # runs all 14 demo steps against the running app, twice. RE
 - **No login:** a demo role switcher (Entrepreneur / Mentor / YDF) replaces Supabase Auth.
 - **Database access:** server only, with the service-role key. Row-level security is on for every table with no policies, so the public anon key can read nothing (verified).
 - **Agent events:** an event runs immediately after it is created, so the demo never waits for a worker. `agent_events` still records every event; a failed event can be retried from the YDF log (`POST /api/agent/run`).
+- **Check-in loop (team workflow):** confirmed actions are SMART (with a "done when" measure) and get a check-in two days before they are due. Each reply is read as done, on track, or stuck (with or without needing help). Then the agent marks it done, confirms the next check-in, records the obstacle, recommends an approved resource, asks the mentee's own mentor (onto the next session's agenda), suggests another mentor, or escalates to YDF for sensitive topics. Every outcome goes into the mentor's progress feed, and a follow-up booking is briefed from it.
 - **Demo clock:** fast-forward moves an offset stored in `demo_state`, and the whole app reads time through it (`demo_now()` in SQL, `getDemoClock()` in TypeScript). The real clock is never changed.
 
 ### Repository layout
@@ -90,9 +92,11 @@ npm run demo:e2e     # runs all 14 demo steps against the running app, twice. RE
 supabase/migrations/
   20261110000001_schema.sql          tables, constraints, RLS
   20261110000002_demo_functions.sql  create_booking, confirm_action_items, fast_forward_demo, reset_demo
+  20261110000003_checkin_loop.sql    SMART measure, check-in schedule, progress_updates, new event types
 src/lib/
   agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, ai, prompts
   matching/    score-mentor.ts (deterministic ranking)
+  progress.ts  mentor progress feed and next-session agenda
   demo/        ids, seed-data (single source of truth), fixtures, dzongkha
   supabase/    server-only client
   state.ts     GET /api/state builder (all dashboard numbers come from here)
@@ -114,8 +118,8 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/session/complete` | 9-10 |
 | POST | `/api/actions/confirm` | 11 (idempotent) |
 | POST | `/api/actions/status` | Pema marks an action done |
-| POST | `/api/demo/fast-forward` | 12 |
-| POST | `/api/inbox/reply` | 13 (one decision per follow-up) |
+| POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins) |
+| POST | `/api/inbox/reply` | 13 (one decision per check-in or follow-up) |
 | POST | `/api/agent/run` | Retry a failed event |
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
@@ -157,12 +161,14 @@ The source of truth is `supabase/migrations/20261110000001_schema.sql`. The tabl
   - `resources`: approved resources only
   - `messages`: the agent inbox
   - `demo_state`: the demo clock
+  - `progress_updates`: the mentor progress feed (migration 003)
+- Migration 003 also gives `action_items` a `success_measure`, `next_check_in_at` and `last_check_in_at`.
 
 ## Agent tools
 
 Defined in `src/lib/agent/schemas.ts` (inputs) and `tools.ts` (implementations). Each event type may use only its listed tools (`ALLOWED_TOOLS` in `handlers.ts`).
 
-`get_entrepreneur_context`, `find_matching_mentors`, `create_booking_request`, `create_session_brief`, `extract_action_items`, `update_action_status`, `recommend_approved_resource`, `suggest_mentor_session`, `create_escalation`, `send_inbox_message`
+`get_entrepreneur_context`, `find_matching_mentors`, `create_booking_request`, `create_session_brief`, `extract_action_items`, `update_action_status`, `recommend_approved_resource`, `suggest_mentor_session`, `create_escalation`, `send_inbox_message`, `record_progress`, `schedule_check_in`, `request_mentor_help` (only to the mentee's own mentor)
 
 ## Mentor scoring (deterministic)
 

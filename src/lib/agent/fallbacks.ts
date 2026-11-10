@@ -6,6 +6,7 @@
 
 import { DEMO_EXTRACTED_ACTIONS, DEMO_SESSION_NOTES } from "../demo/fixtures";
 import type { ScoredMentor } from "../matching/score-mentor";
+import type { AgendaItem } from "../progress";
 import {
   LANGUAGE_LABEL,
   expertiseLabel,
@@ -84,8 +85,9 @@ export function fallbackMatchExplanations(e: EntrepreneurRecord, matches: Scored
 // Session briefs
 // ---------------------------------------------------------------------------
 
-export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduledAt: Date): Briefs {
+export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduledAt: Date, agenda: AgendaItem[] = []): Briefs {
   const when = scheduledAt.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  if (agenda.length > 0) return followUpBriefs(e, m, when, agenda);
   const needs = e.expertise_needs.map((n) => expertiseLabel(n).toLowerCase());
   const shared = needs.filter((n) => m.expertise.map((x) => expertiseLabel(x).toLowerCase()).includes(n));
   return {
@@ -118,6 +120,31 @@ export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduled
   };
 }
 
+/** Brief for a follow-up session: starts from the progress agenda, not from zero. */
+function followUpBriefs(e: EntrepreneurRecord, m: MentorRecord, when: string, agenda: AgendaItem[]): Briefs {
+  const clip = (s: string) => (s.length > 200 ? `${s.slice(0, 197)}...` : s);
+  const open = agenda.filter((a) => a.kind !== "done" && a.kind !== "on_track");
+  const titles = [...new Set(agenda.map((a) => a.text.match(/"([^"]+)"/)?.[1]).filter((t): t is string => !!t))];
+  return {
+    entrepreneur: {
+      headline: `Your follow-up session with ${m.full_name} on ${when}`,
+      prepare: [
+        titles.length ? clip(`Be ready to update ${m.full_name.split(" ")[0]} on: ${titles.join("; ")}.`) : "Be ready to share your progress since the last session.",
+        "Bring any notes from guest conversations.",
+        "Note one thing that went better than expected.",
+      ],
+      questions_to_ask: (open.length ? open : agenda).slice(0, 3).map((a) => clip(`What should I do next about ${a.text.match(/"([^"]+)"/)?.[1] ?? "this"}?`)),
+    },
+    mentor: {
+      headline: `Follow-up session with ${e.full_name}, ${e.business_name ?? "early-stage business"}`,
+      about: clip(
+        `Since your last session: ${agenda.filter((a) => a.kind === "done").length} action(s) done, ${open.length} need attention. The agent has tracked progress between sessions.`,
+      ),
+      focus: agenda.slice(0, 5).map((a) => clip(a.text)),
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Action extraction
 // ---------------------------------------------------------------------------
@@ -146,6 +173,18 @@ export function fallbackExtraction(notes: string): Extraction {
       owner: "entrepreneur" as const,
       due_in_days: 7 + i * 3,
     })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled progress check-in (before the due date)
+// ---------------------------------------------------------------------------
+
+export function fallbackCheckIn(e: Pick<EntrepreneurRecord, "full_name">, actionTitle: string, dueAt: Date | null): FollowUp {
+  const firstName = e.full_name.split(" ")[0];
+  const due = dueAt ? ` It is due on ${dueAt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}.` : "";
+  return {
+    body: `Kuzu zangpo la, ${firstName}. How is "${actionTitle}" going?${due} Reply with a quick update: on track, done, or stuck.`,
   };
 }
 

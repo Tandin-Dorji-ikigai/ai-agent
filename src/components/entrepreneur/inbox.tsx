@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DEMO_BLOCKER_REPLY } from "@/lib/demo/fixtures";
+import { demoReplyFor } from "@/lib/demo/fixtures";
 import { formatDayTime } from "@/lib/format";
 import type { DemoState, MessageView } from "@/lib/state-types";
 import { useDemo } from "../demo-state";
@@ -9,6 +9,7 @@ import { Badge, Button, Card, SectionTitle, SourceBadge, inputClass } from "../u
 import { newIdempotencyKey } from "./mentor-card";
 
 // The agent inbox: how the agent reaches the entrepreneur between sessions.
+// Check-ins and overdue follow-ups each get their own reply box.
 
 function AgentMessage({ m }: { m: MessageView }) {
   const isFollowUp = m.kind === "follow_up";
@@ -27,6 +28,8 @@ function AgentMessage({ m }: { m: MessageView }) {
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-muted">{formatDayTime(m.created_at)}</span>
+        {m.kind === "check_in" && <Badge tone="info">Check-in</Badge>}
+        {isFollowUp && <Badge tone="danger">Overdue</Badge>}
         {m.kind === "recommendation" && <Badge tone="accent">Suggestion</Badge>}
         {escalationCode && <Badge tone="warning">Escalated: {escalationCode}</Badge>}
         {isFollowUp && !m.dz_verified && <Badge>Dzongkha version pending review</Badge>}
@@ -62,14 +65,38 @@ function SuggestedSession({ m, credit }: { m: MessageView; credit: DemoState["cr
   );
 }
 
-export function Inbox({ state }: { state: DemoState }) {
+function ReplyBox({ m, actionTitle }: { m: MessageView; actionTitle: string | undefined }) {
   const { act, busy } = useDemo();
-  const awaiting = [...state.messages].reverse().find((m) => m.awaiting_reply);
-  const [reply, setReply] = useState(DEMO_BLOCKER_REPLY);
+  const [reply, setReply] = useState(() => demoReplyFor(actionTitle, m.kind));
+  const id = `reply-${m.id}`;
+  return (
+    <form
+      className="mt-2 w-full space-y-2 rounded-xl border border-line p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void act(id, "/api/inbox/reply", { message_id: m.id, body: reply });
+      }}
+    >
+      <label htmlFor={id} className="block text-sm font-medium">
+        Reply about {actionTitle ? `"${actionTitle}"` : "this"}
+      </label>
+      <textarea id={id} rows={3} className={inputClass} value={reply} onChange={(e) => setReply(e.target.value)} required />
+      <Button type="submit" className="w-full" busy={busy === id}>
+        {busy === id ? "The agent is reading your reply..." : "Send reply"}
+      </Button>
+    </form>
+  );
+}
+
+export function Inbox({ state }: { state: DemoState }) {
+  const waiting = state.messages.filter((m) => m.awaiting_reply).length;
+  const titleOf = (id: string | null) => state.actions.find((a) => a.id === id)?.title;
 
   return (
     <Card>
-      <SectionTitle aside={awaiting ? <Badge tone="danger">Needs your reply</Badge> : undefined}>Messages from your mentoring agent</SectionTitle>
+      <SectionTitle aside={waiting > 0 ? <Badge tone="danger">{waiting === 1 ? "1 needs your reply" : `${waiting} need your reply`}</Badge> : undefined}>
+        Messages from your mentoring agent
+      </SectionTitle>
       {state.messages.length === 0 ? (
         <p className="text-sm text-muted">No messages yet. The agent will write here when it books, prepares or checks in.</p>
       ) : (
@@ -85,29 +112,12 @@ export function Inbox({ state }: { state: DemoState }) {
                 <>
                   <AgentMessage m={m} />
                   {m.kind === "recommendation" && <SuggestedSession m={m} credit={state.credit} />}
+                  {m.awaiting_reply && <ReplyBox m={m} actionTitle={titleOf(m.related_action_id)} />}
                 </>
               )}
             </li>
           ))}
         </ol>
-      )}
-
-      {awaiting && (
-        <form
-          className="mt-4 space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void act("reply", "/api/inbox/reply", { message_id: awaiting.id, body: reply });
-          }}
-        >
-          <label htmlFor="reply" className="block text-sm font-medium">
-            Your reply
-          </label>
-          <textarea id="reply" rows={4} className={inputClass} value={reply} onChange={(e) => setReply(e.target.value)} required />
-          <Button type="submit" className="w-full" busy={busy === "reply"}>
-            {busy === "reply" ? "The agent is deciding..." : "Send reply"}
-          </Button>
-        </form>
       )}
     </Card>
   );

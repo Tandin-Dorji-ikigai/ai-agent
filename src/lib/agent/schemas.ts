@@ -2,7 +2,7 @@
 // Live AI output and saved fallbacks must both pass these schemas.
 
 import { z } from "zod";
-import { EXPERTISE, LANGUAGES, SECTORS, STAGES } from "../types";
+import { EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES } from "../types";
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
 
@@ -101,6 +101,8 @@ export const ExtractionSchema = z.object({
       z.object({
         title: shortText(140),
         description: z.string().trim().max(300).optional(),
+        /** SMART "measurable": how we will know it is done. */
+        success_measure: z.string().trim().max(200).nullable().optional(),
         owner: z.enum(["entrepreneur", "mentor"]),
         due_in_days: z.number().int().min(1).max(60),
       }),
@@ -114,6 +116,14 @@ export const FollowUpSchema = z.object({
 });
 export type FollowUp = z.infer<typeof FollowUpSchema>;
 
+/** How the agent reads a mentee's reply to a check-in ("progress status?"). */
+export const ReplyClassificationSchema = z.object({
+  status: z.enum(["done", "on_track", "stuck"]),
+  needs_help: z.boolean(),
+  summary: shortText(300),
+});
+export type ReplyClassification = z.infer<typeof ReplyClassificationSchema>;
+
 const factors = z.array(shortText(200)).min(1).max(5);
 
 export const DecisionSchema = z.discriminatedUnion("action", [
@@ -124,6 +134,12 @@ export const DecisionSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("suggest_mentor_session"),
+    mentor_id: z.uuid(),
+    factors,
+  }),
+  z.object({
+    // "Request to human mentor": the mentee's own mentor, added to the next session's agenda.
+    action: z.literal("request_mentor_help"),
     mentor_id: z.uuid(),
     factors,
   }),
@@ -181,7 +197,7 @@ export const ToolInputs = {
   }),
   send_inbox_message: z.object({
     entrepreneur_id: z.uuid(),
-    kind: z.enum(["info", "follow_up", "recommendation", "escalation_notice"]),
+    kind: z.enum(["info", "follow_up", "check_in", "recommendation", "escalation_notice"]),
     body: shortText(800),
     body_dz: z.string().max(800).nullable().optional(),
     dz_verified: z.boolean().optional(),
@@ -189,6 +205,25 @@ export const ToolInputs = {
     awaiting_reply: z.boolean().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     source: z.enum(["live_ai", "fallback", "human", "system"]),
+  }),
+  record_progress: z.object({
+    entrepreneur_id: z.uuid(),
+    action_id: z.uuid(),
+    kind: z.enum(PROGRESS_KINDS),
+    note: z.string().trim().max(600).optional(),
+    agenda: z.boolean().default(false),
+    source: z.enum(["live_ai", "fallback", "human", "system"]),
+  }),
+  schedule_check_in: z.object({
+    entrepreneur_id: z.uuid(),
+    action_id: z.uuid(),
+    in_days: z.number().int().min(1).max(14),
+  }),
+  request_mentor_help: z.object({
+    entrepreneur_id: z.uuid(),
+    mentor_id: z.uuid(),
+    action_id: z.uuid(),
+    summary: shortText(600),
   }),
 } as const;
 

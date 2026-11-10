@@ -22,8 +22,8 @@ Welcome to the team. This guide gets you from zero to a running app in about 15 
 3. She books Deki, a Dzongkha-speaking tourism mentor, using a YDF credit.
 4. The agent briefs both of them before the session.
 5. After the session, it turns the mentor's notes into three actions.
-6. A few days later one action is overdue. The agent asks Pema what is blocking her.
-7. She needs help with permits, which no approved resource or verified mentor covers, so the agent escalates to YDF.
+6. A few days later the agent checks in: one action is going well (it confirms the next check-in), one is overdue.
+7. Pema is stuck on permits, which no approved resource or verified mentor covers, so the agent escalates to YDF. Her mentor sees all of this in a progress feed and an agenda for their next session.
 
 **The judges will be asked to look for:**
 
@@ -40,7 +40,8 @@ Welcome to the team. This guide gets you from zero to a running app in about 15 
 | Milestone | Status |
 |---|---|
 | 1. All 14 demo steps working on saved responses | **Done.** Tested end to end twice against our Supabase project |
-| 2. Switch saved responses to live AI | **Next.** Waiting on the choice of AI provider and an API key |
+| 1b. Our workflow diagram: check-ins, on track / obstacle / needs help / done, SMART actions, mentor progress, next session | **Done** |
+| 2. Switch saved responses to live AI | **Next.** We use **OpenAI** (and Whisper for audio notes). Waiting on an API key |
 | 3. Reliability polish | Partly done |
 | 4. Freeze: no new features, rehearse, record backup video | End of Day 2 |
 
@@ -94,7 +95,7 @@ Open http://localhost:3000. If you see the three view cards and a "Demo controls
 **Check everything works:**
 
 ```bash
-npm test          # 34 unit tests, about 1 second
+npm test          # 47 unit tests, about 1 second
 npm run lint
 npm run typecheck
 ```
@@ -120,9 +121,9 @@ Use the **Entrepreneur / Mentor / YDF** tabs at the top. The header shows the de
 2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor.
 3. **Choose Deki**, keep **Use my YDF credit**, **Book session**. The prep checklist appears; credit drops to Nu. 1,500.
 4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**.
-5. **YDF:** **Fast-forward 5 days**. One action becomes overdue and the agent messages Pema.
-6. **Entrepreneur:** **Send reply** (pre-filled with the permits problem). The agent escalates: **ESC-101**.
-7. **YDF:** metrics, the escalation, and the **Agent activity** log with decision factors and the tools used.
+5. **YDF:** **Fast-forward 5 days**. The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
+6. **Entrepreneur:** two messages need a reply. **Send reply** on the interviews check-in first ("going well"): the agent confirms the next check-in. Then **Send reply** on the permits follow-up: the agent escalates, **ESC-101**.
+7. **Mentor:** the agenda for the next session and the progress feed. **YDF:** metrics, the escalation, and the **Agent activity** log with decision factors and the tools used.
 8. **Reset demo** (YDF view) to start again.
 
 Tip: narrow your browser window, or use the browser's mobile view, to see Pema's screen as it looks on a phone.
@@ -164,7 +165,9 @@ scripts/demo-e2e.mjs      automatic check of all 14 steps
 | Pema's pre-filled answers, session notes, blocker reply | `src/lib/demo/fixtures.ts` |
 | The Dzongkha follow-up message | `src/lib/demo/dzongkha.ts` (see section 9, Person 3) |
 | Saved AI responses (wording) | `src/lib/agent/fallbacks.ts` |
-| How the agent picks resource / mentor / escalate | `src/lib/agent/policy.ts` |
+| How the agent reads replies and picks resource / own mentor / other mentor / escalate | `src/lib/agent/policy.ts` |
+| Mentor progress feed and next-session agenda | `src/lib/progress.ts` |
+| Pre-filled replies for the demo (on track, obstacle, done) | `src/lib/demo/fixtures.ts` |
 | Ranking weights | `src/lib/matching/score-mentor.ts` |
 | What each agent event does | `src/lib/agent/handlers.ts` |
 

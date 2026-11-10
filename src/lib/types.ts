@@ -106,6 +106,7 @@ export const EVENT_TYPES = [
   "action.due_soon",
   "action.overdue",
   "entrepreneur.blocked",
+  "checkin.replied",
   "escalation.requested",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -170,6 +171,35 @@ export interface ActionItemRecord {
   due_at: string | null;
   status: ActionStatus;
   blocker: string | null;
+  /** SMART "measurable": how we will know it is done. */
+  success_measure: string | null;
+  next_check_in_at: string | null;
+  last_check_in_at: string | null;
   confirmed_at: string | null;
+  created_at: string;
+}
+
+export const PROGRESS_KINDS = [
+  "on_track",
+  "done",
+  "obstacle",
+  "help_requested",
+  "resource_recommended",
+  "mentor_requested",
+  "mentor_session_suggested",
+  "escalated",
+] as const;
+export type ProgressKind = (typeof PROGRESS_KINDS)[number];
+
+/** One entry in the mentor's progress feed ("add to mentor progress"). */
+export interface ProgressUpdateRecord {
+  id: string;
+  entrepreneur_id: string;
+  action_item_id: string | null;
+  kind: ProgressKind;
+  note: string | null;
+  /** true = carried into the next session's agenda */
+  agenda: boolean;
+  source: "live_ai" | "fallback" | "human" | "system" | null;
   created_at: string;
 }

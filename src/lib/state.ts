@@ -4,6 +4,7 @@ import { getDemoClock } from "./clock";
 import { loadEntrepreneur, loadMentors } from "./data";
 import { DEMO_IDS } from "./demo/ids";
 import { rankMentors, scoreMentor, type ScoreBreakdown } from "./matching/score-mentor";
+import { buildAgenda } from "./progress";
 import type {
   AgentRunView,
   BookingView,
@@ -12,10 +13,11 @@ import type {
   EscalationView,
   MatchView,
   MessageView,
+  ProgressView,
   SessionView,
 } from "./state-types";
 import { db, must } from "./supabase/server";
-import type { ActionItemRecord, MentorRecord } from "./types";
+import type { ActionItemRecord, MentorRecord, ProgressUpdateRecord } from "./types";
 
 // Builds the whole demo state in one response. Every number on the YDF
 // dashboard comes from these database reads; nothing is invented.
@@ -45,13 +47,15 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       messages: [],
       escalations: [],
       runs: [],
+      progress: [],
+      agenda: [],
       metrics: { credits_used: 0, credits_granted: 0, sessions_completed: 0, actions_completed: 0, actions_total: 0, open_escalations: 0 },
       steps: stepsFor(null),
       mentor_for_view: null,
     };
   }
 
-  const [matchRows, creditRows, bookingRows, actionRows, messageRows, escalationRows, runRows, sessionRows] = await Promise.all([
+  const [matchRows, creditRows, bookingRows, actionRows, messageRows, escalationRows, runRows, sessionRows, progressRows] = await Promise.all([
     db().from("mentor_matches").select("*").eq("entrepreneur_id", entrepreneurId).order("rank"),
     db().from("sponsorship_credits").select("amount_granted, amount_remaining, status").eq("entrepreneur_id", entrepreneurId),
     db().from("bookings").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at", { ascending: false }).limit(1),
@@ -60,6 +64,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     db().from("escalations").select("*, profiles!escalations_entrepreneur_id_fkey(full_name), action_items(title)").order("created_at", { ascending: false }),
     db().from("agent_runs").select("*").order("created_at", { ascending: false }).limit(40),
     db().from("sessions").select("*, bookings!inner(entrepreneur_id)").eq("bookings.entrepreneur_id", entrepreneurId),
+    db().from("progress_updates").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at"),
   ]);
 
   const matches: MatchView[] = (must(matchRows, "load matches") as Array<{
@@ -144,6 +149,28 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
 
   const runs = must(runRows, "load runs") as AgentRunView[];
 
+  const updates = must(progressRows, "load progress") as ProgressUpdateRecord[];
+  const progress: ProgressView[] = updates.map((u) => ({
+    id: u.id,
+    action_item_id: u.action_item_id,
+    action_title: actions.find((a) => a.id === u.action_item_id)?.title ?? null,
+    kind: u.kind,
+    note: u.note,
+    agenda: u.agenda,
+    source: u.source,
+    created_at: u.created_at,
+  }));
+  const agenda = buildAgenda({
+    entrepreneurFirstName: entrepreneur.full_name.split(" ")[0],
+    actions,
+    updates,
+    escalations: escalations.map((e) => ({
+      code: e.code,
+      status: e.status,
+      action_item_id: actions.find((a) => a.title === e.action_title)?.id ?? null,
+    })),
+  });
+
   // "Right mentor, not the most visible one": where does the most-booked mentor rank?
   let most_booked: DemoState["most_booked"] = null;
   if (entrepreneur.assessment_completed_at && mentors.length > 0) {
@@ -183,11 +210,21 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     messages,
     escalations,
     runs,
+    progress,
+    agenda,
     metrics,
     steps: stepsFor({ entrepreneur, matches, booking, session, actions, runs }),
     mentor_for_view,
   };
 }
+
+/** Step 13 is the "stuck, needs help" branch of the check-in loop. */
+const HELP_DECISIONS = new Set([
+  "Recommend an approved resource",
+  "Ask the mentor for help",
+  "Suggest another mentor session",
+  "Escalate to YDF",
+]);
 
 function stepsFor(
   s: {
@@ -199,7 +236,13 @@ function stepsFor(
     runs: AgentRunView[];
   } | null,
 ): DemoStep[] {
-  const decided = !!s?.runs.some((r) => r.trigger === "entrepreneur.blocked" && r.status === "completed");
+  const decided = !!s?.runs.some(
+    (r) =>
+      (r.trigger === "checkin.replied" || r.trigger === "entrepreneur.blocked") &&
+      r.status === "completed" &&
+      r.decision !== null &&
+      HELP_DECISIONS.has(r.decision),
+  );
   const done = [
     !!s?.entrepreneur.assessment_completed_at,
     (s?.matches.length ?? 0) > 0,
@@ -228,8 +271,8 @@ function stepsFor(
     "The mentor submits quick session notes",
     "The agent extracts draft action items",
     "A human confirms the action items",
-    "Fast-forward makes one action overdue",
-    "The agent asks about the blocker and chooses a next action",
+    "Fast-forward: check-ins go out and one action is overdue",
+    "The agent reads Pema's reply and chooses the help she needs",
     "The YDF dashboard shows the outcome",
   ];
   return labels.map((label, i) => ({ n: i + 1, label, done: done[i] }));
