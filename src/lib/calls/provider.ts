@@ -1,82 +1,65 @@
 import "server-only";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 
-// The video provider behind a call. Default: Daily (daily.co, embeddable
-// "Daily Prebuilt" rooms, 10,000 free minutes a month, no participant accounts).
-// Rooms are PRIVATE: a link works only with a meeting token, which the server
-// gives only to the booking's mentor and entrepreneur.
+// The video provider behind a call: LiveKit Cloud (free "Build" plan, no card,
+// 5,000 minutes a month). The browser connects with livekit-client using a
+// short-lived pass (token) that the server signs only for the booking's mentor
+// or entrepreneur, for that one room.
 //
-// Without DAILY_API_KEY the provider is "none": no video, but joining,
-// consent, recording and transcripts all still work (tests, in-person
-// sessions, or a meeting held elsewhere).
+// Without LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET the provider is
+// "none": no video, but joining, consent, recording and transcripts all still
+// work (tests, in-person sessions, or people talking on a phone call).
 
-export type CallProviderName = "daily" | "none";
+export type CallProviderName = "livekit" | "none";
 
 export class CallProviderError extends Error {}
 
-const DAILY_API = process.env.DAILY_API_BASE ?? "https://api.daily.co/v1";
-
 export function callProvider(): CallProviderName {
-  return process.env.DAILY_API_KEY && process.env.CALL_PROVIDER !== "none" ? "daily" : "none";
+  return process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET && process.env.CALL_PROVIDER !== "none"
+    ? "livekit"
+    : "none";
 }
 
-async function daily(path: string, init: { method: string; body?: unknown }): Promise<{ status: number; data: Record<string, unknown> }> {
-  const res = await fetch(`${DAILY_API}${path}`, {
-    method: init.method,
-    headers: { Authorization: `Bearer ${process.env.DAILY_API_KEY}`, "Content-Type": "application/json" },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    signal: AbortSignal.timeout(10_000),
-  });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { status: res.status, data };
+/** The browser connects to this (wss://...). */
+export function livekitUrl(): string {
+  return process.env.LIVEKIT_URL ?? "";
 }
 
-const unix = (d: Date) => Math.floor(d.getTime() / 1000);
+/** The server API uses the same host over https. */
+function rooms(): RoomServiceClient {
+  const host = livekitUrl().replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://");
+  return new RoomServiceClient(host, process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+}
 
-/** Creates the private room (or finds it if it already exists). Returns its URL. */
-export async function createRoom(roomName: string, expiresAt: Date): Promise<string | null> {
+/**
+ * Creates the room up front so it allows only the two participants and closes
+ * soon after both leave. Returns the URL the browser connects to.
+ */
+export async function createRoom(roomName: string): Promise<string | null> {
   if (callProvider() === "none") return null;
-  const created = await daily("/rooms", {
-    method: "POST",
-    body: {
-      name: roomName,
-      privacy: "private",
-      properties: { exp: unix(expiresAt), eject_at_room_exp: true, max_participants: 2, enable_prejoin_ui: true },
-    },
-  });
-  if (created.status < 300 && typeof created.data.url === "string") return created.data.url;
-  // Already created by an earlier join: look it up.
-  const existing = await daily(`/rooms/${encodeURIComponent(roomName)}`, { method: "GET" });
-  if (existing.status < 300 && typeof existing.data.url === "string") return existing.data.url;
-  console.warn(`[calls] Daily room creation failed: HTTP ${created.status} ${String(created.data.info ?? created.data.error ?? "").slice(0, 160)}`);
-  throw new CallProviderError("Could not create the video room.");
-}
-
-/** A personal link for one participant: the room URL plus a meeting token that expires with the room. */
-export async function joinLink(
-  roomUrl: string | null,
-  roomName: string,
-  displayName: string,
-  isOwner: boolean,
-  expiresAt: Date,
-): Promise<string | null> {
-  if (callProvider() === "none" || !roomUrl) return null;
-  const res = await daily("/meeting-tokens", {
-    method: "POST",
-    body: { properties: { room_name: roomName, user_name: displayName, is_owner: isOwner, exp: unix(expiresAt) } },
-  });
-  if (res.status >= 300 || typeof res.data.token !== "string") {
-    console.warn(`[calls] Daily meeting token failed: HTTP ${res.status}`);
-    throw new CallProviderError("Could not create a link to the video room.");
+  try {
+    await rooms().createRoom({ name: roomName, maxParticipants: 2, emptyTimeout: 10 * 60, departureTimeout: 120 });
+  } catch (err) {
+    console.warn("[calls] LiveKit room creation failed:", err instanceof Error ? err.message.slice(0, 160) : "error");
+    throw new CallProviderError("Could not create the video room.");
   }
-  return `${roomUrl}?t=${encodeURIComponent(res.data.token)}`;
+  return livekitUrl();
 }
 
-/** Closes the room when the session ends. Best effort: a room also expires on its own. */
+/** A personal pass for one participant: this room only, expires after `seconds`. */
+export async function joinToken(roomName: string, identity: string, displayName: string, seconds: number): Promise<string | null> {
+  if (callProvider() === "none") return null;
+  const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name: displayName, ttl: seconds });
+  at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true });
+  return at.toJwt();
+}
+
+/** Closes the room when the session ends. Best effort: an empty room also closes by itself. */
 export async function deleteRoom(roomName: string): Promise<void> {
   if (callProvider() === "none") return;
   try {
-    await daily(`/rooms/${encodeURIComponent(roomName)}`, { method: "DELETE" });
+    await rooms().deleteRoom(roomName);
   } catch {
-    // The room expires anyway (exp).
+    // Already gone, or it will close when empty.
   }
 }

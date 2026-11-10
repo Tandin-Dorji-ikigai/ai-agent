@@ -22,7 +22,9 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 
 ## Quick start
 
-**Frontend (MentorFlow UI, merged from PR #2):** the entrepreneur screens start at `/entrepreneur/connect` and the mentor screens at `/mentor/dashboard`; YDF stays at `/ydf`. By default the UI runs in **preview mode**, on sample data in the browser, and does not call the backend. Setting `NEXT_PUBLIC_MENTORFLOW_API_MODE=server` (then rebuilding) makes it call the real API. Connecting each screen to the real endpoints is in progress, starting with the call screen. See `docs/ui-integration.md`.
+**Screens (MentorFlow UI, from PR #2, connected to the backend):** entrepreneur screens start at `/entrepreneur/connect`, mentor screens at `/mentor/dashboard`, and YDF stays at `/ydf`. Every screen uses the real API (there is no sample-data mode). See `docs/ui-integration.md`.
+
+**Video calls (optional, free):** create a project at cloud.livekit.io (no card needed) and add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` to `.env.local`. Without them, calls work with no video (recording and transcripts still work). For local testing: `docker run --rm -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:v1.9.1 --dev --bind 0.0.0.0 --node-ip 127.0.0.1`, then `LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`, `LIVEKIT_API_SECRET=secret`.
 
 ```bash
 npm install
@@ -62,16 +64,18 @@ npm run eval:extraction   # scores extraction on evals/extraction-cases.json (ru
 npm run eval:assessment   # scores drafting the assessment from speech on evals/assessment-cases.json (3 cases)
 ```
 
-## Demo script (about 3 minutes)
+## Demo script (about 4 minutes)
 
-1. **Entrepreneur view** (phone width). The assessment is pre-filled with Pema's answers. Optionally, show **Use a sample intro** (or **Record voice note**, in English): the agent fills the form from speech. Press **Find my mentors**.
-2. Three ranked mentors appear, each with a score breakdown and an explanation built from evidence. Point out that the most-booked mentor ranks 13th of 13. **The agent has already asked Deki** (the best match): "Your mentor request" says who was asked, the reply deadline, and who is next. Nothing is booked or paid yet.
-3. **Mentor view** (signed in as Deki). The request shows Pema's needs, why the agent picked Deki, and the fee. Pick one of Deki's times and press **Accept**. Back on the **Entrepreneur view**, the session time and Pema's preparation checklist appear. (Optional: press **Decline** instead, and the mentor view switches to Sonam, whom the agent asked next.)
-4. **Mentor view**. Show the brief, press **Complete session** (or, with live AI, **Record voice note**), review the three draft actions, then **Confirm 3 actions**.
-5. **YDF view**. Press **Fast-forward 5 days**. The scheduling agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
-6. **Entrepreneur view**. Two messages need a reply. Reply to the interviews check-in first (pre-filled "going well"): the agent confirms the next check-in. Then reply to the permits follow-up (pre-filled with the blocker).
-7. The agent decides **Escalate to YDF**. On the **Mentor view**, show the agenda for the next session and the progress feed. On the **YDF view**, show ESC-101, the metrics, and the activity log with its decision factors and tool calls.
-8. Press **Reset demo** before the next rehearsal.
+1. Open three windows: **YDF** at `/ydf` (press **Reset demo**), **Pema** at `/entrepreneur/connect` (phone width), and **Deki** at `/mentor/dashboard`.
+2. **Pema → Needs assessment.** It is pre-filled with her answers. Press **Save needs & find mentor**. On **Connect**, the agent has already asked Deki (the best match): who was asked, the reply deadline, how it is paid, and who is next. Nothing is booked or paid yet.
+3. **Deki → Mentor requests.** Only need-to-know details (no budget), and why the agent picked Deki (88/100). Pick one of Deki's times and press **Accept**. (To show a no: press **Decline** with a reason; the agent asks Sonam next, and Pema's **My bookings** shows who said no and why.)
+4. **Pema → My bookings.** The session time and the preparation brief appear; YDF shows Nu. 1,500 of credit used.
+5. **The session.** On two devices, both press **Join session**, both agree to recording, talk, then both press **Leave**: each phone records only its own microphone, so the agent knows exactly who said what. (Or, on **Deki → Session workspace**, write quick notes and press **Complete session & save notes**.)
+6. **Deki → Session workspace.** Review the agent's draft actions and press **Confirm selected actions**.
+7. **YDF → Fast-forward 5 days.** The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
+8. **Pema → Notifications.** Reply to the interviews check-in ("Going well, I have spoken to 3 guests"): the agent confirms the next check-in. Reply to the permits follow-up ("I'm stuck: I don't know which permit the guided walk needs"): the agent escalates to YDF, **ESC-101**.
+9. **YDF:** the escalation, the metrics, and **Agent activity** with each decision's factors and the tools used.
+10. **Reset demo** (YDF) before the next rehearsal.
 
 ## Architecture
 
@@ -99,7 +103,7 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 - **Agent events:** an event runs immediately after it is created, so the demo never waits for a worker. `agent_events` still records every event; a failed event can be retried from the YDF log (`POST /api/agent/run`).
 - **Check-in loop (team workflow):** confirmed actions are SMART (with a "done when" measure) and get a check-in two days before they are due. Each reply is read as done, on track, or stuck (with or without needing help). Then the agent marks it done, confirms the next check-in, records the obstacle, recommends an approved resource, asks the mentee's own mentor (onto the next session's agenda), suggests another mentor, or escalates to YDF for sensitive topics. Every outcome goes into the mentor's progress feed, and a follow-up booking is briefed from it.
 - **Mentor requests (the mentor decides):** after matching, the agent sends a request to the best-ranked mentor who is verified, active and has open sessions (never one below 40/100). The mentor sees only what they need: the mentee's needs, stage, sector, challenge, language and why they were picked (no phone number or budget). They accept by picking one of their usual weekly times (Bhutan time), or decline with a reason. Only then is anything booked or any YDF credit used (`accept_mentor_request` in SQL, one transaction). On a decline, or no reply within 2 days, the agent asks the next best mentor and tells the mentee why; after three mentors it creates a YDF escalation. A mentee can also ask for a specific mentor (a follow-up, or one the agent suggested), and the same rules apply.
-- **Calls (backend):** one private Daily room per confirmed booking, only for its two participants; it closes when the session completes. With both people's consent, each browser records only its own microphone and uploads it in 5-minute parts; each part is transcribed (speech-to-text key) and the audio is discarded. When the call ends, the parts are merged by time into `[Mentor]` / `[Entrepreneur]` turns (Whisper's silence inventions and speaker echoes dropped), and the session completes like typed notes do. With labelled lines, a speaker's own "I will..." is their action and "you..." the other person's. Without `DAILY_API_KEY` there is no video, but everything else works.
+- **Calls:** one LiveKit room per confirmed booking (two people at most, a personal pass each), only for its two participants; it closes when the session completes. With both people's consent, each browser records only its own microphone and uploads it in 5-minute parts; each part is transcribed (speech-to-text key) and the audio is discarded. When the call ends, the parts are merged by time into `[Mentor]` / `[Entrepreneur]` turns (Whisper's silence inventions and speaker echoes dropped), and the session completes like typed notes do. With labelled lines, a speaker's own "I will..." is their action and "you..." the other person's. Without the LiveKit settings there is no video, but everything else works. The call screen is `src/components/call/call-room.tsx`.
 - **Demo clock:** fast-forward moves an offset stored in `demo_state`, and the whole app reads time through it (`demo_now()` in SQL, `getDemoClock()` in TypeScript). The real clock is never changed.
 
 ### Repository layout
@@ -112,6 +116,7 @@ supabase/migrations/
   20261110000004_session_sources.sql where session text came from (typed / voice note / call) + transcript
   20261110000005_mentor_requests.sql mentor_requests, weekly times, accept_mentor_request, new events
   20261110000006_calls.sql           calls (one room per booking) and call_track_parts (text only, per person)
+  20261111000007_livekit_calls.sql   calls may use LiveKit
 src/lib/
   audio/       transcribe.ts (Whisper)
   agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, prompts
@@ -149,7 +154,8 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins; mentor requests past their deadline expire) |
 | POST | `/api/inbox/reply` | 13 (one decision per check-in or follow-up) |
 | POST | `/api/agent/run` | Retry a failed event |
-| POST | `/api/calls/join` | Join the call for a confirmed booking: `{ booking_id, role }` → personal `join_url` (Daily), `call_id`, `server_time_ms` |
+| POST | `/api/calls/join` | Join the call for a confirmed booking: `{ booking_id, role }` → `livekit: { url, token }` (a personal pass), `call_id`, `server_time_ms` |
+| POST | `/api/mentors/availability` | The mentor's usual weekly times: `{ mentor_id, weekly_slots: [{ day, time }] }`. New requests offer the next of these |
 | POST | `/api/calls/consent` | `{ call_id, role, consent }`. Recording only when both agree |
 | POST | `/api/calls/track` | Multipart: one part of ONE person's microphone (`call_id, role, part, started_at_ms, file`). Transcribed, audio discarded |
 | POST | `/api/calls/end` | `{ call_id, role, force? }`. When both end: merged transcript with certain speakers → session completed → agent drafts actions |

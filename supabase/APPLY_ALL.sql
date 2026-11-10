@@ -2,7 +2,7 @@
 -- Every migration in supabase/migrations/, in order, for pasting into the
 -- Supabase SQL Editor on a NEW, empty project. On an existing project, use
 -- `npx supabase db push` instead (it applies only the missing migrations).
--- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql
+-- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql
 
 -- ===== 20261110000001_schema.sql =====
 -- AI Mentoring Platform: hackathon prototype schema.
@@ -1071,3 +1071,11 @@ create index call_track_parts_call_idx on call_track_parts (call_id, role, part)
 
 alter table calls            enable row level security;
 alter table call_track_parts enable row level security;
+
+-- ===== 20261111000007_livekit_calls.sql =====
+-- Calls switch from Daily to LiveKit (Daily needs a card on file before anyone
+-- can join; LiveKit Cloud's free plan does not). 'daily' stays allowed so any
+-- existing rows remain valid. Additive: older app code keeps working.
+
+alter table calls drop constraint calls_provider_check;
+alter table calls add constraint calls_provider_check check (provider in ('livekit', 'daily', 'none'));

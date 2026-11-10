@@ -10,7 +10,7 @@ import { DEMO_IDS } from "../demo/ids";
 import { completeSession } from "../sessions";
 import { db, must } from "../supabase/server";
 import { mergeTracks, type CallRole } from "./merge";
-import { callProvider, createRoom, deleteRoom, joinLink, type CallProviderName } from "./provider";
+import { callProvider, createRoom, deleteRoom, joinToken, livekitUrl, type CallProviderName } from "./provider";
 
 // Calls for a booked session (rules in supabase/migrations/..._calls.sql):
 // confirmed bookings only, the two participants only, one room per booking,
@@ -20,7 +20,7 @@ import { callProvider, createRoom, deleteRoom, joinLink, type CallProviderName }
 export interface CallRow {
   id: string;
   booking_id: string;
-  provider: CallProviderName;
+  provider: CallProviderName | "daily";
   room_name: string;
   room_url: string | null;
   status: "open" | "ended";
@@ -98,9 +98,8 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
   let call = must(await db().from("calls").select("*").eq("booking_id", bookingId).single(), "load call") as CallRow;
   requireOpen(call);
 
-  const expiresAt = new Date(Date.now() + ROOM_HOURS * 3_600_000);
-  if (call.provider === "daily" && !call.room_url) {
-    const url = await createRoom(call.room_name, expiresAt);
+  if (call.provider === "livekit" && !call.room_url) {
+    const url = await createRoom(call.room_name);
     call = must(await db().from("calls").update({ room_url: url }).eq("id", call.id).select("*").single(), "save room") as CallRow;
   }
   const joinedField = role === "mentor" ? "mentor_joined_at" : "entrepreneur_joined_at";
@@ -119,13 +118,15 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
       .single(),
     "load participant",
   ) as { full_name: string };
-  const join_url = call.provider === "daily" ? await joinLink(call.room_url, call.room_name, person.full_name, role === "mentor", expiresAt) : null;
+  // A personal pass for this person and this room only (identity = role, so a
+  // second tab for the same person replaces the first instead of adding a third).
+  const token = call.provider === "livekit" ? await joinToken(call.room_name, role, person.full_name, ROOM_HOURS * 3600) : null;
 
   return {
     call_id: call.id,
     provider: call.provider,
     room_name: call.room_name,
-    join_url,
+    livekit: token ? { url: call.room_url ?? livekitUrl(), token } : null,
     display_name: person.full_name,
     recording: recordingState(call),
     // The client records its own microphone and stamps each part in SERVER

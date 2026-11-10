@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AssessmentInputSchema } from "./agent/schemas";
 import { PEMA_ASSESSMENT_ANSWERS } from "./demo/fixtures";
-import { assessmentFromForm, profileFromEntrepreneur } from "./mentorflow-assessment";
+import { assessmentFromForm, isExploring, profileFromEntrepreneur } from "./mentorflow-assessment";
 import type { EntrepreneurRecord } from "./types";
 
 const entrepreneur: EntrepreneurRecord = {
@@ -44,5 +44,18 @@ describe("prototype form to assessment API", () => {
     expect(input.business_stage).toBe("idea");
     expect(input.sector).toBe("agriculture");
     expect(input.business_description).toContain("Growing vegetables");
+  });
+
+  it("does not invent a business name for someone still exploring", () => {
+    const form = { ...profileFromEntrepreneur(entrepreneur), interests: "Agriculture & Food", strengths: "Growing vegetables", motivation: "", challenge: "" };
+    expect(assessmentFromForm(form, needs, true).business_name).toBe("");
+  });
+
+  it("keeps an exploring entrepreneur's saved sector and words when the form is saved again", () => {
+    const saved = { ...entrepreneur, business_name: "", business_stage: "idea" as const, sector: "agriculture", business_description: "Growing vegetables" };
+    expect(isExploring(saved)).toBe(true);
+    const again = assessmentFromForm(profileFromEntrepreneur(saved), needs, true);
+    expect(again.sector).toBe("agriculture");
+    expect(again.business_description).toBe("Growing vegetables");
   });
 });

@@ -52,7 +52,7 @@ async function callSession(bookingId) {
   const jE = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
   const jM = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "mentor" });
   check("9  call: both join the same room for the confirmed booking", jE.status === 200 && jM.json.call_id === jE.json.call_id, { jE: jE.json, jM: jM.json });
-  check("   call: a personal link only when a video provider is set up", jE.json.provider === "daily" ? !!jE.json.join_url : jE.json.join_url === null, jE.json);
+  check("   call: a personal pass only when a video provider is set up", jE.json.provider === "livekit" ? !!jE.json.livekit?.token : jE.json.livekit === null, jE.json);
   const callId = jE.json.call_id;
   const early = await upload({ call_id: callId, role: "mentor", part: 0, started_at_ms: jM.json.server_time_ms });
   check("   call: no recording before both agree", early.status === 409 && early.json.code === "RECORDING_NOT_ALLOWED", early.json);

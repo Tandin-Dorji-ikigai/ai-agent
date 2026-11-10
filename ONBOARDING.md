@@ -74,7 +74,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 |---|---|---|
 | Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Any fluent speaker on the team |
 | Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Audio-to-text teammate |
-| Calls: the screen | The **backend is built and tested** (see "Calls" in section 9). Still needed: the call screen (embed the room, the consent step, record your own microphone, upload parts, end) | Frontend |
+| Calls | **Built and tested.** LiveKit video and audio in the MentorFlow call screen, consent, each person's microphone recorded separately, and a transcript where every speaker is certain | `call/call-room.tsx`, `lib/calls/`, `/api/calls/*` |
 | Real transcripts in the test set | The 5 test cases are written by us. Real (anonymised, consented) transcripts would give honest accuracy numbers | Agent (Tandin), with audio-to-text |
 | YDF acting on escalations | The queue is read-only. **Deferred** by team decision | Nobody for now |
 | UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Frontend teammate |
@@ -157,18 +157,18 @@ Then walk through the demo yourself (section 6).
 
 ---
 
-## 6. The demo, click by click (3 minutes)
+## 6. The demo, click by click (about 4 minutes)
 
-Use the **Entrepreneur / Mentor / YDF** tabs at the top. The header shows the demo clock and how many of the 14 steps are done.
-
-1. **Entrepreneur:** the form is pre-filled with Pema's answers. Optionally show **Use a sample intro**, or **Try a sample without a business** (the agent asks 2 quick questions, then matches idea mentors). **Find my mentors.**
-2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor. **Your mentor request** shows the agent has already asked Deki (best match), the reply deadline, and that Sonam is next. Credit is still Nu. 3,000.
-3. **Mentor** (signed in as Deki): the request shows Pema's needs, why Deki was picked, and the fee. Pick a time, **Accept**. Back on **Entrepreneur**: the session time and prep checklist appear; credit drops to Nu. 1,500. (To show a no: press **Decline** instead. The mentor view switches to Sonam, whom the agent asked next.)
-4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**. With live AI you can also **Record voice note**; the text is filled in for you to check.
-5. **YDF:** **Fast-forward 5 days**. The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
-6. **Entrepreneur:** two messages need a reply. **Send reply** on the interviews check-in first ("going well"): the agent confirms the next check-in. Then **Send reply** on the permits follow-up: the agent escalates, **ESC-101**.
-7. **Mentor:** the agenda for the next session and the progress feed. **YDF:** metrics, the escalation, and the **Agent activity** log with decision factors and the tools used.
-8. **Reset demo** (YDF view) to start again.
+1. Open three windows: **YDF** at `/ydf` (press **Reset demo**), **Pema** at `/entrepreneur/connect` (phone width), and **Deki** at `/mentor/dashboard`.
+2. **Pema → Needs assessment.** It is pre-filled with her answers. Press **Save needs & find mentor**. On **Connect**, the agent has already asked Deki (the best match): who was asked, the reply deadline, how it is paid, and who is next. Nothing is booked or paid yet.
+3. **Deki → Mentor requests.** Only need-to-know details (no budget), and why the agent picked Deki (88/100). Pick one of Deki's times and press **Accept**. (To show a no: press **Decline** with a reason; the agent asks Sonam next, and Pema's **My bookings** shows who said no and why.)
+4. **Pema → My bookings.** The session time and the preparation brief appear; YDF shows Nu. 1,500 of credit used.
+5. **The session.** On two devices, both press **Join session**, both agree to recording, talk, then both press **Leave**: each phone records only its own microphone, so the agent knows exactly who said what. (Or, on **Deki → Session workspace**, write quick notes and press **Complete session & save notes**.)
+6. **Deki → Session workspace.** Review the agent's draft actions and press **Confirm selected actions**.
+7. **YDF → Fast-forward 5 days.** The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
+8. **Pema → Notifications.** Reply to the interviews check-in ("Going well, I have spoken to 3 guests"): the agent confirms the next check-in. Reply to the permits follow-up ("I'm stuck: I don't know which permit the guided walk needs"): the agent escalates to YDF, **ESC-101**.
+9. **YDF:** the escalation, the metrics, and **Agent activity** with each decision's factors and the tools used.
+10. **Reset demo** (YDF) before the next rehearsal.
 
 Tip: narrow your browser window, or use the browser's mobile view, to see Pema's screen as it looks on a phone.
 
@@ -269,16 +269,15 @@ POST /api/session/complete
 - **Needs live AI on:** `AI_MODE=live` plus `GROQ_API_KEY`.
 - **Separate speech-to-text key (optional):** `GROQ_TRANSCRIBE_API_KEY`, from a different Groq account, is used for all transcription (voice notes, voice intros, call and video recordings); the agent keeps `GROQ_API_KEY`. If it is not set, transcription uses `GROQ_API_KEY`.
 
-**Calls (backend built; the screen is next):**
-- **Video:** Daily (daily.co) "Prebuilt" rooms, embedded in our page. 10,000 free minutes a month; participants need no account. The room is private: only the personal `join_url` from `/api/calls/join` works. Public Jitsi (meet.jit.si) is out: it now makes the room creator sign in and caps meetings at 95 minutes.
-  - Set `DAILY_API_KEY` (dashboard → Developers) in `.env.local`. Without it, calls still work with no video (`provider: "none"`, `join_url: null`): joining, consent, recording and transcripts all work, which is fine for in-person sessions and for tests.
-- **Why each person records their own microphone:** Whisper cannot tell voices apart, so guessing who said what goes wrong (a test call had 2 of 3 action owners wrong). With one recording per person, every line's speaker is certain (a test call had 3 of 3 right, and an echo from a speaker was removed).
-- **The screen, step by step** (all `POST`; `role` is `"mentor"` or `"entrepreneur"`):
-  1. `/api/calls/join { booking_id, role }` → `{ call_id, provider, join_url, recording, server_time_ms, part_seconds }`. Only for a **confirmed** booking. Embed `join_url` with Daily Prebuilt (`DailyIframe.createFrame()` then `.join({ url: join_url })`, or an `<iframe src>` with `allow="camera; microphone"`). Offer **audio-only** (start with the camera off) for weak connections. Keep `offset = server_time_ms - Date.now()`.
-  2. Ask: "Record this call for the agent's notes?" Then `/api/calls/consent { call_id, role, consent: true }`. Recording is allowed only when `recording.allowed` is true (both agreed; `GET /api/state` shows `call.consent`). `consent: false` withdraws and deletes your recorded parts.
-  3. Record **only your own microphone** (`getUserMedia({ audio: { echoCancellation: true } })` + `MediaRecorder`), starting a new part every `part_seconds` (5 minutes). Before each part starts, note `started_at_ms = Date.now() + offset`.
-  4. Upload each finished part: multipart `/api/calls/track` with `call_id`, `role`, `part` (0, 1, 2, ...), `started_at_ms`, `file`. Safe to retry: the same part is never stored twice. The audio is transcribed and thrown away.
-  5. On hang-up: upload the last part, then `/api/calls/end { call_id, role }`. When both have ended (or the mentor sends `force: true`, for example if the other person left), the agent gets the merged `[Mentor]` / `[Entrepreneur]` transcript, the session completes, and draft actions appear for the mentor to confirm.
+**Calls (built: backend and screen):**
+- **Video:** LiveKit Cloud (cloud.livekit.io), free "Build" plan, no card. Set `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in `.env.local` (server only). Without them, calls still work with no video (`provider: "none"`): joining, consent, recording and transcripts all work. Daily was dropped because it needs a card on file before anyone can join; public Jitsi now makes the room creator sign in.
+- **Why each person records their own microphone:** Whisper cannot tell voices apart, so guessing who said what goes wrong (a test call had 2 of 3 action owners wrong). With one recording per person, every line's speaker is certain (3 of 3 right, and an echo from a speaker was removed).
+- **The screen** is `src/components/call/call-room.tsx` (opened from "Join session" on a confirmed booking, at `/entrepreneur/call` and `/mentor/call`). What it does, all `POST`, with `role` = `"mentor"` or `"entrepreneur"`:
+  1. `/api/calls/join { booking_id, role }` → `{ call_id, provider, livekit: { url, token } | null, server_time_ms, part_seconds }`, then connects with `livekit-client`. Microphone on, camera off by default (audio-only friendly).
+  2. Asks "Record this call for the agent's notes?" → `/api/calls/consent`. Recording starts only when both agreed (`GET /api/state` → `call.consent`).
+  3. Records **only its own microphone** (the LiveKit microphone track) with `MediaRecorder`, a new part every `part_seconds`, each stamped in server time.
+  4. Uploads each part to `/api/calls/track` (retries up to 3 times). The audio is transcribed and thrown away.
+  5. Leave: uploads the last part, then `/api/calls/end`. When both have left (or the mentor chooses "Finish now"), the agent gets the merged transcript and drafts actions in the mentor's session workspace.
 - **Test it without AI:** `E2E_SOURCE=call npm run demo:e2e` runs the whole demo with a call (saved recordings stand in for Whisper when `AI_MODE=fixture`). Announce the reset first (section 7).
 - **For the demo:** use two devices (laptop and phone). Two tabs on one laptop share one microphone, so both recordings would hear both people.
 

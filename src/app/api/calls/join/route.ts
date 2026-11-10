@@ -5,8 +5,9 @@ import { handleError, ok, parseBody } from "@/lib/http";
 
 // POST /api/calls/join { booking_id, role: "mentor" | "entrepreneur" }
 // Only for a CONFIRMED booking, only its two participants. Creates the room on
-// the first join. Returns { call_id, provider, join_url, recording, server_time_ms, part_seconds }.
-// join_url is a personal, private link (null when no video provider is set up).
+// the first join. Returns { call_id, provider, livekit: { url, token } | null,
+// recording, server_time_ms, part_seconds }. The token is a personal pass for
+// this room only (null when no video provider is set up).
 export async function POST(req: Request) {
   const body = await parseBody(req, CallJoinInputSchema);
   if ("error" in body) return body.error;

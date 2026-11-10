@@ -1,17 +1,15 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
 import { asApiError } from "@/lib/client-api";
-import { frontendRequest, FRONTEND_PREVIEW } from "@/lib/frontend-api";
-import { PREVIEW_CHANGE_EVENT, PREVIEW_STORAGE_KEY } from "@/lib/frontend-preview";
-import type { FrontendState } from "@/lib/frontend-types";
-import type { ApiError } from "@/lib/state-types";
+import { frontendRequest } from "@/lib/frontend-api";
+import type { ApiError, DemoState } from "@/lib/state-types";
 
 type ActResult = ({ ok: true } & Record<string, unknown>) | ApiError;
 
 interface DemoContext {
-  state: FrontendState | null;
+  state: DemoState | null;
   error: ApiError | null;
   busy: string | null;
   refresh: () => Promise<void>;
@@ -32,8 +30,8 @@ export function DemoStateProvider({ children }: { children: ReactNode }) {
   const inFlight = useRef(false);
   const query = useQuery({
     queryKey: STATE_KEY,
-    queryFn: ({ signal }) => frontendRequest<FrontendState>("/api/state", { signal }),
-    networkMode: FRONTEND_PREVIEW ? "always" : "online",
+    queryFn: ({ signal }) => frontendRequest<DemoState>("/api/state", { signal }),
+    networkMode: "always",
     staleTime: 2000,
     refetchInterval: 4000,
     refetchIntervalInBackground: false,
@@ -46,7 +44,7 @@ export function DemoStateProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body ?? {}),
       }),
-    networkMode: FRONTEND_PREVIEW ? "always" : "online",
+    networkMode: "always",
     retry: false,
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: STATE_KEY });
@@ -54,17 +52,6 @@ export function DemoStateProvider({ children }: { children: ReactNode }) {
   }, queryClient);
   const refresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: STATE_KEY });
-  }, [queryClient]);
-  useEffect(() => {
-    if (!FRONTEND_PREVIEW) return;
-    const changed = () => { void queryClient.invalidateQueries({ queryKey: STATE_KEY }); };
-    const storageChanged = (event: StorageEvent) => { if (event.key === PREVIEW_STORAGE_KEY || event.key === null) changed(); };
-    window.addEventListener(PREVIEW_CHANGE_EVENT, changed);
-    window.addEventListener("storage", storageChanged);
-    return () => {
-      window.removeEventListener(PREVIEW_CHANGE_EVENT, changed);
-      window.removeEventListener("storage", storageChanged);
-    };
   }, [queryClient]);
   const act = useCallback(async (label: string, path: string, body?: unknown): Promise<ActResult> => {
     if (inFlight.current) return { ok: false, code: "BUSY", message: "Please wait for the current action to finish." };

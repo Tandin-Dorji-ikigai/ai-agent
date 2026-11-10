@@ -12,8 +12,18 @@ export const FORM_STAGES: Record<string, AssessmentInput["business_stage"]> = {
   Launched: "early", Growth: "growth", Established: "established",
 };
 
+/** Someone with no business yet: idea stage and no business name (the backend allows an empty name for this). */
+export function isExploring(entrepreneur: Pick<EntrepreneurRecord, "business_name" | "business_stage"> | null | undefined): boolean {
+  return !!entrepreneur && entrepreneur.business_stage === "idea" && !entrepreneur.business_name;
+}
+
 export function profileFromEntrepreneur(entrepreneur: EntrepreneurRecord) {
+  const industry = Object.keys(INDUSTRY_SECTORS).find(label => INDUSTRY_SECTORS[label] === entrepreneur.sector) ?? "";
   return {
+    // The "exploring" form reads these back, so saving again keeps what was saved.
+    interests: industry,
+    strengths: entrepreneur.business_description ?? "",
+    motivation: "",
     fullName: entrepreneur.full_name,
     district: entrepreneur.location ?? "",
     language: entrepreneur.preferred_language === "dz" ? "Dzongkha" : "English",
@@ -43,10 +53,12 @@ export function assessmentFromForm(
     : [values.languagePreference === "English" ? "en" : "dz"];
   const languages = [...new Set<AssessmentInput["preferred_language"]>([...language, preferred])];
   return {
-    business_name: exploring ? "Exploring my first business idea" : values.productName?.trim() ?? "",
+    // No made-up business name for someone still exploring (it would reach mentors and the agent).
+    business_name: exploring ? "" : values.productName?.trim() ?? "",
     business_stage: stage,
     sector,
-    business_description: exploring ? [values.interests, values.strengths, values.motivation].filter(Boolean).join(". ") : values.description?.trim() ?? "",
+    // The interest is already the sector; the description keeps only their own words.
+    business_description: exploring ? [values.strengths, values.motivation].map(v => v?.trim()).filter(Boolean).join(" ") || "I am exploring business ideas." : values.description?.trim() ?? "",
     primary_challenge: values.challenge?.trim() || (exploring ? "I need help finding and validating a business idea." : ""),
     goals: (values.goal ?? "").split("\n").map(goal => goal.trim()).filter(Boolean),
     expertise_needs: expertiseNeeds as AssessmentInput["expertise_needs"],

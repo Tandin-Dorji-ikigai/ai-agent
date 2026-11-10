@@ -363,3 +363,12 @@ h3 { font-weight: 650; font-size: 13px; }
 .legacy-demo .text-accent { color: var(--primary); }
 .legacy-demo .bg-accent { background: var(--primary); }
 .legacy-demo [data-slot="card"] { display: block; }
+
+/* Live call (LiveKit): video fills the stage and the self-view, behind the existing layers. */
+.call-remote-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.call-self-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.call-recording-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--destructive); }
+.call-consent-note { position: absolute; left: 16px; right: 16px; bottom: 44px; color: var(--call-muted); font-size: 12px; text-align: center; }
+
+/* Keyboard focus must stay clearly visible (WCAG 2.4.7, 1.4.11). */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

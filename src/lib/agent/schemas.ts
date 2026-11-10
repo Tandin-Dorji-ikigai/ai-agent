@@ -2,7 +2,7 @@
 // Live AI output and saved fallbacks must both pass these schemas.
 
 import { z } from "zod";
-import { DECLINE_REASONS, EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES } from "../types";
+import { DECLINE_REASONS, EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES, WEEKDAYS } from "../types";
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
 
@@ -106,6 +106,15 @@ export const CallEndInputSchema = z.object({
   call_id: z.uuid(),
   role: CallRoleSchema,
   force: z.boolean().default(false),
+});
+
+/** A mentor's usual weekly times (Bhutan time). Requests offer the next of these. */
+export const MentorAvailabilityInputSchema = z.object({
+  mentor_id: z.uuid(),
+  weekly_slots: z
+    .array(z.object({ day: z.enum(WEEKDAYS), time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM, 24-hour") }))
+    .max(21)
+    .refine((slots) => new Set(slots.map((s) => `${s.day} ${s.time}`)).size === slots.length, { message: "Each time can be listed once." }),
 });
 
 /** The mentee asks for a specific mentor (a follow-up, or the agent's suggestion). */

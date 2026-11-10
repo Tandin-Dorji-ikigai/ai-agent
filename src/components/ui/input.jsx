@@ -2,8 +2,8 @@ import * as React from "react"
 import { cn } from "cn"
 
 function Input({
-  className,
-  type,
+  className = "",
+  type = "text",
   ...props
 }) {
   return (
