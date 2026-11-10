@@ -56,6 +56,22 @@
       "text": "We caught up about the festival and how busy the village has been. Business has been steady and the guests in October were happy with the food. Pema shared some photos of the new garden. It was a good chat.",
       "expected": [],
       "must_not": []
+    },
+    {
+      "id": "day-names-real-call",
+      "description": "The 2026-11-11 phone test script (a Wednesday in Bhutan): deadlines said as day names must count from today",
+      "source": "call_recording",
+      "today": "2026-11-11T03:19:00+06:00",
+      "text": "[Mentor] Hi Pema, good to meet you. I read your notes. You run village walks and a homestay near Thimphu, and you're not sure who your guests really are. Is that right?\n[Entrepreneur] Yes, that's right. Most bookings come from friends of friends, but I don't know why people choose us or how to describe the walk so the right people find it.\n[Mentor] Let's start with your guests. How many guests have you had in the last two months?\n[Entrepreneur] About twelve groups. Mostly young couples from Thimphu, and a few tourists from India.\n[Mentor] Good. Before we talk about marketing, you need to hear it from them. Can you call some of them?\n[Entrepreneur] Yes. I will call five recent guests and ask why they booked and what they liked most. I will finish that by Friday.\n[Mentor] Perfect. And I will send you a short list of interview questions by tomorrow, so the calls are easy.\n[Entrepreneur] Thank you, that helps a lot. What about the price? Right now I charge one thousand two hundred ngultrum per person for the walk and lunch.\n[Mentor] That may be low for what you offer. Try two prices: keep one thousand two hundred for some bookings and try one thousand five hundred for others, then see which people accept.\n[Entrepreneur] Okay. I will test both prices on my next ten bookings over the next two weeks.\n[Mentor] Great. And I will send you my pricing sheet template by Wednesday, so you can track the results.\n[Entrepreneur] And the description on Instagram? I think it's too long.\n[Mentor] After your guest calls, rewrite it using the words your guests use. Keep it to three short sentences.\n[Entrepreneur] I will rewrite the Instagram description by next Monday, after the interviews.\n[Mentor] One more thing. I know a tour operator in Paro who looks for village experiences. I will introduce you to him by email this week.\n[Entrepreneur] That would be wonderful. Thank you, Deki.\n[Mentor] You're welcome. Let's meet again in two weeks to look at what the guests said and how the prices did.\n[Entrepreneur] Sounds good. Talk then.",
+      "expected": [
+        { "match": ["question"], "due": 1, "owner": "mentor" },
+        { "match": ["pricing sheet|template"], "due": 7, "owner": "mentor" },
+        { "match": ["call|guest"], "due": 2, "owner": "entrepreneur" },
+        { "match": ["instagram|description"], "due": 5, "owner": "entrepreneur" },
+        { "match": ["introduc|tour operator"], "due": 4, "owner": "mentor" },
+        { "match": ["price|pric"], "due": 14, "owner": "entrepreneur" }
+      ],
+      "must_not": []
     }
   ]
 }

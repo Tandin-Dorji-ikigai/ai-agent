@@ -11,6 +11,8 @@ import { fail, handleError, ok, parseBody } from "@/lib/http";
 const Body = z.object({
   text: z.string().trim().min(1).max(MAX_TRANSCRIPT_CHARS + 4100),
   source: z.enum(NOTES_SOURCES).default("call_recording"),
+  /** "Today" for day-name deadlines (ISO date or time), so eval cases are repeatable. */
+  today: z.iso.datetime({ offset: true }).or(z.iso.date()).optional(),
 });
 
 export async function POST(req: Request) {
@@ -21,7 +23,7 @@ export async function POST(req: Request) {
   if ("error" in body) return body.error;
   try {
     const started = Date.now();
-    const out = await extractFromText(body.data.text, body.data.source);
+    const out = await extractFromText(body.data.text, body.data.source, body.data.today ? new Date(body.data.today) : new Date());
     return ok({ ...out, ai_mode: aiMode(), ms: Date.now() - started });
   } catch (err) {
     return handleError(err);

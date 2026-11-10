@@ -199,7 +199,8 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
   }
 
   // Short text: one pass. Long call transcripts: split, read each part, combine.
-  const out = await extractFromText(input.notes, input.source);
+  // Today (demo clock) turns "by Friday" into days.
+  const out = await extractFromText(input.notes, input.source, env.now);
   const step = { value: out.extraction, source: out.source };
 
   const rows = step.value.actions.map((a) => ({

@@ -35,9 +35,9 @@ function sleep(ms: number) {
 }
 
 /** Rule-based notes for one part (fallback). */
-function ruleNotes(chunk: string): ChunkNotes {
+function ruleNotes(chunk: string, now: Date): ChunkNotes {
   return {
-    agreements: findAgreements(chunk).map((a) => ({
+    agreements: findAgreements(chunk, now).map((a) => ({
       what: a.what,
       who: a.who,
       timeframe: a.due_in_days ? `${a.due_in_days} days` : undefined,
@@ -174,13 +174,13 @@ export function renderCondensed(notes: ChunkNotes[], parts: number, withContext 
 }
 
 /** Rule-based final extraction straight from the combined notes (fallback). */
-export function extractionFromNotes(notes: ChunkNotes[], parts: number): Extraction {
+export function extractionFromNotes(notes: ChunkNotes[], parts: number, now?: Date): Extraction {
   const actions = mergeAgreements(notes)
     .slice(0, 8)
     .map((a) => ({
       title: a.what.length > 140 ? `${a.what.slice(0, 137)}...` : a.what,
       owner: a.who === "mentor" ? ("mentor" as const) : ("entrepreneur" as const),
-      due_in_days: parseDueInDays(a.timeframe ?? "") ?? 7,
+      due_in_days: parseDueInDays(a.timeframe ?? "", now) ?? 7,
     }));
   return {
     summary:
@@ -191,14 +191,18 @@ export function extractionFromNotes(notes: ChunkNotes[], parts: number): Extract
   };
 }
 
-export async function extractFromText(text: string, source: NotesSource): Promise<ExtractResult> {
+/**
+ * `now` is "today" for deadlines said as day names ("by Friday"): pass the
+ * demo clock, so fast-forwarding the demo moves today too.
+ */
+export async function extractFromText(text: string, source: NotesSource, now: Date = new Date()): Promise<ExtractResult> {
   // Short: one pass, as before.
   if (text.length <= SINGLE_PASS_MAX_CHARS + 4100) {
     const step = await aiStep({
       task: "extract_action_items",
       schema: ExtractionSchema,
-      fallback: () => fallbackExtraction(text),
-      live: live.extraction(text, source),
+      fallback: () => fallbackExtraction(text, now),
+      live: live.extraction(text, source, false, now),
       validate: rejectGenderedText,
     });
     const extraction =
@@ -216,7 +220,7 @@ export async function extractFromText(text: string, source: NotesSource): Promis
       aiStep({
         task: "condense_transcript_part",
         schema: ChunkNotesSchema,
-        fallback: () => ruleNotes(chunks[i]),
+        fallback: () => ruleNotes(chunks[i], now),
         live: live.condenseChunk(chunks[i], i + 1, chunks.length, model),
         // Intermediate notes are never shown to users, so no pronoun check here;
         // the final extraction below is still checked.
@@ -247,15 +251,15 @@ export async function extractFromText(text: string, source: NotesSource): Promis
   const final = await aiStep({
     task: "extract_action_items",
     schema: ExtractionSchema,
-    fallback: () => extractionFromNotes(notes, chunks.length),
-    live: live.extraction(renderCondensed(notes, chunks.length, false), source, true),
+    fallback: () => extractionFromNotes(notes, chunks.length, now),
+    live: live.extraction(renderCondensed(notes, chunks.length, false), source, true, now),
     validate: rejectGenderedText,
     timeoutMs: PART_TIMEOUT_MS,
   });
   let extraction = final.value;
   if (final.source === "live_ai") {
     const grounded = groundActions(extraction.actions, agreements);
-    extraction = grounded.length > 0 || agreements.length === 0 ? { ...extraction, actions: grounded } : extractionFromNotes(notes, chunks.length);
+    extraction = grounded.length > 0 || agreements.length === 0 ? { ...extraction, actions: grounded } : extractionFromNotes(notes, chunks.length, now);
   }
   // Labelled by what wrote the drafts the mentor sees; the run text says how many parts were read live.
   return { extraction, source: final.source, parts: chunks.length, liveParts, condensed };

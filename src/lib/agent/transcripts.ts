@@ -78,8 +78,34 @@ function toNumber(word: string): number | null {
 
 const UNIT_DAYS: Record<string, number> = { day: 1, days: 1, week: 7, weeks: 7, month: 30, months: 30 };
 
-/** Days until due, from the LAST timeframe mentioned (so corrections win). */
-export function parseDueInDays(text: string): number | null {
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
+/** Bhutan is UTC+6 all year (no daylight saving). */
+const BHUTAN_OFFSET_MS = 6 * 3_600_000;
+
+/** Today's weekday in Bhutan (0 = Sunday), whatever the server's time zone. */
+export function bhutanWeekday(now: Date): number {
+  return new Date(now.getTime() + BHUTAN_OFFSET_MS).getUTCDay();
+}
+
+/** Today in Bhutan, for prompts: "Wednesday 11 November 2026". */
+export function bhutanToday(now: Date): string {
+  const d = new Date(now.getTime() + BHUTAN_OFFSET_MS);
+  const month = d.toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
+  const weekday = WEEKDAYS[d.getUTCDay()];
+  return `${weekday[0].toUpperCase()}${weekday.slice(1)} ${d.getUTCDate()} ${month} ${d.getUTCFullYear()}`;
+}
+
+/** Days from today until the next given weekday (a week if it is today). */
+function daysUntil(weekday: number, now: Date): number {
+  return (weekday - bhutanWeekday(now) + 7) % 7 || 7;
+}
+
+/**
+ * Days until due, from the LAST timeframe mentioned (so corrections win).
+ * With `now`, day names count from today in Bhutan: "by Friday" said on a
+ * Wednesday is 2, "this week" runs to Sunday. Without it they mean a week.
+ */
+export function parseDueInDays(text: string, now?: Date): number | null {
   const found: number[] = [];
   const re = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty|thirty|a|an)\s+(days?|weeks?|months?)\b/gi;
   for (const m of text.matchAll(re)) {
@@ -89,6 +115,11 @@ export function parseDueInDays(text: string): number | null {
   const last = found.at(-1);
   if (last !== undefined) return Math.min(60, Math.max(1, last));
   if (/\btomorrow\b/i.test(text)) return 1;
+  if (now) {
+    const named = [...text.matchAll(/\b(?:by|on|before|until|till|next|this|coming)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi)].at(-1);
+    if (named) return daysUntil(WEEKDAYS.indexOf(named[1].toLowerCase() as (typeof WEEKDAYS)[number]), now);
+    if (/\b(this week|end of the week)\b/i.test(text)) return Math.max(1, daysUntil(0, now));
+  }
   if (/\b(next week|this week|end of the week|by friday|by monday)\b/i.test(text)) return 7;
   if (/\bnext month\b/i.test(text)) return 30;
   return null;
@@ -161,7 +192,7 @@ function sentencesWithSpeakers(text: string): Array<{ sentence: string; speaker:
   });
 }
 
-export function findAgreements(text: string): FoundAgreement[] {
+export function findAgreements(text: string, now?: Date): FoundAgreement[] {
   const out: FoundAgreement[] = [];
   const seen = new Set<string>();
   for (const { sentence: s, speaker } of sentencesWithSpeakers(text.replace(/[‘’]/g, "'"))) {
@@ -172,14 +203,14 @@ export function findAgreements(text: string): FoundAgreement[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const who = speaker ? ownerFromSpeaker(s, speaker) : MENTOR_OFFER.test(s) ? "mentor" : "entrepreneur";
-    out.push({ what, sentence: s.slice(0, 300), who, due_in_days: parseDueInDays(s) });
+    out.push({ what, sentence: s.slice(0, 300), who, due_in_days: parseDueInDays(s, now) });
   }
   return out.slice(0, 8);
 }
 
 /** Rule-based extraction from any text (no AI). */
-export function heuristicExtraction(text: string, parts = 1): Extraction {
-  const agreements = findAgreements(text);
+export function heuristicExtraction(text: string, parts = 1, now?: Date): Extraction {
+  const agreements = findAgreements(text, now);
   return {
     summary:
       agreements.length > 0

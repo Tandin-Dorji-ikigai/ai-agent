@@ -24,6 +24,7 @@ import {
   MatchExplanationsSchema,
   ReplyClassificationSchema,
 } from "./schemas";
+import { bhutanToday } from "./transcripts";
 
 // Live implementations of each AI step (Milestone 2). Each returns the
 // function aiStep() calls; aiStep validates the result and falls back to the
@@ -176,7 +177,7 @@ export const live = {
       }),
 
   extraction:
-    (notes: string, source: "typed" | "voice_note" | "call_recording" = "typed", condensed = false): Live =>
+    (notes: string, source: "typed" | "voice_note" | "call_recording" = "typed", condensed = false, now: Date = new Date()): Live =>
     (signal) =>
       structured({
         task: "extract_action_items",
@@ -191,7 +192,9 @@ export const live = {
             "Only include actions the notes say were agreed. Never invent actions. " +
             "For each action: title starts with a verb and is specific (under 100 characters); description is one sentence; " +
             "success_measure says how we will know it is done, in measurable terms; " +
-            "due_in_days uses the timeframe in the notes (a week = 7), or 7 if none is given; " +
+            `Today is ${bhutanToday(now)} (Bhutan time). due_in_days counts whole days from today, using the timeframe in the notes: ` +
+            "\"tomorrow\" = 1; a day name (\"by Friday\", \"on Monday\", \"next Monday\") = days until the next such day after today (7 if it is today's day); " +
+            "\"this week\" = days until Sunday; \"a week\" = 7; \"two weeks\" = 14; at least 1; 7 if no timeframe is given; " +
             "Owner: in the mentor's own notes, I/I'll/I will means the mentor. In a call transcript, an offer like " +
             "\"I'll send you\" or \"I'll introduce you\" from the adviser is the mentor's; tasks for the business owner " +
             "(\"you will\", or the owner by name, e.g. \"Dorji will\") are the entrepreneur's. " +

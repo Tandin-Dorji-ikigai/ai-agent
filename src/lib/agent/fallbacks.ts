@@ -7,7 +7,7 @@
 import { DEMO_CALL_TRANSCRIPT, DEMO_EXTRACTED_ACTIONS, DEMO_SESSION_NOTES } from "../demo/fixtures";
 import type { ScoredMentor } from "../matching/score-mentor";
 import type { AgendaItem } from "../progress";
-import { heuristicExtraction } from "./transcripts";
+import { heuristicExtraction, parseDueInDays } from "./transcripts";
 import {
   LANGUAGE_LABEL,
   expertiseLabel,
@@ -170,7 +170,7 @@ const normalise = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
  * simple extractor that turns bullet or numbered lines into draft actions.
  * It never invents actions that are not in the notes.
  */
-export function fallbackExtraction(notes: string): Extraction {
+export function fallbackExtraction(notes: string, now?: Date): Extraction {
   if (normalise(notes) === normalise(DEMO_SESSION_NOTES)) return DEMO_EXTRACTED_ACTIONS;
   if (normalise(notes).includes(normalise(DEMO_CALL_TRANSCRIPT))) return DEMO_EXTRACTED_ACTIONS;
 
@@ -181,14 +181,14 @@ export function fallbackExtraction(notes: string): Extraction {
     .filter((l) => l.length > 0)
     .slice(0, 8);
   // No bullet points (for example a spoken transcript): use the rule-based reader.
-  if (bullets.length === 0) return heuristicExtraction(notes);
+  if (bullets.length === 0) return heuristicExtraction(notes, 1, now);
   const prose = lines.filter((l) => l && !/^([-*•]|\d+[.)])\s+/.test(l) && !/^agreed:?$/i.test(l));
   return {
     summary: (prose.join(" ") || "Session notes recorded.").slice(0, 800),
     actions: bullets.map((title, i) => ({
       title: title.slice(0, 140),
       owner: "entrepreneur" as const,
-      due_in_days: 7 + i * 3,
+      due_in_days: parseDueInDays(title, now) ?? 7 + i * 3,
     })),
   };
 }

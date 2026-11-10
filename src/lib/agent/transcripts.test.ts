@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_CALL_TRANSCRIPT, buildDemoLongTranscript } from "../demo/fixtures";
 import { SINGLE_PASS_MAX_CHARS } from "./schemas";
-import { CHUNK_CHARS, findAgreements, heuristicExtraction, normaliseSpace, parseDueInDays, splitIntoChunks } from "./transcripts";
+import { CHUNK_CHARS, bhutanToday, bhutanWeekday, findAgreements, heuristicExtraction, normaliseSpace, parseDueInDays, splitIntoChunks } from "./transcripts";
 
 describe("splitting long transcripts", () => {
   const long = buildDemoLongTranscript();
@@ -94,5 +94,36 @@ describe("owners when the speaker is known ([Mentor] / [Entrepreneur] lines)", (
   it("unlabelled text keeps the old rule ('I'll send' = the mentor)", async () => {
     const { findAgreements } = await import("./transcripts");
     expect(findAgreements("I will send you a short pricing worksheet tomorrow.")[0]?.who).toBe("mentor");
+  });
+});
+
+describe("day names count from today in Bhutan", () => {
+  // Wednesday 11 Nov 2026, 03:19 in Bhutan = Tuesday 21:19 UTC: the weekday must be Bhutan's.
+  const wednesday = new Date("2026-11-10T21:19:00Z");
+
+  it("knows today in Bhutan, whatever the server's time zone", () => {
+    expect(bhutanWeekday(wednesday)).toBe(3);
+    expect(bhutanToday(wednesday)).toBe("Wednesday 11 November 2026");
+  });
+
+  it.each([
+    ["I will call five recent guests by Friday", 2],
+    ["I will send you the pricing sheet by Wednesday", 7],
+    ["I will rewrite it by next Monday, after the interviews", 5],
+    ["I will introduce you to him by email this week", 4],
+    ["I will send you the questions by tomorrow", 1],
+    ["I will test both prices over the next two weeks", 14],
+    ["on Saturday, no wait, by Thursday", 1],
+  ])("%s -> %s", (text, days) => {
+    expect(parseDueInDays(text, wednesday)).toBe(days);
+  });
+
+  it("without today, a day name still means about a week (as before)", () => {
+    expect(parseDueInDays("I will call them by Friday")).toBe(7);
+  });
+
+  it("the rule-based reader uses today too", () => {
+    const found = findAgreements("[Entrepreneur] I will call five recent guests by Friday.", wednesday);
+    expect(found[0]?.due_in_days).toBe(2);
   });
 });

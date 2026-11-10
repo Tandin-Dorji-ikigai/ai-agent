@@ -25,7 +25,7 @@ for (const c of cases.filter((x) => !process.env.ONLY || x.id === process.env.ON
   const res = await fetch(`${BASE}/api/dev/extract`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, source: c.source }),
+    body: JSON.stringify({ text, source: c.source, today: c.today }),
   });
   const json = await res.json();
   if (!json.ok) {
