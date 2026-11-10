@@ -27,7 +27,9 @@ npm install
 cp .env.example .env.local      # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 ```
 
-**Live AI (optional, free):** create a key at console.groq.com and add `GROQ_API_KEY=...` and `AI_MODE=live` to `.env.local`. Without them the app runs entirely on saved responses. Each person should use their own key, because the free limits are per key: 1,000 requests a day and 8,000 tokens a minute per model.
+**Live AI (optional, free):** create a key at console.groq.com and add `GROQ_API_KEY=...` and `AI_MODE=live` to `.env.local`. Without them the app runs entirely on saved responses. Each person should use a key from their **own Groq account**, because Groq counts the free limits per account (not per key): 1,000 requests a day and 8,000 tokens a minute per model.
+
+**Separate key for speech-to-text (optional):** add `GROQ_TRANSCRIBE_API_KEY=...` (a key from a different Groq account) and all transcription uses it: voice notes, voice intros, and call and video recordings. The agent keeps `GROQ_API_KEY`. Without it, transcription uses `GROQ_API_KEY`. The server log shows which one each transcription used.
 
 **Apply the database migrations** to your Supabase project. Choose one way:
 

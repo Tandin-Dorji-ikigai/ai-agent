@@ -16,8 +16,23 @@ export const MODELS = {
   light: process.env.AI_MODEL_LIGHT ?? "openai/gpt-oss-20b",
 };
 
+/** The agent's key: every AI text step (summaries, matching, briefs, extraction, decisions). */
 export function apiKey(): string | undefined {
   return process.env.GROQ_API_KEY || process.env.AI_API_KEY || undefined;
+}
+
+/**
+ * The speech-to-text key: voice notes, voice intros, call and video recordings.
+ * Groq counts rate limits per account, so a key from a SEPARATE Groq account
+ * gives transcription its own limits. Falls back to the agent's key.
+ */
+export function transcribeApiKey(): string | undefined {
+  return process.env.GROQ_TRANSCRIBE_API_KEY || apiKey();
+}
+
+/** Which key transcription uses, for logs (never the key itself). */
+export function transcribeKeyName(): "transcription key" | "agent key" {
+  return process.env.GROQ_TRANSCRIBE_API_KEY ? "transcription key" : "agent key";
 }
 
 export class RateLimitError extends Error {
@@ -108,9 +123,14 @@ function settleUsage(entry: UsageEntry, data: Record<string, unknown>) {
 
 const approxTokens = (s: string) => Math.ceil(s.length / 4);
 
-/** Low-level POST to the provider. Shared by the agent (here) and audio (src/lib/audio). */
-export async function providerPost(path: string, body: BodyInit, signal: AbortSignal, json = true): Promise<Record<string, unknown>> {
-  const key = apiKey();
+/** Low-level POST to the provider. Shared by the agent (here) and audio (src/lib/audio, which passes its own key). */
+export async function providerPost(
+  path: string,
+  body: BodyInit,
+  signal: AbortSignal,
+  json = true,
+  key: string | undefined = apiKey(),
+): Promise<Record<string, unknown>> {
   if (!key) throw new ProviderError("No AI API key configured.");
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",

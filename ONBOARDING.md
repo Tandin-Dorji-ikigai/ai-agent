@@ -112,7 +112,7 @@ cp .env.example .env.local
 | `SUPABASE_SERVICE_ROLE_KEY` | Project Settings, API Keys, **Legacy API keys** tab: the **service_role** key (click Reveal) |
 
 **Live AI (free, recommended):**
-1. Create your **own** key at console.groq.com. The free limits are per key, so don't share one.
+1. Create your **own** key at console.groq.com, in your own Groq account. Groq counts the free limits per account (not per key), so a second key in the same account does not add capacity.
 2. Add two lines to `.env.local`:
    ```
    AI_MODE=live
@@ -223,7 +223,7 @@ If you change seed data, fixtures or ranking, run `npm test`. Some tests check t
 
 ## 9. Who does what
 
-| | Agent (Tandin) | Frontend | Calls | Audio to text |
+| | Agent (Tandin) | Frontend | Calls | Audio to text (now Tandin) |
 |---|---|---|---|---|
 | **Owns** | `src/lib/agent` (including drafting from speech), `src/lib/matching`, `src/lib/progress.ts`, `src/app/api` (except `transcribe`), `supabase/` | `src/components` (except `voice/`, `mentor/voice-note.tsx` and `call/`), `src/app/*/page.tsx`, `globals.css` | New `src/components/call/` (plus one line in each view to show it) | `src/components/voice/`, `src/components/mentor/voice-note.tsx`, `src/lib/audio/`, `src/app/api/transcribe/` |
 | **Next task** | Add real transcripts to `evals/extraction-cases.json` and keep `npm run eval:extraction` at 100%; 5 reset-to-finish demo runs | Polish the three views; check the phone layout on a real phone | A "Join call" button on each booking for Pema and the mentor, opening a hosted meeting; offer audio-only | Test voice notes on real phones and microphones; turn a call recording into a transcript |
@@ -267,6 +267,7 @@ POST /api/session/complete
 - **Not tested yet:** the **Record** button with a real microphone; phones (iPhone Safari records `audio/mp4`, Chrome records `audio/webm`); background noise.
 - **Still to decide:** what to tell Dzongkha speakers, since Whisper does not list Dzongkha.
 - **Needs live AI on:** `AI_MODE=live` plus `GROQ_API_KEY`.
+- **Separate speech-to-text key (optional):** `GROQ_TRANSCRIBE_API_KEY`, from a different Groq account, is used for all transcription (voice notes, voice intros, call and video recordings); the agent keeps `GROQ_API_KEY`. If it is not set, transcription uses `GROQ_API_KEY`.
 
 **Calls:** keep it small.
 - Do not build video calling. A hosted meeting link (for example Jitsi Meet, no account needed) is enough.

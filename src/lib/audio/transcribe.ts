@@ -1,9 +1,10 @@
 import "server-only";
-import { providerPost } from "../agent/llm";
+import { providerPost, transcribeApiKey, transcribeKeyName } from "../agent/llm";
 import { labelMentorAndEntrepreneur, type TranscriptSegment } from "./speakers";
 
 // Speech-to-text with Whisper on Groq (OpenAI-compatible).
-// OWNER: the audio-to-text teammate.
+// Uses the speech-to-text key (GROQ_TRANSCRIBE_API_KEY, falling back to
+// GROQ_API_KEY), so transcription and the agent can have separate limits.
 //
 // Limits on the Groq free tier: 25 MB per file. Long call recordings will
 // need to be split into parts and the texts joined (not built yet).
@@ -36,8 +37,8 @@ export async function transcribe(file: Blob, filename: string, signal: AbortSign
   // Telling Whisper the language is faster and more accurate than auto-detect.
   if (language) form.append("language", language);
   form.append("prompt", VOCABULARY_HINT);
-  const data = await providerPost("/audio/transcriptions", form, signal, false);
-  console.info(`[ai] transcribe via ${TRANSCRIBE_MODEL}: ${Math.round(file.size / 1024)} KB`);
+  const data = await providerPost("/audio/transcriptions", form, signal, false, transcribeApiKey());
+  console.info(`[ai] transcribe via ${TRANSCRIBE_MODEL} (${transcribeKeyName()}): ${Math.round(file.size / 1024)} KB`);
   return String(data.text ?? "").trim();
 }
 
@@ -53,8 +54,8 @@ async function transcribeVerbose(file: Blob, filename: string, signal: AbortSign
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "segment");
   form.append("prompt", CALL_PROMPT);
-  const data = await providerPost("/audio/transcriptions", form, signal, false);
-  console.info(`[ai] transcribe(verbose) via ${TRANSCRIBE_MODEL}: ${Math.round(file.size / 1024)} KB`);
+  const data = await providerPost("/audio/transcriptions", form, signal, false, transcribeApiKey());
+  console.info(`[ai] transcribe(verbose) via ${TRANSCRIBE_MODEL} (${transcribeKeyName()}): ${Math.round(file.size / 1024)} KB`);
   const text = String(data.text ?? "").trim();
   const raw = Array.isArray(data.segments) ? data.segments : [];
   const segments: TranscriptSegment[] = raw

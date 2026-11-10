@@ -1,5 +1,5 @@
 import { aiMode } from "@/lib/agent/ai";
-import { ProviderError, RateLimitError, apiKey } from "@/lib/agent/llm";
+import { ProviderError, RateLimitError, transcribeApiKey } from "@/lib/agent/llm";
 import { CALL_SPEAKERS } from "@/lib/audio/speakers";
 import { TRANSCRIBE_LANGUAGES, transcribe, transcribeCallRecording, type TranscribeLanguage } from "@/lib/audio/transcribe";
 import { fail, ok } from "@/lib/http";
@@ -47,7 +47,7 @@ function providerStatus(err: unknown): number | null {
 }
 
 export async function POST(req: Request) {
-  if (aiMode() !== "live" || !apiKey()) {
+  if (aiMode() !== "live" || !transcribeApiKey()) {
     return fail(503, "TRANSCRIPTION_UNAVAILABLE", "Voice notes need live AI. Type the notes instead.");
   }
   let form: FormData;
