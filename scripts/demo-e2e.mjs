@@ -7,11 +7,17 @@
 // Options (environment variables):
 //   BASE_URL   default http://localhost:3000
 //   RUNS       how many reset-to-finish runs to do, default 2
+//   PACE_MS    pause after each action, e.g. 4000 with live AI to stay under
+//              the free tier's tokens-per-minute limit (default 0)
+//
+// Works with AI_MODE=fixture (exact checks) and AI_MODE=live (wording may
+// differ, so actions are found by keyword; a source summary is printed).
 //
 // WARNING: this resets the demo database at the start and end of every run.
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const RUNS = Number(process.env.RUNS ?? 2);
+const PACE_MS = Number(process.env.PACE_MS ?? 0);
 
 let failures = 0;
 function check(label, condition, detail) {
@@ -29,6 +35,7 @@ async function call(method, path, body) {
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (method === "POST" && PACE_MS > 0) await new Promise((r) => setTimeout(r, PACE_MS));
   let json;
   try {
     json = await res.json();
@@ -101,11 +108,11 @@ async function runOnce(n, fx) {
   s = await state();
   const titleOf = (id) => s.actions.find((x) => x.id === id)?.title;
   const overdue = s.actions.find((x) => x.status === "overdue");
-  check("   the overdue one is the permits action", overdue?.title === "Confirm which permits the guided village walk needs", overdue);
+  check("   the overdue one is the permits action", /permit|licen/i.test(overdue?.title ?? ""), overdue);
   const followUp = s.messages.find((x) => x.kind === "follow_up" && x.awaiting_reply);
   const checkIn = s.messages.find((x) => x.kind === "check_in" && x.awaiting_reply);
   check("   agent asks about the blocker", !!followUp, s.messages.map((x) => x.kind));
-  check("   agent checks in on the interviews before they are due", titleOf(checkIn?.related_action_id) === "Interview five past guests or local guides", checkIn);
+  check("   agent checks in on the interviews before they are due", /interview|guest/i.test(titleOf(checkIn?.related_action_id) ?? ""), checkIn);
 
   // 13a. On track -> confirm next check-in
   const t1 = await call("POST", "/api/inbox/reply", { message_id: checkIn?.id, body: fx.on_track_reply });
@@ -138,10 +145,10 @@ async function runOnce(n, fx) {
   check("   second fast-forward: interviews and positioning now overdue", f2.json.overdue_action_ids?.length === 2, f2.json);
   s = await state();
   const waiting = s.messages.filter((x) => x.awaiting_reply);
-  const msgFor = (title) => waiting.find((x) => titleOf(x.related_action_id) === title);
-  const o1 = await call("POST", "/api/inbox/reply", { message_id: msgFor("Interview five past guests or local guides")?.id, body: fx.obstacle_reply });
+  const msgFor = (re) => waiting.find((x) => re.test(titleOf(x.related_action_id) ?? ""));
+  const o1 = await call("POST", "/api/inbox/reply", { message_id: msgFor(/interview|guest/i)?.id, body: fx.obstacle_reply });
   check("   'sick, will catch up' reply: agent records the obstacle", o1.json.outcome?.decision === "Record obstacle", o1.json);
-  const d1 = await call("POST", "/api/inbox/reply", { message_id: msgFor("Write a one-line positioning statement")?.id, body: fx.done_reply });
+  const d1 = await call("POST", "/api/inbox/reply", { message_id: msgFor(/position|statement/i)?.id, body: fx.done_reply });
   check("   'done' reply: agent marks the action done", d1.json.outcome?.decision === "Mark done", d1.json);
   s = await state();
   check("   dashboard shows 1 of 3 actions completed", s.metrics.actions_completed === 1 && s.metrics.actions_total === 3, s.metrics);
@@ -152,9 +159,17 @@ async function runOnce(n, fx) {
   check("   next session: follow-up booked with YDF credit", nb.status === 200 && s.credit?.amount_remaining === 0, { nb: nb.json, credit: s.credit });
   check(
     "   follow-up brief is built from progress",
-    s.booking?.mentor_brief?.headline?.startsWith("Follow-up session") && s.booking.mentor_brief.focus.some((x) => x.includes("ESC-101")),
+    s.ai_mode === "live"
+      ? (s.booking?.mentor_brief?.focus?.length ?? 0) > 0 && s.booking?.id !== b1.json.booking_id
+      : s.booking?.mentor_brief?.headline?.startsWith("Follow-up session") && s.booking.mentor_brief.focus.some((x) => x.includes("ESC-101")),
     s.booking?.mentor_brief,
   );
+  if (s.ai_mode === "live") {
+    const bySource = {};
+    for (const r of s.runs) if (r.source) bySource[r.source] = (bySource[r.source] ?? 0) + 1;
+    const fallbacks = s.runs.filter((r) => r.source === "fallback").map((r) => r.trigger);
+    console.log(`  info  agent runs by source: ${JSON.stringify(bySource)}${fallbacks.length ? `; saved responses used for: ${fallbacks.join(", ")}` : ""}`);
+  }
   check("   no agent run failed", s.runs.every((x) => x.status === "completed"), s.runs.filter((x) => x.status !== "completed"));
 
   // Reset again (KEEP_END_STATE=1 leaves the last run finished, for inspection)

@@ -1,11 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { aiStep } from "./ai";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { _resetAiGuards, aiStep } from "./ai";
+import { RateLimitError } from "./llm";
 import { FollowUpSchema } from "./schemas";
 
 const fallback = () => ({ body: "Saved fallback message." });
 
+beforeEach(() => {
+  _resetAiGuards();
+  process.env.GROQ_API_KEY = "test-key-not-real";
+});
+
 afterEach(() => {
   delete process.env.AI_MODE;
+  delete process.env.GROQ_API_KEY;
+  delete process.env.AI_DAILY_CALL_LIMIT;
 });
 
 describe("aiStep", () => {
@@ -59,5 +67,62 @@ describe("aiStep", () => {
       },
     });
     expect(r).toMatchObject({ source: "fallback", fallbackReason: "error" });
+  });
+});
+
+describe("aiStep guards for the free tier", () => {
+  it("uses the fallback when no API key is set", async () => {
+    process.env.AI_MODE = "live";
+    delete process.env.GROQ_API_KEY;
+    const r = await aiStep({ task: "t", schema: FollowUpSchema, fallback, live: async () => ({ body: "live" }) });
+    expect(r).toMatchObject({ source: "fallback", fallbackReason: "no_api_key" });
+  });
+
+  it("pauses live calls after a rate-limit refusal", async () => {
+    process.env.AI_MODE = "live";
+    const first = await aiStep({
+      task: "t",
+      schema: FollowUpSchema,
+      fallback,
+      live: async () => {
+        throw new RateLimitError(30_000);
+      },
+    });
+    expect(first.fallbackReason).toBe("rate_limited");
+    let called = false;
+    const second = await aiStep({
+      task: "t",
+      schema: FollowUpSchema,
+      fallback,
+      live: async () => {
+        called = true;
+        return { body: "live" };
+      },
+    });
+    expect(called).toBe(false);
+    expect(second.fallbackReason).toBe("rate_limited");
+  });
+
+  it("stops calling the AI after the daily cap", async () => {
+    process.env.AI_MODE = "live";
+    process.env.AI_DAILY_CALL_LIMIT = "2";
+    const call = () => aiStep({ task: "t", schema: FollowUpSchema, fallback, live: async () => ({ body: "Live message." }) });
+    expect((await call()).source).toBe("live_ai");
+    expect((await call()).source).toBe("live_ai");
+    expect(await call()).toMatchObject({ source: "fallback", fallbackReason: "daily_cap" });
+  });
+});
+
+describe("aiStep validate hook", () => {
+  it("rejects live output that fails the extra check", async () => {
+    process.env.AI_MODE = "live";
+    const r = await aiStep({
+      task: "t",
+      schema: FollowUpSchema,
+      fallback,
+      live: async () => ({ body: "She is doing well." }),
+      validate: (v) => (/\bshe\b/i.test(v.body) ? "gendered" : null),
+    });
+    expect(r).toMatchObject({ source: "fallback", fallbackReason: "invalid_output" });
   });
 });

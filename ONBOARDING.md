@@ -41,11 +41,40 @@ Welcome to the team. This guide gets you from zero to a running app in about 15 
 |---|---|
 | 1. All 14 demo steps working on saved responses | **Done.** Tested end to end twice against our Supabase project |
 | 1b. Our workflow diagram: check-ins, on track / obstacle / needs help / done, SMART actions, mentor progress, next session | **Done** |
-| 2. Switch saved responses to live AI | **Next.** We use **OpenAI** (and Whisper for audio notes). Waiting on an API key |
+| 2. Live AI | **Done.** We use **Groq** (free): two open models plus Whisper for voice notes. Saved responses remain the backup |
 | 3. Reliability polish | Partly done |
 | 4. Freeze: no new features, rehearse, record backup video | End of Day 2 |
 
-"Saved responses" means every AI step currently returns a prepared answer, so the demo works with no AI key and no internet risk. Milestone 2 adds live AI calls that **fall back to those saved answers** if the AI is slow or returns something invalid.
+Every AI step has a **saved response** as a backup. The demo still works with no key, with no internet, or when Groq's free limit is hit. In the app, each AI output is labelled **Live AI** or **Saved response**.
+
+### What is built (and tested)
+
+| Area | What works today | Where |
+|---|---|---|
+| Needs assessment | Pre-filled form, AI summary | `entrepreneur/assessment-form.tsx`, `/api/assessment` |
+| Matching | Fixed-rule ranking of 15 mentors; top 3 with AI explanations written from verified facts | `matching/score-mentor.ts`, `/api/matches` |
+| Booking | YDF credit or simulated self-payment; cannot double-book or double-charge | `/api/booking`, SQL `create_booking` |
+| Session prep | AI briefs for both sides; follow-up briefs built from progress | `agent/handlers.ts` |
+| After the session | Mentor's quick notes become SMART draft actions; the mentor confirms them | `mentor-view.tsx`, `/api/session/complete`, `/api/actions/confirm` |
+| Check-in loop (our workflow diagram) | Check-ins before due dates and follow-ups once overdue. Replies are read as done, on track, or stuck, and every branch is handled | `agent/handlers.ts`, `agent/policy.ts` |
+| Getting help | The AI picks one tool (approved resource, own mentor, another mentor, or YDF escalation), and our rules double-check its choice | `agent/live.ts`, `agent/policy.ts` |
+| Mentor progress | Progress feed and next-session agenda | `progress.ts`, `mentor-view.tsx` |
+| YDF dashboard | Metrics from the database, escalation queue, agent activity log, demo controls | `ydf-view.tsx` |
+| Live AI | Groq `gpt-oss-120b` and `gpt-oss-20b`, with timeouts, a pause after rate limits, a daily cap, and a check that blocks gender guessing | `agent/ai.ts`, `agent/llm.ts`, `agent/live.ts` |
+| Voice notes (**basic version**) | Record or upload audio in the mentor view; Whisper turns it into text for the mentor to check. See section 9 | `mentor-view.tsx` (`VoiceNote`), `/api/transcribe` |
+| Tests | 57 unit tests. `npm run demo:e2e` runs the whole demo in both modes | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
+
+### What is not built yet
+
+| Gap | Notes | Suggested owner |
+|---|---|---|
+| Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Person 3 (fluent speaker) |
+| Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Voice-notes owner (section 9) |
+| YDF acting on escalations | The queue is read-only, with no assign or resolve buttons | Person 1 or 2, if time allows |
+| UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Person 2 |
+| Reliability target | The plan asks for 5 reset-to-finish runs in a row; 2 done so far | Person 1 |
+| Pitch | Interviews for real quotes, slides, demo script, backup video, rehearsals | Person 3 (video: Person 2) |
+| Out of scope on purpose | Real login, real payments, SMS or WhatsApp, a public URL | Nobody. Present them as next steps in the pitch |
 
 ---
 
@@ -76,7 +105,16 @@ cp .env.example .env.local
 | `SUPABASE_URL` | Project Settings, Data API: **Project URL** (looks like `https://xxxx.supabase.co`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Project Settings, API Keys, **Legacy API keys** tab: the **service_role** key (click Reveal) |
 
-Leave `AI_MODE=fixture` for now.
+**Live AI (free, recommended):**
+1. Create your **own** key at console.groq.com. The free limits are per key, so don't share one.
+2. Add two lines to `.env.local`:
+   ```
+   AI_MODE=live
+   GROQ_API_KEY=gsk_...
+   ```
+   No quotes, and no spaces around `=`.
+
+With `AI_MODE=fixture`, or no key, everything still works on saved responses. The header shows which mode is on: **AI: live** or **AI: saved responses**.
 
 > **Why the legacy key?** The new-style secret key also works if you copy it from the dashboard, but the Supabase CLI only shows a masked version of it, which fails. The legacy service_role key works everywhere.
 >
@@ -106,7 +144,7 @@ Then walk through the demo yourself (section 6).
 
 `SUPABASE_SERVICE_ROLE_KEY` can read and write **everything** in our database.
 
-- It lives only in `.env.local`, which git ignores. Never commit it, paste it into chat, or put it in a screenshot.
+- It lives only in `.env.local`, which git ignores. Never commit it, paste it into chat, or put it in a screenshot. The same applies to `GROQ_API_KEY`.
 - Never rename it to `NEXT_PUBLIC_...`. That would send it to every browser.
 - Only code under `src/lib` and `src/app/api` (server code) may use it. Browser code never touches the database directly.
 - The repository is **public**. Anything committed can be read by anyone.
@@ -120,7 +158,7 @@ Use the **Entrepreneur / Mentor / YDF** tabs at the top. The header shows the de
 1. **Entrepreneur:** the form is pre-filled with Pema's answers. **Find my mentors.**
 2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor.
 3. **Choose Deki**, keep **Use my YDF credit**, **Book session**. The prep checklist appears; credit drops to Nu. 1,500.
-4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**.
+4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**. With live AI you can also **Record voice note**; the text is filled in for you to check.
 5. **YDF:** **Fast-forward 5 days**. The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
 6. **Entrepreneur:** two messages need a reply. **Send reply** on the interviews check-in first ("going well"): the agent confirms the next check-in. Then **Send reply** on the permits follow-up: the agent escalates, **ESC-101**.
 7. **Mentor:** the agenda for the next session and the progress feed. **YDF:** metrics, the escalation, and the **Agent activity** log with decision factors and the tools used.
@@ -178,10 +216,21 @@ If you change seed data, fixtures or ranking, run `npm test`. Some tests check t
 | | Person 1: agent and backend | Person 2: screens and demo | Person 3: product, data and pitch |
 |---|---|---|---|
 | **Owns** | `src/lib/agent`, `src/app/api`, `supabase/` | `src/components`, `src/app/*/page.tsx`, `globals.css` | `src/lib/demo`, prompts and wording, slides |
-| **Next task** | Milestone 2: live AI behind `aiStep()`, fallbacks kept | Polish the three views; check the phone layout on a real phone | Write and verify the Dzongkha message; interview 2 to 3 founders and 1 mentor for real quotes |
-| **Then** | Reliability (Milestone 3) | Record the backup demo video (Day 2 evening) | Slides (8 to 10), demo script, run rehearsals |
+| **Next task** | Keep live AI healthy (watch the `[ai]` lines in the terminal, tune prompts in `live.ts`); get 5 reset-to-finish runs in a row | Polish the three views; check the phone layout on a real phone | Write and verify the Dzongkha message; interview 2 to 3 founders and 1 mentor for real quotes |
+| **Then** | Optional: assign/resolve buttons for YDF escalations | Record the backup demo video (Day 2 evening) | Slides (8 to 10), demo script, run rehearsals |
 
 **Person 3, the Dzongkha task:** open `src/lib/demo/dzongkha.ts`. Write the Dzongkha version of the English message in `dzongkha`, ideally have a second fluent speaker read it, then set `verified: true` and fill in `reviewedBy`. Until then the app shows English with a "Dzongkha version pending review" label. **Do not paste machine translation.**
+
+**Voice notes owner:** a basic working version already exists. Start from it, not from scratch.
+- **Code:**
+  - the `VoiceNote` component in `src/components/mentor-view.tsx`
+  - the endpoint `src/app/api/transcribe/route.ts`
+  - `transcribe()` in `src/lib/agent/llm.ts`, which uses Groq's `whisper-large-v3-turbo` (max 25 MB per file)
+- **How it works:** the mentor records with the browser microphone, or uploads a file. The text appears in the notes box for the mentor to check. **Complete session** then runs the same SMART extraction as typed notes.
+- **Tested:** uploading one computer-generated English recording, which came back word for word.
+- **Not tested yet:** the **Record** button with a real microphone; phones (iPhone Safari records `audio/mp4`, Chrome records `audio/webm`); background noise.
+- **Still to decide:** what to tell Dzongkha speakers, since Whisper does not list Dzongkha. Optionally, let Pema reply to check-ins by voice.
+- **Needs live AI on:** `AI_MODE=live` plus `GROQ_API_KEY`.
 
 **Check-ins:** start of day, lunch, dinner, 15 minutes each. Everyone says: what works, what is blocked, what they are cutting.
 
@@ -230,6 +279,9 @@ From `CLAUDE_WORKING_PLAN.md`. These are what make the agent trustworthy, and ju
 | An agent run shows **Failed** in the activity log | Click **Retry** on it, and tell Person 1 |
 | `supabase db push` says "Local database is up to date" | It is aimed at a local Docker database. You almost certainly should not be pushing at all; ask Person 1 |
 | Tests fail after changing demo data | Expected if you changed numbers on purpose. Update the test deliberately |
+| Header says "AI: saved responses" but you want live | Check `AI_MODE=live` and `GROQ_API_KEY` in `.env.local`, then restart `npm run dev` |
+| Some steps show "Saved response" in live mode | Usually the free limit of 8,000 tokens a minute. Wait a minute. The terminal's `[ai]` lines say why |
+| Voice note says it needs live AI | Same as above: turn on live AI |
 
 ## 13. Using an AI coding assistant (optional)
 

@@ -26,9 +26,9 @@ export const DEMO_SESSION_NOTES = [
   "Pema has 2 homestay rooms and a half-day village walk. Main gap: she is not sure who her guests are.",
   "Price is Nu. 1,200 per night and may not cover costs. Revisit after talking to guests.",
   "Agreed:",
-  "- Check which permits the guided village walk needs before advertising it",
-  "- Interview five past guests or local guides about why they came",
-  "- Write a one-line positioning statement for the homestay and walk",
+  "- Within 4 days: check which permits the guided village walk needs before advertising it",
+  "- Within a week: interview five past guests or local guides about why they came",
+  "- Within 10 days: write a one-line positioning statement for the homestay and walk",
 ].join("\n");
 
 /** What the agent extracts from DEMO_SESSION_NOTES (saved fallback). */
@@ -71,15 +71,19 @@ export const DEMO_ON_TRACK_REPLY = "Going well. I have talked to three past gues
 export const DEMO_OBSTACLE_REPLY = "I was sick for two days so I am a bit behind, but I will catch up next week.";
 export const DEMO_DONE_REPLY = "Done! I wrote it and read it to two guests. They liked it.";
 
-/** Pre-filled reply per action and message kind, so the presenter can click through. */
-const DEMO_REPLIES: Record<string, { check_in: string; follow_up: string }> = {
-  "Confirm which permits the guided village walk needs": { check_in: DEMO_BLOCKER_REPLY, follow_up: DEMO_BLOCKER_REPLY },
-  "Interview five past guests or local guides": { check_in: DEMO_ON_TRACK_REPLY, follow_up: DEMO_OBSTACLE_REPLY },
-  "Write a one-line positioning statement": { check_in: DEMO_DONE_REPLY, follow_up: DEMO_DONE_REPLY },
-};
+/**
+ * Pre-filled reply per action and message kind, so the presenter can click
+ * through. Matched by keyword, because live AI may word the action titles
+ * slightly differently from the saved ones.
+ */
+const DEMO_REPLIES: Array<{ match: RegExp; check_in: string; follow_up: string }> = [
+  { match: /permit|licen/i, check_in: DEMO_BLOCKER_REPLY, follow_up: DEMO_BLOCKER_REPLY },
+  { match: /interview|guest|guide/i, check_in: DEMO_ON_TRACK_REPLY, follow_up: DEMO_OBSTACLE_REPLY },
+  { match: /position|statement|one-line/i, check_in: DEMO_DONE_REPLY, follow_up: DEMO_DONE_REPLY },
+];
 
 export function demoReplyFor(actionTitle: string | undefined, kind: string): string {
-  const r = actionTitle ? DEMO_REPLIES[actionTitle] : undefined;
+  const r = actionTitle ? DEMO_REPLIES.find((x) => x.match.test(actionTitle)) : undefined;
   if (!r) return "";
   return kind === "check_in" ? r.check_in : r.follow_up;
 }

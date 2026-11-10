@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_EXTRACTED_ACTIONS, DEMO_FAST_FORWARD_DAYS, DEMO_SESSION_NOTES, PEMA_ASSESSMENT_ANSWERS } from "../demo/fixtures";
+import {
+  DEMO_BLOCKER_REPLY,
+  DEMO_DONE_REPLY,
+  DEMO_EXTRACTED_ACTIONS,
+  DEMO_FAST_FORWARD_DAYS,
+  DEMO_OBSTACLE_REPLY,
+  DEMO_ON_TRACK_REPLY,
+  DEMO_SESSION_NOTES,
+  PEMA_ASSESSMENT_ANSWERS,
+  demoReplyFor,
+} from "../demo/fixtures";
 import { DEMO_IDS } from "../demo/ids";
 import { SEED_MENTORS, SEED_PEMA } from "../demo/seed-data";
 import { rankMentors, topMatches } from "../matching/score-mentor";
@@ -97,5 +107,15 @@ describe("action extraction fallback", () => {
     const out = fallbackExtraction("Talked about stock.\n- Count inventory\n2. Call the supplier");
     expect(out.actions.map((a) => a.title)).toEqual(["Count inventory", "Call the supplier"]);
     expect(fallbackExtraction("Just a chat, nothing agreed.").actions).toEqual([]);
+  });
+});
+
+describe("demo replies match live-AI wording too", () => {
+  it("finds the right pre-filled reply by keyword", () => {
+    expect(demoReplyFor("Find out which permits and licences the walk needs", "follow_up")).toBe(DEMO_BLOCKER_REPLY);
+    expect(demoReplyFor("Interview 5 past guests", "check_in")).toBe(DEMO_ON_TRACK_REPLY);
+    expect(demoReplyFor("Interview 5 past guests", "follow_up")).toBe(DEMO_OBSTACLE_REPLY);
+    expect(demoReplyFor("Draft a one-line positioning statement", "check_in")).toBe(DEMO_DONE_REPLY);
+    expect(demoReplyFor("Something else entirely", "check_in")).toBe("");
   });
 });

@@ -13,7 +13,7 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 | 0. Repository audit | Done (empty repository) |
 | 1. End-to-end skeleton, all 14 steps on saved responses | **Done.** `npm run demo:e2e` passes twice in a row on a local database, and the full flow was clicked through in a headless browser |
 | 1b. Team workflow: check-in loop (on track / obstacle / needs help / done), SMART actions, mentor progress, next session | **Done.** Migration 003; every branch is covered by `npm run demo:e2e` |
-| 2. Replace saved responses with live AI | Next. Provider: **OpenAI** (LLM with structured output and tool calling; Whisper for audio notes). Needs `OPENAI_API_KEY` |
+| 2. Live AI | **Done.** Groq free tier: `gpt-oss-120b` and `gpt-oss-20b` (strict JSON output and real tool calling), plus Whisper for voice notes. Every step falls back to its saved response |
 | 3. Reliability | Partly done: idempotent booking, confirmation and replies; no negative credit; one open escalation per action |
 | 4. Freeze | Not started |
 
@@ -23,6 +23,8 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 npm install
 cp .env.example .env.local      # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 ```
+
+**Live AI (optional, free):** create a key at console.groq.com and add `GROQ_API_KEY=...` and `AI_MODE=live` to `.env.local`. Without them the app runs entirely on saved responses. Each person should use their own key, because the free limits are per key: 1,000 requests a day and 8,000 tokens a minute per model.
 
 **Apply the database migrations** to your Supabase project. Choose one way:
 
@@ -46,6 +48,7 @@ npm test             # 47 unit tests: ranking, fallbacks, reply reading, decisio
 npm run lint
 npm run typecheck
 npm run demo:e2e     # all 14 demo steps plus every check-in branch, twice. RESETS THE DEMO DATA
+PACE_MS=3000 RUNS=1 npm run demo:e2e   # with AI_MODE=live: stays under the free tier, prints live vs saved counts
 ```
 
 ## Demo script (about 3 minutes)
@@ -53,7 +56,7 @@ npm run demo:e2e     # all 14 demo steps plus every check-in branch, twice. RESE
 1. **Entrepreneur view** (phone width). The assessment is pre-filled with Pema's answers. Press **Find my mentors**.
 2. Three ranked mentors appear, each with a score breakdown and an explanation built from evidence. Point out that the most-booked mentor ranks 13th of 13.
 3. **Choose Deki**, keep **Use my YDF credit**, then **Book session**. Pema's preparation checklist appears.
-4. **Mentor view**. Show the brief, press **Complete session**, review the three draft actions, then **Confirm 3 actions**.
+4. **Mentor view**. Show the brief, press **Complete session** (or, with live AI, **Record voice note**), review the three draft actions, then **Confirm 3 actions**.
 5. **YDF view**. Press **Fast-forward 5 days**. The scheduling agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
 6. **Entrepreneur view**. Two messages need a reply. Reply to the interviews check-in first (pre-filled "going well"): the agent confirms the next check-in. Then reply to the permits follow-up (pre-filled with the blocker).
 7. The agent decides **Escalate to YDF**. On the **Mentor view**, show the agenda for the next session and the progress feed. On the **YDF view**, show ESC-101, the metrics, and the activity log with its decision factors and tool calls.
@@ -94,7 +97,9 @@ supabase/migrations/
   20261110000002_demo_functions.sql  create_booking, confirm_action_items, fast_forward_demo, reset_demo
   20261110000003_checkin_loop.sql    SMART measure, check-in schedule, progress_updates, new event types
 src/lib/
-  agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, ai, prompts
+  agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, prompts
+               ai.ts (fallback wrapper and guards), llm.ts (Groq client), live.ts (live prompts),
+               json-schema.ts (zod schema to strict JSON schema)
   matching/    score-mentor.ts (deterministic ranking)
   progress.ts  mentor progress feed and next-session agenda
   demo/        ids, seed-data (single source of truth), fixtures, dzongkha
@@ -121,6 +126,7 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins) |
 | POST | `/api/inbox/reply` | 13 (one decision per check-in or follow-up) |
 | POST | `/api/agent/run` | Retry a failed event |
+| POST | `/api/transcribe` | Voice note to text (Whisper); live AI only |
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
 
@@ -187,6 +193,19 @@ Only verified, active mentors are ranked. Ties are broken by more open slots, th
 
 Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI with a timeout, validates the output against the same schema, and otherwise uses the saved response. Every run records whether its result came from `live_ai` or `fallback`. `AI_MODE=fixture` (the default) makes no AI calls at all.
 
+**Live AI (Groq, OpenAI-compatible; see `llm.ts` and `live.ts`):**
+- `gpt-oss-120b` handles match explanations, briefs, action extraction and the help decision. `gpt-oss-20b` handles the summary, check-ins and reading replies. Each model has its own rate limit.
+- **Strict JSON schema** output for every text step, converted from the same zod schemas and validated again by zod.
+- The help decision uses **real tool calling**. The model must call exactly one of: `recommend_approved_resource`, `request_own_mentor_help`, `suggest_other_mentor`, `escalate_to_ydf`. IDs are restricted to real resources and mentors, and `validateDecision()` still has the final say.
+- Match explanations are written only from facts our code computes (`explainMatch()`), so the model cannot misread the scores.
+- **Guards:**
+  - an 8 second timeout per step
+  - a pause after a rate-limit refusal (HTTP 429)
+  - a daily cap per server (`AI_DAILY_CALL_LIMIT`)
+  - live text that guesses anyone's gender (he/she) is rejected and the saved response is used
+- The server terminal shows token usage per call, plus why any saved response was used (`[ai] ...` lines). Prompts and keys are never logged.
+- To switch to OpenAI or another compatible provider, change `AI_BASE_URL`, the key and the model names. Nothing else changes.
+
 ## Dzongkha moment
 
 `src/lib/demo/dzongkha.ts` holds one follow-up message. **A fluent teammate must write and verify the Dzongkha text.** Until `verified: true`, the app shows English with the label "Dzongkha version pending review". Unreviewed machine translation is never shown.
@@ -237,8 +256,8 @@ Read README.md and CLAUDE_WORKING_PLAN.md completely before making changes
 prototype of an AI mentoring platform using Next.js 16, TypeScript, Supabase
 Postgres, and an AI API with structured tool calling.
 
-Milestone 1 is complete: all 14 steps work on saved responses, and
-`npm run demo:e2e` must keep passing. Keep all agent logic in the Next.js
+Milestones 1 and 2 are complete: all 14 steps work on saved responses and
+on live AI (Groq), and `npm run demo:e2e` must keep passing in both modes. Keep all agent logic in the Next.js
 server runtime. Never expose the service-role key to browser code. Do not add
 production features listed as out of scope.
 

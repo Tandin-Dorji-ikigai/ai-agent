@@ -5,6 +5,8 @@ import { isEligible, topMatches } from "../matching/score-mentor";
 import { db, DbError, must } from "../supabase/server";
 import type { ActionItemRecord, ActionStatus, ResourceRecord } from "../types";
 import { aiStep } from "./ai";
+import { live } from "./live";
+import { rejectGenderedText } from "./prompts";
 import { fallbackExtraction } from "./fallbacks";
 import { ExtractionSchema, ToolInputs, type ToolName } from "./schemas";
 
@@ -151,6 +153,8 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
     task: "extract_action_items",
     schema: ExtractionSchema,
     fallback: () => fallbackExtraction(input.notes),
+    live: live.extraction(input.notes),
+    validate: rejectGenderedText,
   });
 
   const rows = step.value.actions.map((a) => ({

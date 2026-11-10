@@ -11,6 +11,8 @@ import {
   type ResultSource,
 } from "../types";
 import { aiStep } from "./ai";
+import { live } from "./live";
+import { hasGenderedPronoun, rejectGenderedText } from "./prompts";
 import {
   fallbackAssessmentSummary,
   fallbackBriefs,
@@ -131,6 +133,8 @@ const assessmentCompleted: Handler = async ({ event, tools, now }) => {
     task: "assessment_summary",
     schema: AssessmentSummarySchema,
     fallback: () => fallbackAssessmentSummary(ctx.profile),
+    live: live.assessmentSummary(ctx.profile),
+    validate: rejectGenderedText,
   });
   must(
     await db()
@@ -156,6 +160,8 @@ const matchRequested: Handler = async ({ event, tools, now }) => {
     task: "match_explanations",
     schema: MatchExplanationsSchema,
     fallback: () => fallbackMatchExplanations(ctx.profile, ranked),
+    live: live.matchExplanations(ctx.profile, ranked),
+    validate: rejectGenderedText,
   });
 
   // Grounding check: the AI may only explain the mentors the backend ranked.
@@ -207,6 +213,8 @@ const bookingConfirmed: Handler = async ({ event, tools, now }) => {
     task: "session_briefs",
     schema: BriefsSchema,
     fallback: () => fallbackBriefs(src.entrepreneur, src.mentor, scheduled, agenda),
+    live: live.briefs(src.entrepreneur, src.mentor, scheduled, agenda),
+    validate: rejectGenderedText,
   });
   must(
     await db()
@@ -277,6 +285,8 @@ const checkInDue: Handler = async ({ event, tools, now }) => {
     task: "progress_check_in",
     schema: FollowUpSchema,
     fallback: () => fallbackCheckIn(ctx.profile, action.title, action.due_at ? new Date(action.due_at) : null),
+    live: live.checkIn(ctx.profile, action.title, action.due_at ? new Date(action.due_at) : null, action.success_measure),
+    validate: rejectGenderedText,
   });
   await tools.call("send_inbox_message", {
     entrepreneur_id,
@@ -309,6 +319,8 @@ const actionOverdue: Handler = async ({ event, tools, now }) => {
     task: "overdue_follow_up",
     schema: FollowUpSchema,
     fallback: () => fallbackFollowUp(ctx.profile, action.title, daysOverdue),
+    live: live.overdue(ctx.profile, action.title, daysOverdue),
+    validate: rejectGenderedText,
   });
   const dz = dzongkhaFollowUp(action.title);
   await tools.call("send_inbox_message", {
@@ -369,8 +381,15 @@ const checkInReplied: Handler = async ({ event, tools, now }) => {
   const mentorFirst = currentMentor ? currentMentor.full_name.split(" ")[0] : "your mentor";
 
   // Progress status?
-  const read = await aiStep({ task: "classify_reply", schema: ReplyClassificationSchema, fallback: () => classifyReply(reply) });
-  const status = read.value;
+  const read = await aiStep({
+    task: "classify_reply",
+    schema: ReplyClassificationSchema,
+    fallback: () => classifyReply(reply),
+    live: live.classifyReply(action.title, reply, firstName),
+  });
+  // Keep the live classification, but never show the mentor a gender guess:
+  // fall back to the mentee's own words for the summary.
+  const status = hasGenderedPronoun(read.value.summary) ? { ...read.value, summary: reply.slice(0, 300) } : read.value;
   const statusFactor = `Reply read as: ${status.status === "on_track" ? "on track" : status.status}${status.status === "stuck" ? (status.needs_help ? ", needs help" : ", no help needed") : ""}.`;
   const base = { input_summary: `${ctx.profile.full_name} replied about "${action.title}"` };
 
@@ -442,7 +461,13 @@ const checkInReplied: Handler = async ({ event, tools, now }) => {
     actionTitle: blocked.title,
     entrepreneurName: ctx.profile.full_name,
   };
-  const step = await aiStep({ task: "blocker_decision", schema: DecisionSchema, fallback: () => decideNextStep(dctx) });
+  const step = await aiStep({
+    task: "blocker_decision",
+    schema: DecisionSchema,
+    fallback: () => decideNextStep(dctx),
+    live: live.decision(dctx),
+    validate: rejectGenderedText,
+  });
   let decision: Decision = step.value;
   let source: ResultSource = step.source;
   if (validateDecision(decision, dctx) !== null) {

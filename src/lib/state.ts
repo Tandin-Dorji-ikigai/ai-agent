@@ -1,5 +1,6 @@
 import "server-only";
 import { aiMode } from "./agent/ai";
+import { apiKey } from "./agent/llm";
 import { getDemoClock } from "./clock";
 import { loadEntrepreneur, loadMentors } from "./data";
 import { DEMO_IDS } from "./demo/ids";
@@ -29,7 +30,8 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
 
   const base = {
     ok: true as const,
-    ai_mode: aiMode(),
+    // "live" only when live AI can actually run (mode on and a key present).
+    ai_mode: aiMode() === "live" && apiKey() ? ("live" as const) : ("fixture" as const),
     clock: { now: clock.now.toISOString(), offset_days: clock.offsetDays },
   };
 
