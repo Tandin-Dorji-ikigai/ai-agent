@@ -5,14 +5,14 @@ import { formatDay, formatNu, relativeDue } from "@/lib/format";
 import type { DemoState } from "@/lib/state-types";
 import { DemoGate, LastError } from "./demo-gate";
 import { useDemo } from "./demo-state";
-import { AssessmentForm } from "./entrepreneur/assessment-form";
+import { AssessmentForm, profileToForm } from "./entrepreneur/assessment-form";
 import { Inbox } from "./entrepreneur/inbox";
 import { MentorCard, newIdempotencyKey } from "./entrepreneur/mentor-card";
 import { Badge, Button, Card, SectionTitle, SourceBadge, StatusBadge } from "./ui";
 
 // Pema's phone. Mobile-first: one narrow column.
 
-function Recommendations({ state }: { state: DemoState }) {
+function Recommendations({ state, onChangeAnswers }: { state: DemoState; onChangeAnswers: () => void }) {
   const { act, busy } = useDemo();
   if (state.matches.length === 0) {
     return (
@@ -35,6 +35,9 @@ function Recommendations({ state }: { state: DemoState }) {
         <p className="text-sm text-muted">
           Ranked by fixed rules on expertise, sector, stage, language, availability and budget. The AI only explains the ranking.
         </p>
+        <Button variant="ghost" className="-ml-3 mt-1" onClick={onChangeAnswers}>
+          Change my answers
+        </Button>
       </div>
       {state.matches.map((m) => (
         <MentorCard key={m.mentor.id} match={m} credit={state.credit} />
@@ -167,46 +170,52 @@ function Actions({ state }: { state: DemoState }) {
   );
 }
 
-export function EntrepreneurView() {
+function EntrepreneurBody({ state }: { state: DemoState }) {
+  const [editing, setEditing] = useState(false);
+  const e = state.entrepreneur!;
   return (
-    <DemoGate>
-      {(state) => {
-        const e = state.entrepreneur!;
-        return (
-          <div className="mx-auto max-w-md space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm text-muted">Signed in as (demo)</p>
-                <h1 className="text-xl font-semibold">{e.full_name}</h1>
-                <p className="text-sm text-muted">{e.business_name}</p>
-              </div>
-              {state.credit && (
-                <Badge tone="accent" className="mt-1 shrink-0">
-                  YDF credit {formatNu(state.credit.amount_remaining)}
-                </Badge>
-              )}
-            </div>
+    <div className="mx-auto max-w-md space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted">Signed in as (demo)</p>
+          <h1 className="text-xl font-semibold">{e.full_name}</h1>
+          <p className="text-sm text-muted">{e.business_name}</p>
+        </div>
+        {state.credit && (
+          <Badge tone="accent" className="mt-1 shrink-0">
+            YDF credit {formatNu(state.credit.amount_remaining)}
+          </Badge>
+        )}
+      </div>
 
-            <LastError />
+      <LastError />
 
-            {!e.assessment_completed_at ? (
-              <AssessmentForm />
-            ) : (
-              <>
-                {state.messages.length > 0 && <Inbox state={state} />}
-                {state.booking ? <SessionCard state={state} /> : <Recommendations state={state} />}
-                <Actions state={state} />
-                {e.assessment_summary && (
-                  <details className="rounded-xl border border-line bg-card p-4">
-                    <summary className="cursor-pointer text-sm font-semibold">What the agent knows about you</summary>
-                    <p className="mt-2 text-sm text-muted">{e.assessment_summary}</p>
-                  </details>
-                )}
-              </>
-            )}
-          </div>
-        );
-      }}
-    </DemoGate>
+      {!e.assessment_completed_at ? (
+        <AssessmentForm />
+      ) : editing && !state.booking ? (
+        <>
+          <AssessmentForm initial={profileToForm(e)} onDone={() => setEditing(false)} heading="Change your answers" />
+          <Button variant="ghost" onClick={() => setEditing(false)}>
+            Keep my answers
+          </Button>
+        </>
+      ) : (
+        <>
+          {state.messages.length > 0 && <Inbox state={state} />}
+          {state.booking ? <SessionCard state={state} /> : <Recommendations state={state} onChangeAnswers={() => setEditing(true)} />}
+          <Actions state={state} />
+          {e.assessment_summary && (
+            <details className="rounded-xl border border-line bg-card p-4">
+              <summary className="cursor-pointer text-sm font-semibold">What the agent knows about you</summary>
+              <p className="mt-2 text-sm text-muted">{e.assessment_summary}</p>
+            </details>
+          )}
+        </>
+      )}
+    </div>
   );
+}
+
+export function EntrepreneurView() {
+  return <DemoGate>{(state) => <EntrepreneurBody state={state} />}</DemoGate>;
 }

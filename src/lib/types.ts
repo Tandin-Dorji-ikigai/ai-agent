@@ -24,6 +24,8 @@ export const SECTORS = [
   "retail",
   "fintech",
   "technology",
+  /** Aspiring entrepreneurs who have not chosen an area yet. */
+  "undecided",
 ] as const;
 export type Sector = (typeof SECTORS)[number];
 export const SECTOR_LABEL: Record<Sector, string> = {
@@ -33,9 +35,11 @@ export const SECTOR_LABEL: Record<Sector, string> = {
   retail: "Retail",
   fintech: "Fintech",
   technology: "Technology",
+  undecided: "Not decided yet",
 };
 
 export const EXPERTISE = [
+  "idea_development",
   "customer_validation",
   "market_positioning",
   "pricing",
@@ -59,6 +63,7 @@ export const EXPERTISE = [
 ] as const;
 export type Expertise = (typeof EXPERTISE)[number];
 export const EXPERTISE_LABEL: Record<Expertise, string> = {
+  idea_development: "Finding and testing a business idea",
   customer_validation: "Customer validation",
   market_positioning: "Market positioning",
   pricing: "Pricing",

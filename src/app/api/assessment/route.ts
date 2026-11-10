@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       await db()
         .from("entrepreneur_profiles")
         .update({
-          business_name: input.business_name,
+          business_name: input.business_name || null,
           business_stage: input.business_stage,
           sector: input.sector,
           business_description: input.business_description,

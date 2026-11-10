@@ -124,3 +124,19 @@ describe("demo replies match live-AI wording too", () => {
     expect(demoReplyFor("Something else entirely", "check_in")).toBe("");
   });
 });
+
+describe("explanations when no budget was given", () => {
+  it("states the fee without judging it against a budget", () => {
+    const aspiring = { ...pema, sector: "undecided", business_stage: "idea" as const, expertise_needs: ["idea_development"], budget: 0 };
+    for (const sm of rankMentors(aspiring, SEED_MENTORS)) {
+      const text = explainMatch(aspiring, sm);
+      expect(text).not.toMatch(/budget/i);
+      expect(text).not.toMatch(/Works with not decided/i);
+    }
+  });
+  it("summarises an aspiring entrepreneur without a business name", () => {
+    const out = fallbackAssessmentSummary({ ...pema, business_name: null, sector: "undecided", business_stage: "idea", budget: 0 });
+    expect(out.summary).toMatch(/aspiring entrepreneur at the idea stage/);
+    expect(out.summary).toMatch(/budget not decided yet/);
+  });
+});

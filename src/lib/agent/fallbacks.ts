@@ -33,13 +33,23 @@ function listJoin(items: string[]): string {
 // Assessment summary
 // ---------------------------------------------------------------------------
 
+/** "tourism " or "" when no sector has been chosen yet. */
+const sectorWord = (sector: string | null) => (!sector || sector === "undecided" ? "" : `${sectorLabel(sector).toLowerCase()} `);
+
 export function fallbackAssessmentSummary(e: EntrepreneurRecord): AssessmentSummary {
   const needs = listJoin(e.expertise_needs.map((n) => expertiseLabel(n).toLowerCase()));
+  const stage = stageAdj(e.business_stage);
+  const sw = sectorWord(e.sector);
+  const intro = e.business_name
+    ? `${e.full_name} runs ${e.business_name}, ${article(stage)} ${stage} ${sw}business.`
+    : e.business_stage === "idea"
+      ? `${e.full_name} is an aspiring entrepreneur at the idea stage${sw ? `, interested in ${sw.trim()}` : ""}.`
+      : `${e.full_name} runs ${article(stage)} ${stage} ${sw}business.`;
   const parts = [
-    `${e.full_name} runs ${e.business_name ?? "a business"}, ${article(stageAdj(e.business_stage))} ${stageAdj(e.business_stage)} ${sectorLabel(e.sector).toLowerCase()} business.`,
+    intro,
     e.primary_challenge ? `Main challenge: ${e.primary_challenge.replace(/\.$/, "")}.` : "",
     needs ? `Looking for help with ${needs}.` : "",
-    `Prefers ${LANGUAGE_LABEL[e.preferred_language]}; budget ${nu(e.budget)} per session.`,
+    `Prefers ${LANGUAGE_LABEL[e.preferred_language]}; ${e.budget > 0 ? `budget ${nu(e.budget)} per session` : "budget not decided yet"}.`,
   ];
   return { summary: parts.filter(Boolean).join(" ").slice(0, 600) };
 }
@@ -69,7 +79,8 @@ export function explainMatch(e: Pick<EntrepreneurRecord, "sector" | "business_st
   if (b.availability === 10) parts.push(`Has ${m.slots_remaining} open sessions.`);
   else if (b.availability > 0) parts.push("Has 1 open session left.");
   else parts.push("Fully booked right now.");
-  if (b.budget === 10) parts.push(`Fee ${nu(m.fee)} is within your budget.`);
+  if (e.budget <= 0) parts.push(`Fee ${nu(m.fee)} per session.`);
+  else if (b.budget === 10) parts.push(`Fee ${nu(m.fee)} is within your budget.`);
   else if (b.budget > 0) parts.push(`Fee ${nu(m.fee)} is a little above your budget.`);
   else parts.push(`Fee ${nu(m.fee)} is well above your budget.`);
 
@@ -108,7 +119,9 @@ export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduled
     mentor: {
       headline: `Session with ${e.full_name}, ${e.business_name ?? "early-stage business"}`,
       about: [
-        `${stageLabel(e.business_stage).replace(" ", "-")} ${sectorLabel(e.sector).toLowerCase()} business.`,
+        e.business_name || e.business_stage !== "idea"
+          ? `${stageLabel(e.business_stage).replace(" ", "-")} ${sectorWord(e.sector)}business.`
+          : `Aspiring entrepreneur at the idea stage${sectorWord(e.sector) ? `, interested in ${sectorWord(e.sector).trim()}` : ""}.`,
         e.business_description ?? "",
         e.primary_challenge ? `Main challenge in their words: "${e.primary_challenge}"` : "",
         `Prefers ${LANGUAGE_LABEL[e.preferred_language]}.`,

@@ -67,6 +67,17 @@ async function runOnce(n, fx) {
     vd.status === 200 && vd.json.draft?.sector === "tourism" && vd.json.draft?.budget === 1500 && vd.json.draft?.expertise_needs?.includes("pricing"),
     vd.json,
   );
+  const va = await call("POST", "/api/assessment/draft", { transcript: fx.aspiring_intro });
+  check(
+    "   aspiring intro: idea stage, finding an idea, asks only budget and language",
+    va.status === 200 &&
+      va.json.draft?.business_stage === "idea" &&
+      va.json.draft?.expertise_needs?.includes("idea_development") &&
+      ["budget", "preferred_language"].every((f) => va.json.missing?.includes(f)) &&
+      !va.json.draft?.business_name &&
+      va.json.draft?.budget === undefined,
+    va.json,
+  );
   s = await state();
   check("   drafting saved nothing", !s.entrepreneur?.assessment_completed_at, s.entrepreneur);
 
@@ -211,8 +222,9 @@ async function runOnce(n, fx) {
   check("   long transcript: draft actions extracted in the background", longDrafts.length >= 3, { run: longRun, drafts: longDrafts });
   check(
     "   long transcript: the idea they decided against is not an action",
-    !longDrafts.some((a) => /website/i.test(`${a.title} ${a.description ?? ""}`)),
-    longDrafts.map((a) => a.title),
+    // An action ABOUT building a website (a description may mention it as context).
+    !longDrafts.some((a) => /website/i.test(a.title)),
+    longDrafts.map((a) => `${a.title} | ${a.description ?? ""}`),
   );
   check("   long transcript was read in parts", /-part transcript/.test(longRun?.final_output ?? ""), longRun?.final_output);
 

@@ -64,7 +64,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Long call transcripts | Calls of any length are read in parts in the background (a 30-minute call takes about a minute); only real agreements become actions | `agent/extract.ts`, `agent/transcripts.ts` |
 | Extraction test set | `npm run eval:extraction` scores the agent on 5 sample cases. Live AI: 100% found, no extras, due dates and owners right | `evals/extraction-cases.json`, `scripts/eval-extraction.mjs` |
 | Voice notes (**basic version**) | Record or upload audio in the mentor view; Whisper turns it into text for the mentor to check. See section 9 | `mentor-view.tsx` (`VoiceNote`), `/api/transcribe` |
-| Voice intro for the assessment (English) | Pema can speak instead of typing. Whisper and the agent draft the form, mark what was not said ("Not mentioned"), and Pema checks it. "Use a sample intro" works without a microphone | `entrepreneur/assessment-form.tsx`, `voice/voice-recorder.tsx`, `agent/assessment-draft.ts`, `/api/assessment/draft` |
+| Voice intro for the assessment (English) | Pema, or someone with no business yet, can speak instead of typing. The agent shows "Here is what I understood" (heard or suggested) and asks only the missing answers as tap-to-answer questions. "Use a sample intro" and "Try a sample without a business" work without a microphone | `entrepreneur/assessment-form.tsx`, `voice/voice-recorder.tsx`, `agent/assessment-draft.ts`, `agent/assessment-rules.ts`, `/api/assessment/draft` |
 | Tests | 57 unit tests. `npm run demo:e2e` runs the whole demo in both modes | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
 
 ### What is not built yet
@@ -160,7 +160,7 @@ Then walk through the demo yourself (section 6).
 
 Use the **Entrepreneur / Mentor / YDF** tabs at the top. The header shows the demo clock and how many of the 14 steps are done.
 
-1. **Entrepreneur:** the form is pre-filled with Pema's answers. Optionally press **Use a sample intro** to show the agent filling the form from speech. **Find my mentors.**
+1. **Entrepreneur:** the form is pre-filled with Pema's answers. Optionally show **Use a sample intro**, or **Try a sample without a business** (the agent asks 2 quick questions, then matches idea mentors). **Find my mentors.**
 2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor.
 3. **Choose Deki**, keep **Use my YDF credit**, **Book session**. The prep checklist appears; credit drops to Nu. 1,500.
 4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**. With live AI you can also **Record voice note**; the text is filled in for you to check.
@@ -252,6 +252,8 @@ POST /api/session/complete
 - Need a new database field (for example a meeting link on a booking)? Ask the agent owner for a migration. Never change tables in the dashboard.
 
 ### Notes per role
+
+**Frontend, about the assessment form:** `entrepreneur/assessment-form.tsx` now has two modes: the typed form, and the voice flow ("Here is what I understood", the follow-up questions, and "Review or change all answers"). After a voice intro the agent goes ahead by itself: "Assumed" defaults, a 5-second countdown, then the matches; "Change my answers" sits on the recommendations. Keep the labels "Find my mentors", "Use a sample intro", "Try a sample without a business", "Find them now", "Wait, let me check first", "Change my answers" and "Keep my answers", because tests click them.
 
 **Audio to text:** a basic version already works. Start from it, not from scratch.
 - **Code:**

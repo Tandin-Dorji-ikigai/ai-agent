@@ -9,8 +9,14 @@
         "business_name": "Yangchen Village Walks and Homestay",
         "sector": "tourism",
         "business_stage": "early",
-        "expertise_needs": ["customer_validation", "pricing"],
-        "languages": ["dz", "en"],
+        "expertise_needs": [
+          "customer_validation",
+          "pricing"
+        ],
+        "languages": [
+          "dz",
+          "en"
+        ],
         "preferred_language": "dz",
         "budget": 1500
       }
@@ -22,8 +28,12 @@
       "expected": {
         "business_name": null,
         "sector": "agriculture",
-        "expertise_needs": ["pricing"],
-        "languages": ["dz"],
+        "expertise_needs": [
+          "pricing"
+        ],
+        "languages": [
+          "dz"
+        ],
         "budget": null
       }
     },
@@ -35,10 +45,32 @@
         "business_name": null,
         "sector": "technology",
         "business_stage": "idea",
-        "expertise_needs": ["fundraising"],
-        "languages": ["en"],
+        "expertise_needs": [
+          "fundraising"
+        ],
+        "languages": [
+          "en"
+        ],
         "preferred_language": "en",
         "budget": 500
+      }
+    },
+    {
+      "id": "aspiring-no-idea",
+      "description": "Aspiring entrepreneur with no business or idea yet (based on a real test recording): infer idea stage, undecided sector, the need to find an idea; ask for budget and preferred language",
+      "text_from_fixture": "aspiring_intro",
+      "expected": {
+        "business_name": null,
+        "business_stage": "idea",
+        "sector": "undecided",
+        "expertise_needs": [
+          "idea_development"
+        ],
+        "languages": [
+          "en"
+        ],
+        "preferred_language": null,
+        "budget": null
       }
     }
   ]

@@ -2,10 +2,18 @@
 // draft. The fallback when live AI is off or fails, and the grounding check for
 // the live answer (a name or budget the person never said is removed).
 // Pure functions, unit-tested. English only for now.
+//
+// Two kinds of filled answers:
+//   heard     - said outright ("I speak Dzongkha", "about 1,500 ngultrum")
+//   suggested - clear from the meaning ("I don't have a business idea yet"
+//               means the idea stage); listed in suggested_fields so the form
+//               can label them for the person to check.
 
 import type { Expertise, Language, Sector, Stage } from "../types";
-import type { AssessmentDraft } from "./schemas";
+import type { AssessmentDraft, DraftField } from "./schemas";
 import { splitSentences } from "./transcripts";
+
+export type { DraftField };
 
 const SECTOR_RULES: Array<[Sector, RegExp]> = [
   ["tourism", /\b(homestays?|guest ?houses?|guests?|tours?|trek\w*|hotels?|travel\w*|tourism|tourists?|village walk|guided walk)\b/gi],
@@ -16,14 +24,30 @@ const SECTOR_RULES: Array<[Sector, RegExp]> = [
   ["retail", /\b(my shop|our shop|store|retail|grocery|boutique)\b/gi],
 ];
 
+/** Talking about this mentoring app itself ("I'm using this platform") is not their business. */
+const SELF_REFERENCE = /\b(this|your) (platform|app|website|site|application)\b/gi;
+const withoutSelfReference = (text: string) => text.replace(SELF_REFERENCE, " ");
+
+/** Evidence in what was said for a given sector (after removing mentions of this app). */
+export function sectorEvidence(sector: string, transcript: string): boolean {
+  const rule = SECTOR_RULES.find(([s]) => s === sector);
+  if (!rule) return false;
+  return new RegExp(rule[1].source, "i").test(withoutSelfReference(transcript));
+}
+
+/** No business or idea yet: an aspiring entrepreneur. */
+const ASPIRING =
+  /\b(aspiring|no (business )?idea|don'?t have (a|my|any) (business )?idea|don'?t have a business|new to entrepreneurship|want to (start|become) (a|an|my) (business|entrepreneur)|get into entrepreneurship|haven'?t started)\b/i;
+
 const STAGE_RULES: Array<[Stage, RegExp]> = [
-  ["idea", /\b(an idea|my idea|planning to|plan to start|want to start|thinking of starting|haven'?t started|not started yet)\b/i],
+  ["idea", /\b(an idea|my idea|planning to|plan to start|want to start|thinking of starting|haven'?t started|not started yet|aspiring|no (business )?idea|don'?t have (a|my|any) (business )?idea|new to entrepreneurship)\b/i],
   ["early", /\b(just started|started (last|this) year|recently started|first (customers|guests)|few (customers|guests)|new business|started \w+ months? ago)\b/i],
   ["growth", /\b(growing|expand\w*|scale up|hire more|more staff|second (branch|shop))\b/i],
   ["established", /\b(\d+|many|several|ten|five) years|established|for years\b/i],
 ];
 
 const NEED_RULES: Array<[Expertise, RegExp]> = [
+  ["idea_development", /\b(business idea|generate (an )?idea|find (an|a) idea|work on my ideas?|startup idea|get into entrepreneurship|new to entrepreneurship|aspiring)\b/i],
   ["customer_validation", /\b(who (my|our) (guests|customers) are|find(ing)? (more )?(customers|guests|buyers)|market research|what customers want)\b/i],
   ["market_positioning", /\b(how to describe|describe the|position\w*|stand out|how to market|marketing)\b/i],
   ["pricing", /\b(pric\w*|how much to charge|what to charge)\b/i],
@@ -96,34 +120,67 @@ export function parseBusinessName(text: string): string | null {
   return m[1].replace(/\s+(and|of|&)$/i, "").trim() || null;
 }
 
-/** Draft from rules (no AI). Leaves anything not said empty. */
+/** Drops greetings and "my name is X" so descriptions read as content, not small talk. */
+export function cleanSentence(sentence: string): string {
+  let s = sentence
+    .replace(/^((hello|hi|hey|kuzu ?zangpo( la)?)[,.!]?\s*)+/i, "")
+    .replace(/\b(so )?(currently )?my name is [A-Z][\w'-]*( [A-Z][\w'-]*)?\s*(and|,)?\s*/i, "")
+    .replace(/^(so|okay|ok|and|well|um|uh)[,\s]+/i, "")
+    .trim();
+  if (s) s = s.charAt(0).toUpperCase() + s.slice(1);
+  return s;
+}
+
+/** Draft from rules (no AI). Leaves anything not said or implied empty. */
 export function ruleDraft(transcript: string): AssessmentDraft {
   const text = transcript.replace(/[‘’]/g, "'");
   const sentences = splitSentences(text);
+  const suggested = new Set<DraftField>();
+  const aspiring = ASPIRING.test(text);
 
-  const sectorScores = SECTOR_RULES.map(([sector, re]) => [sector, (text.match(re) ?? []).length] as const).filter(([, n]) => n > 0);
+  const sectorText = withoutSelfReference(text);
+  const sectorScores = SECTOR_RULES.map(([sector, re]) => [sector, (sectorText.match(re) ?? []).length] as const).filter(([, n]) => n > 0);
   sectorScores.sort((a, b) => b[1] - a[1]);
-  const sector = sectorScores[0]?.[0];
+  let sector: Sector | undefined = sectorScores[0]?.[0];
+  if (!sector && aspiring) {
+    sector = "undecided";
+    suggested.add("sector");
+  }
 
   const business_stage = STAGE_RULES.find(([, re]) => re.test(text))?.[0];
+  if (business_stage === "idea" && aspiring) suggested.add("business_stage");
+
   const expertise_needs = NEED_RULES.filter(([, re]) => re.test(text)).map(([need]) => need).slice(0, 5);
+  if (expertise_needs.includes("idea_development")) suggested.add("expertise_needs");
 
   const languages: Language[] = [];
   if (DZONGKHA.test(text)) languages.push("dz");
   if (ENGLISH.test(text)) languages.push("en");
+  if (languages.length === 0) {
+    // No language named: the person spoke English, so they speak it.
+    languages.push("en");
+    suggested.add("languages");
+  }
   const preferredMatch = text.match(/\bprefer\w*\s+(\w+)\b/i);
-  const preferred_language: Language | undefined = preferredMatch
-    ? DZONGKHA.test(preferredMatch[1])
-      ? "dz"
-      : ENGLISH.test(preferredMatch[1])
-        ? "en"
-        : undefined
-    : languages.length === 1
-      ? languages[0]
-      : undefined;
+  let preferred_language: Language | undefined;
+  if (preferredMatch) {
+    preferred_language = DZONGKHA.test(preferredMatch[1]) ? "dz" : ENGLISH.test(preferredMatch[1]) ? "en" : undefined;
+  } else if (languages.length === 1 && !suggested.has("languages")) {
+    preferred_language = languages[0];
+  }
 
-  const describing = sentences.filter((s) => /\b(we have|we offer|i run|we run|we sell|i sell|i make|we make|i grow|we grow|i have an idea)\b/i.test(s));
-  const challenge = sentences.find((s) => /\b(challenge|problem|struggl\w*|difficult|hard to|don't (really )?know|not sure)\b/i.test(s));
+  let describing = sentences.filter((s) => /\b(we have|we offer|i run|we run|we sell|i sell|i make|we make|i grow|we grow|i have an idea)\b/i.test(s));
+  if (describing.length === 0) {
+    describing = sentences.filter((s) => /\b(i'm|i am) (an? )?(aspiring|new|student|farmer|weaver|entrepreneur)\b/i.test(s));
+    if (describing.length) suggested.add("business_description");
+  }
+
+  let challenge = sentences.find((s) => /\b(challenge|problem|struggl\w*|difficult|hard to|don't (really )?know|not sure)\b/i.test(s));
+  if (!challenge) {
+    challenge = sentences.find((s) => /\b(want to (get|learn|know|understand|find)|how (i|to) can|no idea|don't have)\b/i.test(s));
+    if (challenge) suggested.add("primary_challenge");
+  }
+
   const goals = sentences.filter((s) => /\b(i want to|we want to|my goal|hope to|would like to)\b/i.test(s)).slice(0, 2);
   const budget = parseBudget(text) ?? undefined;
   const business_name = parseBusinessName(text) ?? undefined;
@@ -132,19 +189,20 @@ export function ruleDraft(transcript: string): AssessmentDraft {
     business_name,
     business_stage,
     sector,
-    business_description: describing.length ? describing.slice(0, 2).join(" ").slice(0, 1000) : undefined,
-    primary_challenge: challenge?.slice(0, 1000),
+    business_description: describing.length ? describing.slice(0, 2).map(cleanSentence).filter(Boolean).join(" ").slice(0, 1000) || undefined : undefined,
+    primary_challenge: challenge ? cleanSentence(challenge).slice(0, 1000) || undefined : undefined,
     goals: goals.map((g) => g.slice(0, 200)),
     expertise_needs,
     languages,
     preferred_language,
     budget,
+    suggested_fields: [...suggested],
   };
 }
 
 /** Grounding for live AI: a name or budget must actually appear in what was said. */
 export function groundDraft(draft: AssessmentDraft, transcript: string): AssessmentDraft {
-  const out = { ...draft };
+  const out = { ...draft, suggested_fields: [...(draft.suggested_fields ?? [])] };
   if (out.business_name && !transcript.toLowerCase().includes(out.business_name.toLowerCase())) delete out.business_name;
   if (out.budget !== undefined) {
     const said = parseBudget(transcript);
@@ -154,14 +212,40 @@ export function groundDraft(draft: AssessmentDraft, transcript: string): Assessm
       if (!digits) delete out.budget;
     }
   }
-  const spoken = { dz: DZONGKHA.test(transcript), en: ENGLISH.test(transcript) };
-  out.languages = (out.languages ?? []).filter((l) => spoken[l]);
-  if (out.preferred_language && !spoken[out.preferred_language]) delete out.preferred_language;
+  const named = { dz: DZONGKHA.test(transcript), en: ENGLISH.test(transcript) };
+  if (named.dz || named.en) {
+    // Languages were named: keep only those.
+    out.languages = (out.languages ?? []).filter((l) => named[l]);
+    if (out.preferred_language && !named[out.preferred_language]) delete out.preferred_language;
+  } else {
+    // None named: the intro was spoken in English, so English (suggested) is all we know.
+    out.languages = ["en"];
+    if (!out.suggested_fields.includes("languages")) out.suggested_fields.push("languages");
+    if (out.preferred_language === "dz") delete out.preferred_language;
+  }
+  // Exactly one language named and no stated preference: that language is the preference.
+  const namedList = (["dz", "en"] as const).filter((l) => named[l]);
+  if (!out.preferred_language && namedList.length === 1 && (out.languages ?? []).includes(namedList[0])) {
+    out.preferred_language = namedList[0];
+  }
+  // The sector must be backed by what was said; otherwise it is only a suggestion
+  // (or "not decided yet" for someone with no business).
+  if (out.sector && out.sector !== "undecided" && !sectorEvidence(out.sector, transcript)) {
+    if (ASPIRING.test(transcript)) out.sector = "undecided";
+    if (!out.suggested_fields.includes("sector")) out.suggested_fields.push("sector");
+  }
+  out.suggested_fields = out.suggested_fields.filter((f) => {
+    const v = out[f];
+    return !(v === undefined || v === "" || (Array.isArray(v) && v.length === 0));
+  });
   return out;
 }
 
-export const REQUIRED_FIELDS = [
-  "business_name",
+/**
+ * Answers needed before matching. The business name is optional: aspiring
+ * entrepreneurs may not have one yet.
+ */
+export const QUESTION_FIELDS = [
   "sector",
   "business_stage",
   "business_description",
@@ -170,12 +254,11 @@ export const REQUIRED_FIELDS = [
   "languages",
   "preferred_language",
   "budget",
-] as const;
-export type DraftField = (typeof REQUIRED_FIELDS)[number];
+] as const satisfies readonly DraftField[];
 
-/** Fields the person did not mention (shown as "Not mentioned" in the form). */
+/** Fields still unanswered (the agent asks follow-up questions for these). */
 export function missingFields(draft: AssessmentDraft): DraftField[] {
-  return REQUIRED_FIELDS.filter((f) => {
+  return QUESTION_FIELDS.filter((f) => {
     const v = draft[f];
     return v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
   });

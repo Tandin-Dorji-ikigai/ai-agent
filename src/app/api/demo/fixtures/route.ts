@@ -7,6 +7,7 @@ import {
   DEMO_ON_TRACK_REPLY,
   DEMO_SESSION_NOTES,
   DEMO_VOICE_INTRO,
+  DEMO_ASPIRING_INTRO,
   buildDemoLongTranscript,
   PEMA_ASSESSMENT_ANSWERS,
 } from "@/lib/demo/fixtures";
@@ -20,6 +21,7 @@ export async function GET() {
     session_notes: DEMO_SESSION_NOTES,
     call_transcript: DEMO_CALL_TRANSCRIPT,
     voice_intro: DEMO_VOICE_INTRO,
+    aspiring_intro: DEMO_ASPIRING_INTRO,
     long_call_transcript: buildDemoLongTranscript(),
     blocker_reply: DEMO_BLOCKER_REPLY,
     on_track_reply: DEMO_ON_TRACK_REPLY,

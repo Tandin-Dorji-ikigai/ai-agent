@@ -15,7 +15,7 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 | 1b. Team workflow: check-in loop (on track / obstacle / needs help / done), SMART actions, mentor progress, next session | **Done.** Migration 003; every branch is covered by `npm run demo:e2e` |
 | 2. Live AI | **Done.** Groq free tier: `gpt-oss-120b` and `gpt-oss-20b` (strict JSON output and real tool calling), plus Whisper for voice notes. Every step falls back to its saved response |
 | 2b. Long call transcripts and an extraction test set | **Done.** Calls of any length are read in parts, paced to the free tier, in the background. `npm run eval:extraction` scores the agent on 5 sample cases |
-| 2c. Voice intro for the needs assessment (English) | **Done.** Pema can speak instead of typing; the agent drafts the form, marks what was not said, and Pema checks it before submitting. `npm run eval:assessment` scores it |
+| 2c. Voice intro for the needs assessment (English), including aspiring entrepreneurs with no business yet | **Done.** The agent drafts the answers (heard or suggested), asks only what it still needs as tap-to-answer questions, and the entrepreneur checks before submitting. `npm run eval:assessment` scores it |
 | 3. Reliability | Partly done: idempotent booking, confirmation and replies; no negative credit; one open escalation per action |
 | 4. Freeze | Not started |
 
@@ -228,10 +228,27 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
 - Every step has a rule-based fallback that only keeps sentences where people agreed something, so it never invents tasks.
 
 **Voice intro for the assessment** (`src/lib/agent/assessment-draft.ts`, `assessment-rules.ts`; English for now):
+- **Aspiring entrepreneurs and students:**
+  - the business name is optional;
+  - sector can be "Not decided yet";
+  - a new kind of help, "Finding and testing a business idea", is offered by Ugyen Lhendup and Dawa Penjor in the demo data;
+  - a budget of 0 means "not sure yet" and is neutral in matching.
+- **Heard vs suggested:** the agent may infer the stage, description, challenge, needs and sector from the meaning ("I don't have a business idea yet" means the idea stage). These are labelled "Suggested", and a name or budget is never guessed.
+- **It asks instead of a form:** after the intro the screen shows "Here is what I understood", then only the follow-up questions still needed (tap chips or answer by voice). The full form sits behind "Review or change all answers".
+- **It goes ahead by itself:**
+  - Small gaps get safe defaults labelled **Assumed**: budget "not sure" (neutral in matching) and preferred language = the language spoken.
+  - Once it has enough, a 5-second countdown ("Find them now" / "Wait, let me check first") saves the answers and finds mentors with no button press.
+  - "Change my answers" on the recommendations re-opens the form and re-matches. Booking still needs the person's choice.
 - **Flow:** speech goes to Whisper (with `language=en` and a spelling hint for local words), then the agent drafts the form. Fields that were not said are marked "Not mentioned", and the entrepreneur edits and submits as usual.
 - **Grounding:** a business name, budget or language that was not actually said is removed from the AI's draft.
 - **Misspellings:** speech-to-text spellings such as "Zonka" (Dzongkha) and "Gultrim" (ngultrum) are understood.
-- **Fallback:** the rule-based reader. **Score** (`npm run eval:assessment`): live AI 100% of fields right with 0 invented (rules: also 100%, tuned on the same 3 cases).
+- **Fallback:** the rule-based reader.
+- **Score** (`npm run eval:assessment`, 4 cases including an aspiring entrepreneur): live AI 100% of fields right with 0 invented. The rules also score 100%, but were tuned on the same cases.
+- **Fixed after live testing:**
+  - "I'm using this platform" no longer makes someone a technology business;
+  - a sector without evidence in the speech is only a suggestion;
+  - one named language becomes the preferred one;
+  - greetings and names are kept out of descriptions.
 - **Real audio test:** a spoken intro, transcribed and drafted, got every field right. Names can be misheard (for example "Yangchun" for "Yangchen"), which is why the entrepreneur checks the form.
 
 **Extraction quality** (`npm run eval:extraction`, 5 cases: short call, voice note with a corrected deadline, 30-minute call, mentor-owned actions, a chat with nothing agreed):

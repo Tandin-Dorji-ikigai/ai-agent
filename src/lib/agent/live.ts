@@ -49,7 +49,7 @@ function profileFacts(e: EntrepreneurRecord) {
     help_needed: e.expertise_needs.map(expertiseLabel),
     languages: e.languages.map((l) => LANGUAGE_LABEL[l]),
     preferred_language: LANGUAGE_LABEL[e.preferred_language],
-    budget_per_session_nu: e.budget,
+    budget_per_session_nu: e.budget > 0 ? e.budget : "not decided yet (YDF credit can cover fees)",
     location: e.location,
   };
 }
@@ -91,16 +91,21 @@ export const live = {
         schema: AssessmentDraftSchema,
         signal,
         system: sys(
-          "An entrepreneur introduced their business by voice (transcribed, may contain errors). Fill a needs-assessment DRAFT " +
-            "that they will check and edit. Use ONLY what they said: if something was not said, leave it null or empty. Never guess. " +
-            `sector: one of ${["tourism", "agriculture", "handicrafts", "retail", "fintech", "technology"].join(", ")}, ` +
-            "for what the business itself is (an app or website is technology, even if its users are farmers). " +
+          "Someone introduced themselves and their business (or business idea) by voice, in English; the text may contain " +
+            "transcription errors. Fill a needs-assessment DRAFT that they will check. They may be an aspiring entrepreneur with no business yet. " +
+            "HEARD: fill what they said outright. SUGGESTED: you may also fill business_stage, business_description, primary_challenge, " +
+            "expertise_needs and sector when the meaning is clear (e.g. 'I don't have a business idea yet' means business_stage idea, " +
+            "sector undecided and the need idea_development). List every suggested field in suggested_fields. " +
+            "NEVER guess business_name or budget: leave them null unless said. Leave preferred_language null unless they state a preference. " +
+            `sector: one of ${["tourism", "agriculture", "handicrafts", "retail", "fintech", "technology", "undecided"].join(", ")}, ` +
+            "for what the business itself is (an app or website is technology, even if its users are farmers); undecided if they have no business or idea yet. " +
             "Speech-to-text may spell Dzongkha as Zonka and ngultrum as Gultrim. " +
-            "business_stage: idea (not started), early (started, first customers), growth (growing or hiring), established (many years). " +
+            "business_stage: idea (no business yet, or only an idea), early (started, first customers), growth (growing or hiring), established (many years). " +
             `expertise_needs: up to 5 from this list that match the help they ask for or clearly need: ${EXPERTISE_KEYS}. ` +
-            "languages and preferred_language: dz (Dzongkha) or en (English), only if they said so. " +
+            "languages: dz (Dzongkha) and/or en (English) that they say they speak; if they name none, en (they are speaking English), marked suggested. " +
             "budget: the amount per mentoring session in Ngultrum as a number, only if they said one. " +
-            "business_name: only if they said it. business_description and primary_challenge: 1 to 2 sentences, close to their words. " +
+            "business_description and primary_challenge: 1 to 2 sentences in the first person, close to their words, without greetings or their name. " +
+            "Mentions of using this platform or app are about our mentoring service, not their business. " +
             "goals: only goals they stated.",
         ),
         user: transcript,
@@ -132,7 +137,7 @@ export const live = {
             stage: stageLabel(e.business_stage),
             preferred_language: LANGUAGE_LABEL[e.preferred_language],
             help_needed: e.expertise_needs.map(expertiseLabel),
-            budget_per_session_nu: e.budget,
+            budget_per_session_nu: e.budget > 0 ? e.budget : "not decided yet (YDF credit can cover fees)",
           },
           mentors: ranked.map((r) => ({
             mentor_id: r.mentor.id,

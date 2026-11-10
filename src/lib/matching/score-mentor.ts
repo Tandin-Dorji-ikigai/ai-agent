@@ -56,8 +56,9 @@ function availabilityPoints(mentor: MentorRecord): number {
   return 0;
 }
 
-/** Budget: within budget = full, up to 50% over = half, more = 0. */
+/** Budget: within budget = full, up to 50% over = half, more = 0. Budget 0 = "not sure yet": neutral for everyone. */
 function budgetPoints(budget: number, fee: number): number {
+  if (budget <= 0) return WEIGHTS.budget / 2;
   if (fee <= budget) return WEIGHTS.budget;
   if (fee <= budget * 1.5) return WEIGHTS.budget / 2;
   return 0;

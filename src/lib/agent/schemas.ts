@@ -11,7 +11,8 @@ const shortText = (max: number) => z.string().trim().min(1).max(max);
 // ---------------------------------------------------------------------------
 
 export const AssessmentInputSchema = z.object({
-  business_name: shortText(120),
+  /** Optional: aspiring entrepreneurs may not have a business (or a name) yet. */
+  business_name: z.string().trim().max(120).default(""),
   business_stage: z.enum(STAGES),
   sector: z.enum(SECTORS),
   business_description: shortText(1000),
@@ -20,9 +21,24 @@ export const AssessmentInputSchema = z.object({
   expertise_needs: z.array(z.enum(EXPERTISE)).min(1).max(5),
   languages: z.array(z.enum(LANGUAGES)).min(1),
   preferred_language: z.enum(LANGUAGES),
+  /** Per session in Nu. 0 means "not sure yet" (matching treats it as neutral; YDF credit can cover fees). */
   budget: z.number().min(0).max(100000),
 });
 export type AssessmentInput = z.infer<typeof AssessmentInputSchema>;
+
+/** Assessment fields the voice draft can fill. */
+export const DRAFT_FIELDS = [
+  "business_name",
+  "sector",
+  "business_stage",
+  "business_description",
+  "primary_challenge",
+  "expertise_needs",
+  "languages",
+  "preferred_language",
+  "budget",
+] as const;
+export type DraftField = (typeof DRAFT_FIELDS)[number];
 
 /**
  * A DRAFT of the needs assessment, understood from a spoken self-introduction.
@@ -40,6 +56,8 @@ export const AssessmentDraftSchema = z.object({
   languages: z.array(z.enum(LANGUAGES)).max(2).default([]),
   preferred_language: z.enum(LANGUAGES).optional(),
   budget: z.number().min(0).max(100000).optional(),
+  /** Fields that were inferred from the meaning rather than said outright (shown as "Suggested"). */
+  suggested_fields: z.array(z.enum(DRAFT_FIELDS)).default([]),
 });
 export type AssessmentDraft = z.infer<typeof AssessmentDraftSchema>;
 

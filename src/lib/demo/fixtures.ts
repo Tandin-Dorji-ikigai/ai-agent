@@ -31,6 +31,12 @@ export const DEMO_VOICE_INTRO =
   "I speak Dzongkha and English, and I prefer Dzongkha. " +
   "I can spend about one thousand five hundred ngultrum per session.";
 
+/** A spoken intro from an aspiring entrepreneur with no business yet (English). */
+export const DEMO_ASPIRING_INTRO =
+  "Hello. My name is Sangay and I'm an aspiring entrepreneur. I want to learn how I can get into entrepreneurship and work on my ideas. " +
+  "I'm new to entrepreneurship and I don't have a business idea yet. As I learn the life cycle of a business, " +
+  "I want to use it to find an idea and build my startup on it.";
+
 /** Quick notes the mentor types after the session. */
 export const DEMO_SESSION_NOTES = [
   "Pema has 2 homestay rooms and a half-day village walk. Main gap: she is not sure who her guests are.",

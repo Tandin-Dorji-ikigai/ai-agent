@@ -84,3 +84,26 @@ describe("mentor matching for the Pema demo", () => {
     expect(forward.indexOf(M.jigmeNamgyel)).toBeLessThan(forward.indexOf(M.rinchenZangmo));
   });
 });
+
+describe("aspiring entrepreneur with no business, sector or budget yet", () => {
+  const aspiring: MatchInput = {
+    sector: "undecided",
+    business_stage: "idea",
+    preferred_language: "en",
+    languages: ["en"],
+    expertise_needs: ["idea_development"],
+    budget: 0,
+  };
+
+  it("matches the mentors who help people find and test an idea", () => {
+    const top = topMatches(aspiring, SEED_MENTORS).map((t) => t.mentor.full_name);
+    expect(top.slice(0, 2).sort()).toEqual(["Dawa Penjor", "Ugyen Lhendup"]);
+  });
+
+  it("treats an unknown budget and sector as neutral for every mentor", () => {
+    for (const s of rankMentors(aspiring, SEED_MENTORS)) {
+      expect(s.breakdown.budget).toBe(5);
+      expect(s.breakdown.sector).toBe(0);
+    }
+  });
+});

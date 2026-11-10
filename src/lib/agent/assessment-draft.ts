@@ -13,7 +13,10 @@ import { AssessmentDraftSchema, type AssessmentDraft } from "./schemas";
 
 export interface DraftResult {
   draft: AssessmentDraft;
+  /** Still unanswered: the agent asks follow-up questions for these. */
   missing: DraftField[];
+  /** Filled from the meaning rather than said outright: shown as "Suggested". */
+  suggested: DraftField[];
   source: ResultSource;
 }
 
@@ -27,5 +30,5 @@ export async function draftAssessment(transcript: string): Promise<DraftResult> 
     timeoutMs: 15_000,
   });
   const draft = step.source === "live_ai" ? groundDraft(step.value, transcript) : step.value;
-  return { draft, missing: missingFields(draft), source: step.source };
+  return { draft, missing: missingFields(draft), suggested: draft.suggested_fields ?? [], source: step.source };
 }
