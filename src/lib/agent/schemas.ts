@@ -2,7 +2,7 @@
 // Live AI output and saved fallbacks must both pass these schemas.
 
 import { z } from "zod";
-import { EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES } from "../types";
+import { DECLINE_REASONS, EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES } from "../types";
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
 
@@ -65,10 +65,22 @@ export const AssessmentDraftInputSchema = z.object({
   transcript: shortText(6000),
 });
 
-export const BookingInputSchema = z.object({
+/** The mentor says yes and picks one of the offered times. */
+export const AcceptRequestInputSchema = z.object({
+  request_id: z.uuid(),
+  scheduled_at: z.iso.datetime({ offset: true }),
+});
+
+/** The mentor says no, with a reason (and an optional note for the agent and YDF). */
+export const DeclineRequestInputSchema = z.object({
+  request_id: z.uuid(),
+  reason: z.enum(DECLINE_REASONS),
+  note: z.string().trim().max(300).optional(),
+});
+
+/** The mentee asks for a specific mentor (a follow-up, or the agent's suggestion). */
+export const AskMentorInputSchema = z.object({
   mentor_id: z.uuid(),
-  funding_type: z.enum(["self_paid", "ydf_credit"]),
-  idempotency_key: z.string().min(8).max(100),
 });
 
 /** Where a session's text came from (handover contract, see ONBOARDING.md section 9). */
@@ -241,11 +253,12 @@ export const ToolInputs = {
     entrepreneur_id: z.uuid(),
     limit: z.number().int().min(1).max(5).default(3),
   }),
-  create_booking_request: z.object({
+  send_mentor_request: z.object({
     entrepreneur_id: z.uuid(),
     mentor_id: z.uuid(),
-    funding_type: z.enum(["self_paid", "ydf_credit"]),
-    idempotency_key: z.string().min(8).max(100),
+    round_id: z.uuid(),
+    attempt: z.number().int().min(1).max(10),
+    kind: z.enum(["match", "direct"]),
   }),
   create_session_brief: z.object({ booking_id: z.uuid() }),
   extract_action_items: z.object({
@@ -273,7 +286,7 @@ export const ToolInputs = {
     entrepreneur_id: z.uuid(),
     action_item_id: z.uuid().optional(),
     session_id: z.uuid().optional(),
-    reason: z.enum(["specialist_required", "safeguarding", "dispute", "other"]),
+    reason: z.enum(["specialist_required", "safeguarding", "dispute", "no_mentor_available", "other"]),
     summary: shortText(600),
     priority: z.enum(["low", "medium", "high"]),
   }),

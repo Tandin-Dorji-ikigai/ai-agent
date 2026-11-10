@@ -53,7 +53,8 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 |---|---|---|
 | Needs assessment | Pre-filled form, AI summary | `entrepreneur/assessment-form.tsx`, `/api/assessment` |
 | Matching | Fixed-rule ranking of 15 mentors; top 3 with AI explanations written from verified facts | `matching/score-mentor.ts`, `/api/matches` |
-| Booking | YDF credit or simulated self-payment; cannot double-book or double-charge | `/api/booking`, SQL `create_booking` |
+| Mentor requests (the mentor decides) | After matching, the agent asks the best mentor by itself (no button; if a step was missed or failed, it picks it up again when Pema's screen opens). The mentor accepts (picking one of their usual times) or declines with a reason. On a no, or no reply in 2 days, the agent asks the next best and tells the mentee why; after three, YDF is asked to help. Nothing is booked and no credit is used until a mentor accepts | `matching/requests.ts`, `matching/slots.ts`, `lib/requests.ts`, `/api/requests/*`, SQL `accept_mentor_request` |
+| Booking | Created only when a mentor accepts: YDF credit or simulated self-payment; cannot double-book or double-charge | SQL `accept_mentor_request` → `create_booking` |
 | Session prep | AI briefs for both sides; follow-up briefs built from progress | `agent/handlers.ts` |
 | After the session | Mentor's quick notes become SMART draft actions; the mentor confirms them | `mentor-view.tsx`, `/api/session/complete`, `/api/actions/confirm` |
 | Check-in loop (our workflow diagram) | Check-ins before due dates and follow-ups once overdue. Replies are read as done, on track, or stuck, and every branch is handled | `agent/handlers.ts`, `agent/policy.ts` |
@@ -65,7 +66,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Extraction test set | `npm run eval:extraction` scores the agent on 5 sample cases. Live AI: 100% found, no extras, due dates and owners right | `evals/extraction-cases.json`, `scripts/eval-extraction.mjs` |
 | Voice notes (**basic version**) | Record or upload audio in the mentor view; Whisper turns it into text for the mentor to check. See section 9 | `mentor-view.tsx` (`VoiceNote`), `/api/transcribe` |
 | Voice intro for the assessment (English) | Pema, or someone with no business yet, can speak instead of typing. The agent shows "Here is what I understood" (heard or suggested) and asks only the missing answers as tap-to-answer questions. "Use a sample intro" and "Try a sample without a business" work without a microphone | `entrepreneur/assessment-form.tsx`, `voice/voice-recorder.tsx`, `agent/assessment-draft.ts`, `agent/assessment-rules.ts`, `/api/assessment/draft` |
-| Tests | 57 unit tests. `npm run demo:e2e` runs the whole demo in both modes | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
+| Tests | 131 unit tests. `npm run demo:e2e` runs the whole demo in both modes, plus a mentor declining, not replying, and the hand-over to YDF | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
 
 ### What is not built yet
 
@@ -138,7 +139,7 @@ Open http://localhost:3000. If you see the three view cards and a "Demo controls
 **Check everything works:**
 
 ```bash
-npm test          # 47 unit tests, about 1 second
+npm test          # 131 unit tests, about 1 second
 npm run lint
 npm run typecheck
 ```
@@ -161,8 +162,8 @@ Then walk through the demo yourself (section 6).
 Use the **Entrepreneur / Mentor / YDF** tabs at the top. The header shows the demo clock and how many of the 14 steps are done.
 
 1. **Entrepreneur:** the form is pre-filled with Pema's answers. Optionally show **Use a sample intro**, or **Try a sample without a business** (the agent asks 2 quick questions, then matches idea mentors). **Find my mentors.**
-2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor.
-3. **Choose Deki**, keep **Use my YDF credit**, **Book session**. The prep checklist appears; credit drops to Nu. 1,500.
+2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor. **Your mentor request** shows the agent has already asked Deki (best match), the reply deadline, and that Sonam is next. Credit is still Nu. 3,000.
+3. **Mentor** (signed in as Deki): the request shows Pema's needs, why Deki was picked, and the fee. Pick a time, **Accept**. Back on **Entrepreneur**: the session time and prep checklist appear; credit drops to Nu. 1,500. (To show a no: press **Decline** instead. The mentor view switches to Sonam, whom the agent asked next.)
 4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**. With live AI you can also **Record voice note**; the text is filled in for you to check.
 5. **YDF:** **Fast-forward 5 days**. The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
 6. **Entrepreneur:** two messages need a reply. **Send reply** on the interviews check-in first ("going well"): the agent confirms the next check-in. Then **Send reply** on the permits follow-up: the agent escalates, **ESC-101**.
@@ -186,12 +187,12 @@ If you need to experiment freely, ask Person 1 to help you run a private local d
 ## 8. How the code is organised
 
 ```text
-supabase/migrations/      database tables and SQL functions (booking, confirm, fast-forward, reset)
+supabase/migrations/      database tables and SQL functions (booking, accepting a request, confirm, fast-forward, reset)
 src/app/                  pages: / , /entrepreneur , /mentor , /ydf
 src/app/api/              server endpoints, one folder per action
 src/components/           all UI (React + Tailwind)
 src/lib/agent/            the agent: runner, handlers, tools, schemas, fallbacks, decision policy
-src/lib/matching/         deterministic mentor scoring
+src/lib/matching/         deterministic mentor scoring, who the agent asks next, session times
 src/lib/demo/             demo data: mentors, Pema's answers, session notes, Dzongkha message
 scripts/demo-e2e.mjs      automatic check of all 14 steps
 ```

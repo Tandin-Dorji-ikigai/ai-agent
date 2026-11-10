@@ -7,6 +7,7 @@ import type {
   MentorRecord,
   ResourceRecord,
   Stage,
+  WeeklySlot,
 } from "./types";
 
 // Read helpers that turn database rows into the shapes the agent and UI use.
@@ -29,6 +30,7 @@ interface MentorRow {
   fee: number | string;
   slots_remaining: number;
   availability_summary: string | null;
+  weekly_slots: WeeklySlot[] | null;
   sessions_delivered: number;
   verified: boolean;
   active: boolean;
@@ -49,6 +51,7 @@ function toMentor(row: MentorRow): MentorRecord {
     fee: Number(row.fee),
     slots_remaining: row.slots_remaining,
     availability_summary: row.availability_summary,
+    weekly_slots: row.weekly_slots ?? [],
     sessions_delivered: row.sessions_delivered,
     verified: row.verified,
     active: row.active,

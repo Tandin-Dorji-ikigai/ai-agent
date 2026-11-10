@@ -46,6 +46,12 @@ const USER_MESSAGES: Record<string, [number, string]> = {
   ASSESSMENT_REQUIRED: [409, "Complete the needs assessment first."],
   NOT_FOUND: [404, "Not found."],
   INVALID_TRANSITION: [409, "That status change is not allowed."],
+  REQUEST_NOT_FOUND: [404, "Request not found."],
+  REQUEST_NOT_PENDING: [409, "This request has already been answered or closed."],
+  REQUEST_EXPIRED: [409, "This request has expired. The agent has moved on to another mentor."],
+  SLOT_NOT_OFFERED: [409, "Pick one of the times offered in the request."],
+  SLOT_IN_PAST: [409, "That time has already passed. Pick a later one."],
+  NOT_BOOKABLE: [409, "This mentor has no open sessions right now."],
 };
 
 /** Converts thrown errors into safe JSON responses (no stack traces or secrets). */

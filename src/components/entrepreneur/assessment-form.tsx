@@ -29,7 +29,8 @@ import { VoiceRecorder } from "../voice/voice-recorder";
 // After a voice intro the agent proceeds by itself: small gaps get safe,
 // labelled defaults ("Assumed"), and once it has enough it saves the answers
 // and finds mentors after a short countdown that the person can stop.
-// Nothing irreversible happens: booking still needs the person's choice.
+// Nothing irreversible happens: the agent then asks a mentor, and a session
+// is booked only when that mentor accepts.
 
 /** Seconds the agent waits (showing what it understood) before finding mentors. */
 const AUTO_SECONDS = 5;

@@ -16,7 +16,8 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 | 2. Live AI | **Done.** Groq free tier: `gpt-oss-120b` and `gpt-oss-20b` (strict JSON output and real tool calling), plus Whisper for voice notes. Every step falls back to its saved response |
 | 2b. Long call transcripts and an extraction test set | **Done.** Calls of any length are read in parts, paced to the free tier, in the background. `npm run eval:extraction` scores the agent on 5 sample cases |
 | 2c. Voice intro for the needs assessment (English), including aspiring entrepreneurs with no business yet | **Done.** The agent drafts the answers (heard or suggested), asks only what it still needs as tap-to-answer questions, and the entrepreneur checks before submitting. `npm run eval:assessment` scores it |
-| 3. Reliability | Partly done: idempotent booking, confirmation and replies; no negative credit; one open escalation per action |
+| 2d. Mentor requests: the agent asks, the mentor decides | **Done.** Migration 005. After matching, the agent sends a request to the best bookable mentor. The mentor accepts (and picks one of their usual times) or declines. On a no, or no reply in 2 days, the agent asks the next best; after three it hands over to YDF. Covered by `npm run demo:e2e` |
+| 3. Reliability | Partly done: idempotent request acceptance, confirmation and replies; credit used only when a mentor accepts; no negative credit; never two open requests; one open escalation per action |
 | 4. Freeze | Not started |
 
 ## Quick start
@@ -30,7 +31,7 @@ cp .env.example .env.local      # then fill in SUPABASE_URL and SUPABASE_SERVICE
 
 **Apply the database migrations** to your Supabase project. Choose one way:
 
-- In the Supabase dashboard, open the SQL Editor and run the two files in `supabase/migrations/` in order.
+- In the Supabase dashboard, open the SQL Editor and run every file in `supabase/migrations/`, in order.
 - With the CLI: `npx supabase link --project-ref <ref>`, then `npx supabase db push`.
 
 Then:
@@ -46,10 +47,10 @@ Open the app and click **Load demo data**, or go to the YDF view and press **Res
 ### Checks
 
 ```bash
-npm test             # 47 unit tests: ranking, fallbacks, reply reading, decision rules, agenda, AI timeout handling
+npm test             # 131 unit tests: ranking, who is asked next, session times, fallbacks, reply reading, decision rules, agenda, AI guards
 npm run lint
 npm run typecheck
-npm run demo:e2e     # all 14 demo steps plus every check-in branch, twice. RESETS THE DEMO DATA
+npm run demo:e2e     # all 14 demo steps and every check-in branch, twice, then a mentor declining, not replying, and the YDF hand-over. RESETS THE DEMO DATA
 PACE_MS=3000 RUNS=1 npm run demo:e2e   # with AI_MODE=live: stays under the free tier, prints live vs saved counts
 E2E_SOURCE=call_recording npm run demo:e2e   # the same demo from a call transcript, plus a 30-minute call read in the background
 npm run eval:extraction   # scores extraction on evals/extraction-cases.json (rule-based with AI_MODE=fixture, live AI with AI_MODE=live)
@@ -59,8 +60,8 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 ## Demo script (about 3 minutes)
 
 1. **Entrepreneur view** (phone width). The assessment is pre-filled with Pema's answers. Optionally, show **Use a sample intro** (or **Record voice note**, in English): the agent fills the form from speech. Press **Find my mentors**.
-2. Three ranked mentors appear, each with a score breakdown and an explanation built from evidence. Point out that the most-booked mentor ranks 13th of 13.
-3. **Choose Deki**, keep **Use my YDF credit**, then **Book session**. Pema's preparation checklist appears.
+2. Three ranked mentors appear, each with a score breakdown and an explanation built from evidence. Point out that the most-booked mentor ranks 13th of 13. **The agent has already asked Deki** (the best match): "Your mentor request" says who was asked, the reply deadline, and who is next. Nothing is booked or paid yet.
+3. **Mentor view** (signed in as Deki). The request shows Pema's needs, why the agent picked Deki, and the fee. Pick one of Deki's times and press **Accept**. Back on the **Entrepreneur view**, the session time and Pema's preparation checklist appear. (Optional: press **Decline** instead, and the mentor view switches to Sonam, whom the agent asked next.)
 4. **Mentor view**. Show the brief, press **Complete session** (or, with live AI, **Record voice note**), review the three draft actions, then **Confirm 3 actions**.
 5. **YDF view**. Press **Fast-forward 5 days**. The scheduling agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
 6. **Entrepreneur view**. Two messages need a reply. Reply to the interviews check-in first (pre-filled "going well"): the agent confirms the next check-in. Then reply to the permits follow-up (pre-filled with the blocker).
@@ -80,7 +81,7 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
                                |
               +------ MENTORING AGENT ------+
               |  runner: events run inline  |
-              |  10 controlled tools        |
+              |  13 controlled tools        |
               |  saved fallback per AI step |
               +------------------------------+
                                |
@@ -92,6 +93,7 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 - **Database access:** server only, with the service-role key. Row-level security is on for every table with no policies, so the public anon key can read nothing (verified).
 - **Agent events:** an event runs immediately after it is created, so the demo never waits for a worker. `agent_events` still records every event; a failed event can be retried from the YDF log (`POST /api/agent/run`).
 - **Check-in loop (team workflow):** confirmed actions are SMART (with a "done when" measure) and get a check-in two days before they are due. Each reply is read as done, on track, or stuck (with or without needing help). Then the agent marks it done, confirms the next check-in, records the obstacle, recommends an approved resource, asks the mentee's own mentor (onto the next session's agenda), suggests another mentor, or escalates to YDF for sensitive topics. Every outcome goes into the mentor's progress feed, and a follow-up booking is briefed from it.
+- **Mentor requests (the mentor decides):** after matching, the agent sends a request to the best-ranked mentor who is verified, active and has open sessions (never one below 40/100). The mentor sees only what they need: the mentee's needs, stage, sector, challenge, language and why they were picked (no phone number or budget). They accept by picking one of their usual weekly times (Bhutan time), or decline with a reason. Only then is anything booked or any YDF credit used (`accept_mentor_request` in SQL, one transaction). On a decline, or no reply within 2 days, the agent asks the next best mentor and tells the mentee why; after three mentors it creates a YDF escalation. A mentee can also ask for a specific mentor (a follow-up, or one the agent suggested), and the same rules apply.
 - **Demo clock:** fast-forward moves an offset stored in `demo_state`, and the whole app reads time through it (`demo_now()` in SQL, `getDemoClock()` in TypeScript). The real clock is never changed.
 
 ### Repository layout
@@ -102,12 +104,15 @@ supabase/migrations/
   20261110000002_demo_functions.sql  create_booking, confirm_action_items, fast_forward_demo, reset_demo
   20261110000003_checkin_loop.sql    SMART measure, check-in schedule, progress_updates, new event types
   20261110000004_session_sources.sql where session text came from (typed / voice note / call) + transcript
+  20261110000005_mentor_requests.sql mentor_requests, weekly times, accept_mentor_request, new events
 src/lib/
   audio/       transcribe.ts (Whisper)
   agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, prompts
                ai.ts (fallback wrapper and guards), llm.ts (Groq client), live.ts (live prompts),
                json-schema.ts (zod schema to strict JSON schema)
-  matching/    score-mentor.ts (deterministic ranking)
+  matching/    score-mentor.ts (deterministic ranking), requests.ts (who is asked next, funding,
+               what the mentor sees), slots.ts (weekly times to concrete times, Bhutan time)
+  requests.ts  accept, decline and expiry of mentor requests (what people do)
   progress.ts  mentor progress feed and next-session agenda
   demo/        ids, seed-data (single source of truth), fixtures, dzongkha
   supabase/    server-only client
@@ -127,11 +132,14 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/assessment` | 1 |
 | POST | `/api/assessment/draft` | Voice intro: `{ transcript }` → `{ draft, missing, source }`. Saves nothing; the entrepreneur checks the form and submits it |
 | POST | `/api/matches` | 2-4 |
-| POST | `/api/booking` | 5-8 (idempotent on `idempotency_key`) |
+| POST | `/api/requests/accept` | 6-8. The mentor accepts: `{ request_id, scheduled_at }` (one of the request's `offered_slots`). Books the session, uses credit now; idempotent |
+| POST | `/api/requests/decline` | The mentor declines: `{ request_id, reason: no_time \| not_my_area \| other, note? }`. The agent asks the next best mentor, or YDF after three |
+| POST | `/api/requests/ask` | The mentee asks for a specific mentor (follow-up or suggestion): `{ mentor_id }` |
+| POST | `/api/requests/start` | Keeps the agent going with no button: if there are matches but nobody is being asked (older data, or a failed step), the agent asks now. The entrepreneur view calls it by itself. Safe to repeat; returns `{ started, reason }` |
 | POST | `/api/session/complete` | 9-10. Handover contract: `{ booking_id, notes?, transcript?, source: typed \| voice_note \| call_recording }`. Long transcripts return `202 { processing: true }` and are read in the background; over 200,000 characters returns `400` |
 | POST | `/api/actions/confirm` | 11 (idempotent) |
 | POST | `/api/actions/status` | Pema marks an action done |
-| POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins) |
+| POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins; mentor requests past their deadline expire) |
 | POST | `/api/inbox/reply` | 13 (one decision per check-in or follow-up) |
 | POST | `/api/agent/run` | Retry a failed event |
 | POST | `/api/transcribe` | Voice note to text (Whisper); live AI only |
@@ -147,13 +155,15 @@ The demo endpoints have no authentication. **Do not deploy this publicly as it i
 **Deterministic platform:** mentor scoring, availability, bookings, simulated payments, credit deduction, ownership checks, status transitions, and the agent log.
 
 **Humans:**
-- The entrepreneur chooses the mentor and confirms any suggested session.
+- Each mentor decides every request: accept with a time that suits them, or decline.
+- The entrepreneur can change their answers, and can ask for a specific mentor (a follow-up, or one the agent suggested).
 - The mentor delivers the session and confirms the draft actions.
 - YDF approves credit, assigns and resolves escalations, and selects seed-fund winners.
 - Qualified people handle legal, financial and other sensitive advice.
 
 The agent **cannot**:
 - approve mentors, credit, funding or payments
+- accept a request for a mentor, or book a session a mentor has not accepted
 - set fees
 - resolve or assign escalations
 - recommend unapproved resources or unverified, inactive or fully booked mentors
@@ -167,7 +177,7 @@ The source of truth is `supabase/migrations/20261110000001_schema.sql`. The tabl
 
 - `profiles` no longer references `auth.users`, because the prototype has no login.
 - `entrepreneur_profiles` adds `expertise_needs`, `languages` and `assessment_completed_at`.
-- `mentor_profiles` adds `slots_remaining`, `sessions_delivered` and `headline`.
+- `mentor_profiles` adds `slots_remaining`, `sessions_delivered`, `headline` and `weekly_slots` (usual times, migration 005).
 - `action_items` adds `owner`, `due_in_days` and a `draft` status. Drafts become `pending` only after human confirmation.
 - `agent_runs` adds `source` (`live_ai` or `fallback`), `decision` and `decision_factors`.
 - `escalations` adds a readable `code` (ESC-101, and so on), and allows only one open escalation per action.
@@ -176,13 +186,14 @@ The source of truth is `supabase/migrations/20261110000001_schema.sql`. The tabl
   - `messages`: the agent inbox
   - `demo_state`: the demo clock
   - `progress_updates`: the mentor progress feed (migration 003)
+  - `mentor_requests`: each request the agent sends, the times offered, and the mentor's answer (migration 005)
 - Migration 003 also gives `action_items` a `success_measure`, `next_check_in_at` and `last_check_in_at`.
 
 ## Agent tools
 
 Defined in `src/lib/agent/schemas.ts` (inputs) and `tools.ts` (implementations). Each event type may use only its listed tools (`ALLOWED_TOOLS` in `handlers.ts`).
 
-`get_entrepreneur_context`, `find_matching_mentors`, `create_booking_request`, `create_session_brief`, `extract_action_items`, `update_action_status`, `recommend_approved_resource`, `suggest_mentor_session`, `create_escalation`, `send_inbox_message`, `record_progress`, `schedule_check_in`, `request_mentor_help` (only to the mentee's own mentor)
+`get_entrepreneur_context`, `find_matching_mentors`, `send_mentor_request` (asks; only the mentor can accept), `create_session_brief`, `extract_action_items`, `update_action_status`, `recommend_approved_resource`, `suggest_mentor_session`, `create_escalation`, `send_inbox_message`, `record_progress`, `schedule_check_in`, `request_mentor_help` (only to the mentee's own mentor)
 
 ## Mentor scoring (deterministic)
 
@@ -238,7 +249,7 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
 - **It goes ahead by itself:**
   - Small gaps get safe defaults labelled **Assumed**: budget "not sure" (neutral in matching) and preferred language = the language spoken.
   - Once it has enough, a 5-second countdown ("Find them now" / "Wait, let me check first") saves the answers and finds mentors with no button press.
-  - "Change my answers" on the recommendations re-opens the form and re-matches. Booking still needs the person's choice.
+  - "Change my answers" on the recommendations re-opens the form and re-matches, and the agent asks again. A booking still needs the mentor's yes.
 - **Flow:** speech goes to Whisper (with `language=en` and a spelling hint for local words), then the agent drafts the form. Fields that were not said are marked "Not mentioned", and the entrepreneur edits and submits as usual.
 - **Grounding:** a business name, budget or language that was not actually said is removed from the AI's draft.
 - **Misspellings:** speech-to-text spellings such as "Zonka" (Dzongkha) and "Gultrim" (ngultrum) are understood.
@@ -269,9 +280,9 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
 2. The backend calculates mentor scores.
 3. The system returns three verified mentors.
 4. The AI explains each match using only supplied evidence.
-5. Pema selects a mentor.
-6. Pema selects simulated YDF sponsorship.
-7. The platform creates a simulated booking.
+5. The agent asks the best-matched mentor.
+6. The mentor accepts and picks a time.
+7. The platform books it, paid with simulated YDF credit.
 8. The agent produces entrepreneur and mentor briefs.
 9. The mentor submits quick session notes.
 10. The agent extracts draft action items.
@@ -297,7 +308,7 @@ The header shows progress (x/14), and the YDF view has the checklist.
 
 ## Demo story
 
-> Pema is building a community-tourism business outside Thimphu. She did not attend a YDF training programme. She completes the AI assessment and receives three verified mentor recommendations with fees and explanations. She chooses a Dzongkha-speaking tourism mentor and uses a simulated YDF credit. The agent prepares both participants. After the session, it extracts three actions. The demo clock advances, one action becomes overdue, and the agent asks Pema about the blocker. Because she needs specialist help with permits, and no approved resource or verified mentor covers it, the agent creates a YDF escalation.
+> Pema is building a community-tourism business outside Thimphu. She did not attend a YDF training programme. She completes the AI assessment and receives three verified mentor recommendations with fees and explanations. The agent asks the best match, a Dzongkha-speaking tourism mentor, who accepts and picks a time; the session uses a simulated YDF credit. The agent prepares both participants. After the session, it extracts three actions. The demo clock advances, one action becomes overdue, and the agent asks Pema about the blocker. Because she needs specialist help with permits, and no approved resource or verified mentor covers it, the agent creates a YDF escalation.
 
 All people, businesses, resources and organisations in the seed data are fictional.
 

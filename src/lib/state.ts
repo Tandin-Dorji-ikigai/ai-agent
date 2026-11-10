@@ -4,6 +4,7 @@ import { apiKey } from "./agent/llm";
 import { getDemoClock } from "./clock";
 import { loadEntrepreneur, loadMentors } from "./data";
 import { DEMO_IDS } from "./demo/ids";
+import { MAX_REQUESTS_PER_ROUND, pickNextMentor } from "./matching/requests";
 import { rankMentors, scoreMentor, type ScoreBreakdown } from "./matching/score-mentor";
 import { buildAgenda } from "./progress";
 import type {
@@ -13,12 +14,14 @@ import type {
   DemoStep,
   EscalationView,
   MatchView,
+  MentorRequestView,
   MessageView,
   ProgressView,
+  RequestRoundView,
   SessionView,
 } from "./state-types";
 import { db, must } from "./supabase/server";
-import type { ActionItemRecord, MentorRecord, ProgressUpdateRecord } from "./types";
+import type { ActionItemRecord, MentorRecord, MentorRequestRecord, ProgressUpdateRecord } from "./types";
 
 // Builds the whole demo state in one response. Every number on the YDF
 // dashboard comes from these database reads; nothing is invented.
@@ -53,11 +56,13 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       agenda: [],
       metrics: { credits_used: 0, credits_granted: 0, sessions_completed: 0, actions_completed: 0, actions_total: 0, open_escalations: 0 },
       steps: stepsFor(null),
+      request_round: null,
+      pending_request: null,
       mentor_for_view: null,
     };
   }
 
-  const [matchRows, creditRows, bookingRows, actionRows, messageRows, escalationRows, runRows, sessionRows, progressRows] = await Promise.all([
+  const [matchRows, creditRows, bookingRows, actionRows, messageRows, escalationRows, runRows, sessionRows, progressRows, requestRows] = await Promise.all([
     db().from("mentor_matches").select("*").eq("entrepreneur_id", entrepreneurId).order("rank"),
     db().from("sponsorship_credits").select("amount_granted, amount_remaining, status").eq("entrepreneur_id", entrepreneurId),
     db().from("bookings").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at", { ascending: false }).limit(1),
@@ -67,6 +72,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     db().from("agent_runs").select("*").order("created_at", { ascending: false }).limit(40),
     db().from("sessions").select("*, bookings!inner(entrepreneur_id)").eq("bookings.entrepreneur_id", entrepreneurId),
     db().from("progress_updates").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at"),
+    db().from("mentor_requests").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at"),
   ]);
 
   const matches: MatchView[] = (must(matchRows, "load matches") as Array<{
@@ -201,7 +207,38 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     open_escalations: escalations.filter((e) => e.status !== "resolved").length,
   };
 
-  const mentor_for_view: MentorRecord | null = booking?.mentor ?? matches[0]?.mentor ?? null;
+  // Mentor requests: the agent asks, the mentor decides.
+  const requests: MentorRequestView[] = (must(requestRows, "load requests") as MentorRequestRecord[])
+    .filter((r) => mentorById.has(r.mentor_id))
+    .map((r) => ({
+      id: r.id,
+      round_id: r.round_id,
+      attempt: r.attempt,
+      kind: r.kind,
+      status: r.status,
+      mentor: mentorById.get(r.mentor_id)!,
+      score: r.score,
+      funding_type: r.funding_type,
+      fee: Number(r.fee),
+      mentee_summary: r.mentee_summary,
+      offered_slots: r.offered_slots ?? [],
+      decline_reason: r.decline_reason,
+      decline_note: r.decline_note,
+      scheduled_at: r.scheduled_at,
+      booking_id: r.booking_id,
+      expires_at: r.expires_at,
+      responded_at: r.responded_at,
+      created_at: r.created_at,
+    }));
+  const pending_request = requests.find((r) => r.status === "pending") ?? null;
+  const request_round = roundFor(
+    requests,
+    escalations,
+    entrepreneur.assessment_completed_at ? rankMentors(entrepreneur, mentors) : [],
+    entrepreneur.assessment_completed_at,
+  );
+
+  const mentor_for_view: MentorRecord | null = pending_request?.mentor ?? booking?.mentor ?? matches[0]?.mentor ?? null;
 
   return {
     ...base,
@@ -219,8 +256,49 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     progress,
     agenda,
     metrics,
-    steps: stepsFor({ entrepreneur, matches, booking, session, actions, runs }),
+    steps: stepsFor({ entrepreneur, matches, booking, session, actions, runs, requests }),
+    request_round,
+    pending_request,
     mentor_for_view,
+  };
+}
+
+/** The newest round of requests, with what the agent will do next. */
+function roundFor(
+  requests: MentorRequestView[],
+  escalations: EscalationView[],
+  ranked: ReturnType<typeof rankMentors>,
+  assessedAt: string | null,
+): RequestRoundView | null {
+  const noMentor = (since: string) =>
+    escalations.find((e) => e.reason === "no_mentor_available" && e.status !== "resolved" && Date.parse(e.created_at) >= Date.parse(since)) ?? null;
+  const latest = requests.at(-1);
+  if (!latest) {
+    // Nobody suitable could be asked at all: the agent went straight to YDF.
+    const escalation = assessedAt ? noMentor(assessedAt) : null;
+    return escalation
+      ? { round_id: "none", kind: "match", status: "escalated", requests: [], next_mentor: null, max_requests: MAX_REQUESTS_PER_ROUND, escalation_code: escalation.code }
+      : null;
+  }
+  const inRound = requests.filter((r) => r.round_id === latest.round_id).sort((a, b) => a.attempt - b.attempt);
+  const escalation = noMentor(inRound[0].created_at);
+  const status: RequestRoundView["status"] = inRound.some((r) => r.status === "accepted")
+    ? "accepted"
+    : inRound.some((r) => r.status === "pending")
+      ? "waiting"
+      : escalation
+        ? "escalated"
+        : "stopped";
+  const canAskMore = status === "waiting" && inRound.length < MAX_REQUESTS_PER_ROUND;
+  const next = canAskMore ? pickNextMentor(ranked, inRound.map((r) => r.mentor.id)) : null;
+  return {
+    round_id: latest.round_id,
+    kind: inRound[0].kind,
+    status,
+    requests: inRound,
+    next_mentor: next ? { mentor: next.mentor, score: next.score } : null,
+    max_requests: MAX_REQUESTS_PER_ROUND,
+    escalation_code: status === "escalated" ? escalation!.code : null,
   };
 }
 
@@ -240,6 +318,7 @@ function stepsFor(
     session: SessionView | null;
     actions: ActionItemRecord[];
     runs: AgentRunView[];
+    requests: MentorRequestView[];
   } | null,
 ): DemoStep[] {
   const decided = !!s?.runs.some(
@@ -254,9 +333,9 @@ function stepsFor(
     (s?.matches.length ?? 0) > 0,
     (s?.matches.length ?? 0) === 3,
     !!s && s.matches.length > 0 && s.matches.every((m) => !!m.explanation),
-    !!s?.booking,
-    s?.booking?.funding_type === "ydf_credit",
-    s?.booking?.status === "confirmed" || s?.booking?.status === "completed",
+    (s?.requests.length ?? 0) > 0,
+    !!s?.requests.some((r) => r.status === "accepted"),
+    s?.booking?.funding_type === "ydf_credit" && (s.booking.status === "confirmed" || s.booking.status === "completed"),
     !!s?.booking?.entrepreneur_brief && !!s?.booking?.mentor_brief,
     !!s?.session?.completed_at,
     (s?.actions.length ?? 0) > 0,
@@ -270,9 +349,9 @@ function stepsFor(
     "The backend calculates mentor scores",
     "The system returns three verified mentors",
     "Each match is explained from supplied evidence only",
-    "Pema selects a mentor",
-    "Pema selects simulated YDF sponsorship",
-    "The platform creates a simulated booking",
+    "The agent asks the best-matched mentor",
+    "The mentor accepts and picks a time",
+    "The platform books it, paid with simulated YDF credit",
     "The agent produces entrepreneur and mentor briefs",
     "The mentor submits quick session notes",
     "The agent extracts draft action items",

@@ -1,16 +1,141 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDay, formatNu, relativeDue } from "@/lib/format";
-import type { DemoState } from "@/lib/state-types";
+import { formatBhutanDay, formatSlot } from "@/lib/matching/slots";
+import type { DemoState, MentorRequestView } from "@/lib/state-types";
+import { DECLINE_REASON_LABEL } from "@/lib/types";
 import { DemoGate, LastError } from "./demo-gate";
 import { useDemo } from "./demo-state";
 import { AssessmentForm, profileToForm } from "./entrepreneur/assessment-form";
 import { Inbox } from "./entrepreneur/inbox";
-import { MentorCard, newIdempotencyKey } from "./entrepreneur/mentor-card";
-import { Badge, Button, Card, SectionTitle, SourceBadge, StatusBadge } from "./ui";
+import { MentorCard, type RequestChip } from "./entrepreneur/mentor-card";
+import { Badge, Button, Card, Notice, SectionTitle, SourceBadge, StatusBadge } from "./ui";
 
 // Pema's phone. Mobile-first: one narrow column.
+
+const firstName = (full: string) => full.split(" ")[0];
+
+/** One line per mentor the agent asked, newest last. */
+function requestOutcome(r: MentorRequestView): string {
+  switch (r.status) {
+    case "pending":
+      return `Deciding, reply due ${formatBhutanDay(r.expires_at)}`;
+    case "accepted":
+      return `Accepted: ${formatSlot(r.scheduled_at)}`;
+    case "declined":
+      return `Declined: ${r.decline_reason ? DECLINE_REASON_LABEL[r.decline_reason].toLowerCase() : "no reason given"}`;
+    case "expired":
+      return "No reply in time";
+    default:
+      return "Request cancelled";
+  }
+}
+
+const OUTCOME_TONE: Record<MentorRequestView["status"], "info" | "success" | "neutral"> = {
+  pending: "info",
+  accepted: "success",
+  declined: "neutral",
+  expired: "neutral",
+  cancelled: "neutral",
+};
+
+/** "Your mentor request": the agent asks, the mentor decides, the mentee is kept informed. */
+function RequestStatus({ state }: { state: DemoState }) {
+  const round = state.request_round!;
+  const current = round.requests.find((r) => r.status === "pending");
+  const label = { waiting: "Waiting for a reply", accepted: "Booked", escalated: "With YDF", stopped: "Stopped" }[round.status];
+  const tone = { waiting: "info", accepted: "success", escalated: "warning", stopped: "neutral" } as const;
+  return (
+    <Card>
+      <SectionTitle aside={<Badge tone={tone[round.status]}>{label}</Badge>}>Your mentor request</SectionTitle>
+      {round.status === "waiting" && current && (
+        <div className="space-y-2 text-sm">
+          <p>
+            I have asked <span className="font-semibold">{current.mentor.full_name}</span>
+            {round.kind === "direct"
+              ? current.mentee_summary.follow_up
+                ? " for a follow-up session"
+                : " for a session"
+              : current.attempt === 1
+                ? ", your best match,"
+                : ", your next best match,"}{" "}
+            and am waiting for a reply by {formatBhutanDay(current.expires_at)}.
+          </p>
+          <p className="text-muted">
+            {firstName(current.mentor.full_name)} sees a short summary of your needs, not your phone number. If{" "}
+            {firstName(current.mentor.full_name)} accepts, the session ({formatNu(current.fee)}) is{" "}
+            {current.funding_type === "ydf_credit" ? "paid with your YDF credit" : "self-paid (simulated)"}. Nothing is booked or paid
+            before that.
+          </p>
+          {round.next_mentor && (
+            <p className="text-muted">
+              If {firstName(current.mentor.full_name)} cannot, I will ask {round.next_mentor.mentor.full_name} next.
+            </p>
+          )}
+        </div>
+      )}
+      {round.status === "escalated" && (
+        <Notice tone="warning" title="YDF is helping you find a mentor">
+          {round.requests.length > 0
+            ? `None of the mentors I asked can take you on right now, so a YDF programme officer will help (${round.escalation_code}).`
+            : `No available mentor fits your needs well enough right now, so a YDF programme officer will help (${round.escalation_code}).`}
+        </Notice>
+      )}
+      {round.status === "stopped" && <AgentWorking text="The request stopped before a mentor said yes. I am picking it up again." />}
+      {round.requests.length > 0 && (
+        <ol className="mt-3 space-y-2" aria-label="Mentors asked">
+          {round.requests.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+              <span className="font-medium">{r.mentor.full_name}</span>
+              <Badge tone={OUTCOME_TONE[r.status]}>{requestOutcome(r)}</Badge>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Card>
+  );
+}
+
+/** A short "the agent is on it" line, announced politely to screen readers. */
+function AgentWorking({ text }: { text: string }) {
+  return (
+    <p role="status" className="flex items-center gap-2 text-sm text-muted">
+      <span className="size-3 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+      {text}
+    </p>
+  );
+}
+
+/**
+ * The agent keeps going by itself: whenever there are matches but no mentor is
+ * being asked (older data, or a step that failed), it asks the best match.
+ * No button. It acts once per situation; the server ignores repeats.
+ */
+function useAutoRequest(state: DemoState, editing: boolean): boolean {
+  const { act } = useDemo();
+  const round = state.request_round;
+  const needed =
+    !editing && !!state.entrepreneur?.assessment_completed_at && state.matches.length > 0 && !state.booking && (!round || round.status === "stopped");
+  const key = needed ? `${state.entrepreneur?.assessment_completed_at}:${round?.round_id ?? "none"}:${round?.requests.at(-1)?.id ?? ""}` : null;
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!key || handled.current === key) return;
+    handled.current = key;
+    void act("auto-request", "/api/requests/start");
+  }, [key, act]);
+  return needed;
+}
+
+/** Matches exist and the agent is about to ask the best one. */
+function AskingNow() {
+  return (
+    <Card>
+      <SectionTitle>Your mentor request</SectionTitle>
+      <AgentWorking text="I am asking your best-matched mentor now. That mentor decides." />
+    </Card>
+  );
+}
 
 function Recommendations({ state, onChangeAnswers }: { state: DemoState; onChangeAnswers: () => void }) {
   const { act, busy } = useDemo();
@@ -26,6 +151,12 @@ function Recommendations({ state, onChangeAnswers }: { state: DemoState; onChang
     );
   }
   const pop = state.most_booked;
+  const round = state.request_round;
+  const chipFor = (mentorId: string): RequestChip | undefined => {
+    const r = round?.requests.find((x) => x.mentor.id === mentorId);
+    if (r) return r.status;
+    return round?.next_mentor?.mentor.id === mentorId ? "next" : undefined;
+  };
   return (
     <section aria-labelledby="recs" className="space-y-3">
       <div>
@@ -33,14 +164,15 @@ function Recommendations({ state, onChangeAnswers }: { state: DemoState; onChang
           Your three best-matched mentors
         </h2>
         <p className="text-sm text-muted">
-          Ranked by fixed rules on expertise, sector, stage, language, availability and budget. The AI only explains the ranking.
+          Ranked by fixed rules on expertise, sector, stage, language, availability and budget. The AI only explains the ranking. The
+          agent asks them in this order, and each mentor decides.
         </p>
         <Button variant="ghost" className="-ml-3 mt-1" onClick={onChangeAnswers}>
           Change my answers
         </Button>
       </div>
       {state.matches.map((m) => (
-        <MentorCard key={m.mentor.id} match={m} credit={state.credit} />
+        <MentorCard key={m.mentor.id} match={m} chip={chipFor(m.mentor.id)} />
       ))}
       {pop && pop.rank !== null && pop.rank > 3 && (
         <p className="rounded-lg bg-sunken p-3 text-sm text-muted">
@@ -52,34 +184,28 @@ function Recommendations({ state, onChangeAnswers }: { state: DemoState; onChang
   );
 }
 
-/** "Next session": book a follow-up with the same mentor, briefed from progress. */
-function FollowUpBooking({ state }: { state: DemoState }) {
+/** "Next session": ask the same mentor for a follow-up, briefed from progress. The mentor decides. */
+function FollowUpRequest({ state }: { state: DemoState }) {
   const { act, busy } = useDemo();
-  const [key, setKey] = useState(newIdempotencyKey);
   const b = state.booking!;
   const m = b.mentor;
-  const useCredit = !!state.credit && state.credit.status === "active" && state.credit.amount_remaining >= m.fee;
+  const first = firstName(m.full_name);
+  if (state.request_round?.status === "waiting") return null;
   if (m.slots_remaining < 1) return <p className="mt-3 text-sm text-muted">{m.full_name} has no open sessions right now.</p>;
+  const useCredit = !!state.credit && state.credit.status === "active" && state.credit.amount_remaining >= m.fee;
   return (
     <div className="mt-4 border-t border-line pt-4">
       <p className="text-sm text-muted">
-        {m.full_name.split(" ")[0]} will be briefed with your progress since this session.{" "}
-        {useCredit ? `Uses ${formatNu(m.fee)} of your YDF credit.` : `Self-paid (simulated), ${formatNu(m.fee)}.`}
+        {first} will be briefed with your progress since this session.{" "}
+        {useCredit ? `Uses ${formatNu(m.fee)} of your YDF credit if ${first} accepts.` : `Self-paid (simulated), ${formatNu(m.fee)}, if ${first} accepts.`}
       </p>
       <Button
         className="mt-2 w-full"
         variant="secondary"
         busy={busy === "follow-up"}
-        onClick={async () => {
-          const res = await act("follow-up", "/api/booking", {
-            mentor_id: m.id,
-            funding_type: useCredit ? "ydf_credit" : "self_paid",
-            idempotency_key: key,
-          });
-          if (!res.ok) setKey(newIdempotencyKey());
-        }}
+        onClick={() => act("follow-up", "/api/requests/ask", { mentor_id: m.id })}
       >
-        Book a follow-up with {m.full_name.split(" ")[0]}
+        Ask {first} for a follow-up
       </Button>
     </div>
   );
@@ -94,7 +220,7 @@ function SessionCard({ state }: { state: DemoState }) {
         {b.status === "completed" ? "Your session" : "Your next session"}
       </SectionTitle>
       <p className="text-sm">
-        <span className="font-semibold">{b.mentor.full_name}</span>, {formatDay(b.scheduled_at)}
+        <span className="font-semibold">{b.mentor.full_name}</span>, {formatSlot(b.scheduled_at)}
       </p>
       <p className="text-sm text-muted">
         {formatNu(b.fee)}, {b.funding_type === "ydf_credit" ? "paid with YDF credit" : "self-paid (simulated)"}
@@ -126,7 +252,7 @@ function SessionCard({ state }: { state: DemoState }) {
       {b.status === "completed" && state.actions.some((a) => a.status === "draft") && (
         <p className="mt-3 text-sm text-muted">{b.mentor.full_name.split(" ")[0]} is reviewing the actions from your session.</p>
       )}
-      {b.status === "completed" && state.session?.summary_confirmed && <FollowUpBooking state={state} />}
+      {b.status === "completed" && state.session?.summary_confirmed && <FollowUpRequest state={state} />}
     </Card>
   );
 }
@@ -172,6 +298,7 @@ function Actions({ state }: { state: DemoState }) {
 
 function EntrepreneurBody({ state }: { state: DemoState }) {
   const [editing, setEditing] = useState(false);
+  const asking = useAutoRequest(state, editing);
   const e = state.entrepreneur!;
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -202,6 +329,8 @@ function EntrepreneurBody({ state }: { state: DemoState }) {
       ) : (
         <>
           {state.messages.length > 0 && <Inbox state={state} />}
+          {state.request_round && state.request_round.status !== "accepted" && <RequestStatus state={state} />}
+          {asking && !state.request_round && <AskingNow />}
           {state.booking ? <SessionCard state={state} /> : <Recommendations state={state} onChangeAnswers={() => setEditing(true)} />}
           <Actions state={state} />
           {e.assessment_summary && (

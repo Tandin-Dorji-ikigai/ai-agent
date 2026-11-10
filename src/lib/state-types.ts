@@ -2,7 +2,16 @@
 
 import type { ScoreBreakdown } from "./matching/score-mentor";
 import type { AgendaItem } from "./progress";
-import type { ActionItemRecord, EntrepreneurRecord, MentorRecord, ProgressKind } from "./types";
+import type {
+  ActionItemRecord,
+  DeclineReason,
+  EntrepreneurRecord,
+  FundingType,
+  MenteeSummary,
+  MentorRecord,
+  ProgressKind,
+  RequestStatus,
+} from "./types";
 
 export type { AgendaItem };
 
@@ -114,6 +123,46 @@ export interface AgentRunView {
   created_at: string;
 }
 
+/** A request the agent sent to one mentor. */
+export interface MentorRequestView {
+  id: string;
+  round_id: string;
+  attempt: number;
+  kind: "match" | "direct";
+  status: RequestStatus;
+  mentor: MentorRecord;
+  score: number | null;
+  funding_type: FundingType;
+  fee: number;
+  /** What the mentor sees about the mentee. */
+  mentee_summary: MenteeSummary;
+  /** Times the mentor can pick from (ISO, UTC). */
+  offered_slots: string[];
+  decline_reason: DeclineReason | null;
+  /** The mentor's own words; shown to the mentor and YDF, not the mentee. */
+  decline_note: string | null;
+  scheduled_at: string | null;
+  booking_id: string | null;
+  expires_at: string;
+  responded_at: string | null;
+  created_at: string;
+}
+
+/** The agent's current attempt to find the mentee a mentor. */
+export interface RequestRoundView {
+  round_id: string;
+  kind: "match" | "direct";
+  /** waiting: a mentor is deciding. accepted: booked. escalated: handed to YDF. stopped: closed without a booking. */
+  status: "waiting" | "accepted" | "escalated" | "stopped";
+  /** Oldest first. */
+  requests: MentorRequestView[];
+  /** Who the agent will ask if the current mentor says no (null after the last allowed request). */
+  next_mentor: { mentor: MentorRecord; score: number } | null;
+  /** Requests the agent may still send before it hands over to YDF. */
+  max_requests: number;
+  escalation_code: string | null;
+}
+
 export interface DemoStep {
   n: number;
   label: string;
@@ -148,7 +197,11 @@ export interface DemoState {
     open_escalations: number;
   };
   steps: DemoStep[];
-  /** Mentor shown in the mentor view: the booked mentor, else the top match. */
+  /** The agent's current round of mentor requests (null before matching). */
+  request_round: RequestRoundView | null;
+  /** The open request, if a mentor is deciding right now. */
+  pending_request: MentorRequestView | null;
+  /** Mentor shown in the mentor view: the one deciding on a request, else the booked mentor, else the top match. */
   mentor_for_view: MentorRecord | null;
 }
 

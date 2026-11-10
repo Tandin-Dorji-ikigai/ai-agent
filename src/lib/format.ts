@@ -41,7 +41,9 @@ function startOfDay(iso: string): number {
 export const TRIGGER_LABEL: Record<string, string> = {
   "assessment.completed": "Needs assessment completed",
   "mentor.match.requested": "Mentor match requested",
-  "mentor.selected": "Mentor selected",
+  "mentor.selected": "Mentee asked for a mentor",
+  "mentor.request.declined": "Mentor declined a request",
+  "mentor.request.expired": "Mentor request expired (no reply)",
   "booking.confirmed": "Booking confirmed",
   "session.completed": "Session completed",
   "action.due_soon": "Scheduled check-in",

@@ -6,7 +6,6 @@ import { formatDayTime } from "@/lib/format";
 import type { DemoState, MessageView } from "@/lib/state-types";
 import { useDemo } from "../demo-state";
 import { Badge, Button, Card, SectionTitle, SourceBadge, inputClass } from "../ui";
-import { newIdempotencyKey } from "./mentor-card";
 
 // The agent inbox: how the agent reaches the entrepreneur between sessions.
 // Check-ins and overdue follow-ups each get their own reply box.
@@ -39,28 +38,25 @@ function AgentMessage({ m }: { m: MessageView }) {
   );
 }
 
-function SuggestedSession({ m, credit }: { m: MessageView; credit: DemoState["credit"] }) {
+/** The agent suggested another mentor: the mentee can ask the agent to send them a request. */
+function SuggestedSession({ m, state }: { m: MessageView; state: DemoState }) {
   const { act, busy } = useDemo();
-  const [key] = useState(newIdempotencyKey);
   const mentorId = typeof m.metadata.mentor_id === "string" ? m.metadata.mentor_id : null;
   if (!mentorId) return null;
+  const asked = state.request_round?.requests.some((r) => r.mentor.id === mentorId && r.created_at >= m.created_at);
+  if (asked) return null;
+  const waiting = state.request_round?.status === "waiting";
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
+    <div className="mt-2">
       <Button
         variant="secondary"
-        busy={busy === "booking"}
-        disabled={!credit || credit.amount_remaining <= 0}
-        onClick={() => act("booking", "/api/booking", { mentor_id: mentorId, funding_type: "ydf_credit", idempotency_key: key })}
+        busy={busy === `ask-${m.id}`}
+        disabled={waiting}
+        onClick={() => act(`ask-${m.id}`, "/api/requests/ask", { mentor_id: mentorId })}
       >
-        Book with YDF credit
+        Yes, ask for a session
       </Button>
-      <Button
-        variant="ghost"
-        busy={busy === "booking"}
-        onClick={() => act("booking", "/api/booking", { mentor_id: mentorId, funding_type: "self_paid", idempotency_key: `${key}-self` })}
-      >
-        Pay myself
-      </Button>
+      {waiting && <p className="mt-1 text-xs text-muted">You can ask once your open mentor request has an answer.</p>}
     </div>
   );
 }
@@ -111,7 +107,7 @@ export function Inbox({ state }: { state: DemoState }) {
               ) : (
                 <>
                   <AgentMessage m={m} />
-                  {m.kind === "recommendation" && <SuggestedSession m={m} credit={state.credit} />}
+                  {m.kind === "recommendation" && <SuggestedSession m={m} state={state} />}
                   {m.awaiting_reply && <ReplyBox m={m} actionTitle={titleOf(m.related_action_id)} />}
                 </>
               )}

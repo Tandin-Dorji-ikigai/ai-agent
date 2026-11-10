@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { formatNu } from "@/lib/format";
 import { WEIGHTS, type ScoreFactor } from "@/lib/matching/score-mentor";
-import type { DemoState, MatchView } from "@/lib/state-types";
+import type { MatchView } from "@/lib/state-types";
 import { LANGUAGE_LABEL } from "@/lib/types";
-import { useDemo } from "../demo-state";
-import { Badge, Button, SourceBadge } from "../ui";
+import { Badge, SourceBadge } from "../ui";
 
 const FACTOR_LABEL: Record<ScoreFactor, string> = {
   expertise: "Expertise",
@@ -17,13 +15,6 @@ const FACTOR_LABEL: Record<ScoreFactor, string> = {
   budget: "Budget",
 };
 
-/** Works on plain http over a LAN too, where crypto.randomUUID is unavailable. */
-export function newIdempotencyKey(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-}
-
 export function ScoreBreakdown({ breakdown }: { breakdown: MatchView["breakdown"] }) {
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
@@ -31,16 +22,15 @@ export function ScoreBreakdown({ breakdown }: { breakdown: MatchView["breakdown"
         const value = breakdown[f];
         const max = WEIGHTS[f];
         return (
-          <div key={f}>
-            <div className="flex justify-between text-muted">
-              <dt>{FACTOR_LABEL[f]}</dt>
-              <dd className={value === 0 ? "text-muted" : "font-semibold text-ink"}>
-                {value}/{max}
-              </dd>
-            </div>
-            <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
+          // dt and dd are direct children of the group, as a definition list requires.
+          <div key={f} className="grid grid-cols-[1fr_auto]">
+            <dt className="text-muted">{FACTOR_LABEL[f]}</dt>
+            <dd className={value === 0 ? "text-muted" : "font-semibold text-ink"}>
+              {value}/{max}
+            </dd>
+            <dd className="col-span-2 mt-0.5 h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
               <div className="h-full rounded-full bg-accent" style={{ width: `${(value / max) * 100}%` }} />
-            </div>
+            </dd>
           </div>
         );
       })}
@@ -48,19 +38,20 @@ export function ScoreBreakdown({ breakdown }: { breakdown: MatchView["breakdown"
   );
 }
 
-export function MentorCard({ match, credit }: { match: MatchView; credit: DemoState["credit"] }) {
-  const { act, busy } = useDemo();
+/** Where this mentor is in the agent's request round. */
+export type RequestChip = "pending" | "accepted" | "declined" | "expired" | "cancelled" | "next";
+
+const CHIP: Record<RequestChip, [string, "info" | "success" | "neutral" | "accent"]> = {
+  pending: ["Asked, deciding now", "info"],
+  accepted: ["Accepted", "success"],
+  declined: ["Declined", "neutral"],
+  expired: ["No reply", "neutral"],
+  cancelled: ["Request cancelled", "neutral"],
+  next: ["Next if needed", "accent"],
+};
+
+export function MentorCard({ match, chip }: { match: MatchView; chip?: RequestChip }) {
   const m = match.mentor;
-  const creditCovers = !!credit && credit.status === "active" && credit.amount_remaining >= m.fee;
-  const [open, setOpen] = useState(false);
-  const [funding, setFunding] = useState<"ydf_credit" | "self_paid">(creditCovers ? "ydf_credit" : "self_paid");
-  const [key, setKey] = useState(newIdempotencyKey);
-
-  const book = async () => {
-    const res = await act("booking", "/api/booking", { mentor_id: m.id, funding_type: funding, idempotency_key: key });
-    if (!res.ok) setKey(newIdempotencyKey());
-  };
-
   return (
     <article className="rounded-xl border border-line bg-card p-4">
       <div className="flex items-start justify-between gap-3">
@@ -79,6 +70,7 @@ export function MentorCard({ match, credit }: { match: MatchView; credit: DemoSt
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
+        {chip && <Badge tone={CHIP[chip][1]}>{CHIP[chip][0]}</Badge>}
         <Badge>{formatNu(m.fee)} per session</Badge>
         <Badge>{m.languages.map((l) => LANGUAGE_LABEL[l]).join(", ")}</Badge>
         <Badge tone={m.slots_remaining > 0 ? "success" : "danger"}>
@@ -103,54 +95,6 @@ export function MentorCard({ match, credit }: { match: MatchView; credit: DemoSt
           <ScoreBreakdown breakdown={match.breakdown} />
         </div>
       </details>
-
-      {!open ? (
-        <Button className="mt-4 w-full" variant="secondary" onClick={() => setOpen(true)} disabled={m.slots_remaining < 1}>
-          Choose {m.full_name.split(" ")[0]}
-        </Button>
-      ) : (
-        <fieldset className="mt-4 space-y-2">
-          <legend className="mb-1 text-sm font-semibold">How will this session be paid?</legend>
-          <label className="flex min-h-11 items-start gap-2 rounded-lg border border-line p-3 text-sm">
-            <input
-              type="radio"
-              name={`funding-${m.id}`}
-              className="mt-0.5 size-4 accent-accent"
-              checked={funding === "ydf_credit"}
-              disabled={!creditCovers}
-              onChange={() => setFunding("ydf_credit")}
-            />
-            <span>
-              <span className="font-medium">Use my YDF credit</span>
-              <span className="block text-muted">
-                {credit ? `${formatNu(credit.amount_remaining)} of ${formatNu(credit.amount_granted)} left` : "No credit available"}
-                {credit && !creditCovers ? " (not enough for this fee)" : ""}
-              </span>
-            </span>
-          </label>
-          <label className="flex min-h-11 items-start gap-2 rounded-lg border border-line p-3 text-sm">
-            <input
-              type="radio"
-              name={`funding-${m.id}`}
-              className="mt-0.5 size-4 accent-accent"
-              checked={funding === "self_paid"}
-              onChange={() => setFunding("self_paid")}
-            />
-            <span>
-              <span className="font-medium">Pay myself</span>
-              <span className="block text-muted">Simulated payment of {formatNu(m.fee)}. No money moves in this prototype.</span>
-            </span>
-          </label>
-          <div className="flex gap-2 pt-1">
-            <Button className="flex-1" busy={busy === "booking"} onClick={book}>
-              Book session
-            </Button>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-          </div>
-        </fieldset>
-      )}
     </article>
   );
 }

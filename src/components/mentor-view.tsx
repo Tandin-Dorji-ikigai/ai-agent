@@ -2,16 +2,146 @@
 
 import { useState } from "react";
 import { DEMO_SESSION_NOTES } from "@/lib/demo/fixtures";
-import { formatDay, formatDayTime, formatNu, relativeDue } from "@/lib/format";
-import type { AgendaItem, DemoState, ProgressView } from "@/lib/state-types";
-import { expertiseLabel, LANGUAGE_LABEL } from "@/lib/types";
+import { formatDayTime, formatNu, relativeDue } from "@/lib/format";
+import { formatBhutanDay, formatSlot } from "@/lib/matching/slots";
+import type { AgendaItem, DemoState, MentorRequestView, ProgressView } from "@/lib/state-types";
+import { DECLINE_REASON_LABEL, DECLINE_REASONS, expertiseLabel, LANGUAGE_LABEL, sectorLabel, stageLabel, type DeclineReason } from "@/lib/types";
 import { DemoGate, LastError } from "./demo-gate";
 import { VoiceNote } from "./mentor/voice-note";
 import { useDemo } from "./demo-state";
-import { Badge, Button, Card, Notice, SectionTitle, SourceBadge, StatusBadge, inputClass } from "./ui";
+import { Badge, Button, Card, ChoiceChips, Notice, SectionTitle, SourceBadge, StatusBadge, inputClass } from "./ui";
 
 // The mentor's side: less coordination, more guidance. A brief arrives,
 // they talk, they leave short notes, and the agent does the rest.
+
+/** A request from the agent: the mentor decides, and picks the time. */
+function RequestCard({ req, now }: { req: MentorRequestView; now: string }) {
+  const { act, busy } = useDemo();
+  const times = req.offered_slots.filter((t) => new Date(t).getTime() > new Date(now).getTime());
+  const [slot, setSlot] = useState(times[0] ?? "");
+  const [declining, setDeclining] = useState(false);
+  const [reason, setReason] = useState<DeclineReason>("no_time");
+  const [note, setNote] = useState("");
+  const s = req.mentee_summary;
+  const mentee = s.full_name.split(" ")[0];
+  const noteId = `decline-note-${req.id}`;
+
+  return (
+    <Card>
+      <SectionTitle aside={<Badge tone="accent">{s.follow_up ? "Follow-up request" : "New request"}</Badge>}>
+        {s.follow_up ? `${s.full_name} asks for a follow-up session` : `${s.full_name} would like you as a mentor`}
+      </SectionTitle>
+      <p className="text-sm text-muted">
+        Sent by the mentoring agent. Please reply by {formatBhutanDay(req.expires_at)}; after that the agent asks another mentor.
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {s.business_stage && <Badge>{stageLabel(s.business_stage)}</Badge>}
+        {s.sector && <Badge>{sectorLabel(s.sector)}</Badge>}
+        {s.location && <Badge>{s.location}</Badge>}
+        <Badge>Prefers {LANGUAGE_LABEL[s.preferred_language]}</Badge>
+      </div>
+
+      <dl className="mt-3 space-y-2 text-sm">
+        {s.business_name && (
+          <div>
+            <dt className="font-semibold">Business</dt>
+            <dd className="text-muted">{s.business_name}</dd>
+          </div>
+        )}
+        <div>
+          <dt className="font-semibold">Needs help with</dt>
+          <dd className="text-muted">{s.needs.join(", ")}</dd>
+        </div>
+        {s.challenge && (
+          <div>
+            <dt className="font-semibold">Main challenge, in {mentee}&apos;s words</dt>
+            <dd className="text-muted">{s.challenge}</dd>
+          </div>
+        )}
+        {s.why.length > 0 && (
+          <div>
+            <dt className="font-semibold">Why the agent asked you{req.score !== null ? ` (${req.score}/100)` : ""}</dt>
+            <dd>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted">
+                {s.why.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        )}
+        <div>
+          <dt className="font-semibold">Fee</dt>
+          <dd className="text-muted">
+            {formatNu(req.fee)}, {req.funding_type === "ydf_credit" ? "paid with YDF credit when you accept" : "self-paid (simulated)"}
+          </dd>
+        </div>
+      </dl>
+
+      {!declining ? (
+        <div className="mt-4 space-y-3">
+          {times.length > 0 ? (
+            <ChoiceChips
+              legend="Pick a time from your usual hours (Bhutan time)"
+              name={`slot-${req.id}`}
+              options={times.map((t) => ({ value: t, label: formatSlot(t) }))}
+              value={slot}
+              onChange={setSlot}
+            />
+          ) : (
+            <Notice tone="warning">All the offered times have passed. Decline, and the agent will ask another mentor.</Notice>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              busy={busy === "accept"}
+              disabled={!slot}
+              onClick={() => act("accept", "/api/requests/accept", { request_id: req.id, scheduled_at: slot })}
+            >
+              {slot ? `Accept for ${formatSlot(slot)}` : "Accept"}
+            </Button>
+            <Button variant="secondary" onClick={() => setDeclining(true)}>
+              Decline
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act("decline", "/api/requests/decline", { request_id: req.id, reason, note: note.trim() || undefined });
+          }}
+        >
+          <ChoiceChips
+            legend="Why can you not take this on?"
+            name={`reason-${req.id}`}
+            options={DECLINE_REASONS.map((r) => ({ value: r, label: DECLINE_REASON_LABEL[r] }))}
+            value={reason}
+            onChange={(v) => setReason(v as DeclineReason)}
+          />
+          <div>
+            <label htmlFor={noteId} className="mb-1 block text-sm font-medium">
+              Note for the agent and YDF (optional)
+            </label>
+            <textarea id={noteId} rows={2} maxLength={300} className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          <p className="text-xs text-muted">
+            {mentee} is told the reason you pick, not your note, and the agent asks the next best mentor.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="danger" busy={busy === "decline"}>
+              Send decline
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setDeclining(false)}>
+              Back
+            </Button>
+          </div>
+        </form>
+      )}
+    </Card>
+  );
+}
 
 function NotesForm({ state }: { state: DemoState }) {
   const { act, busy } = useDemo();
@@ -222,7 +352,9 @@ export function MentorView() {
     <DemoGate>
       {(state) => {
         const mentor = state.mentor_for_view;
-        const b = state.booking;
+        const req = state.pending_request && state.pending_request.mentor.id === mentor?.id ? state.pending_request : null;
+        // Only this mentor's own booking (a request may now be with someone else).
+        const b = state.booking && state.booking.mentor.id === mentor?.id ? state.booking : null;
         const confirmed = state.actions.filter((a) => a.status !== "draft");
         const hasDrafts = state.actions.some((a) => a.status === "draft");
 
@@ -240,17 +372,24 @@ export function MentorView() {
 
             <LastError />
 
+            {req && <RequestCard key={req.id} req={req} now={state.clock.now} />}
+
             {!b ? (
-              <Card>
-                <SectionTitle>No sessions booked yet</SectionTitle>
-                <p className="text-sm text-muted">When an entrepreneur books you, their brief appears here. You will not need to chase context or schedules.</p>
-              </Card>
+              !req && (
+                <Card>
+                  <SectionTitle>No requests or sessions yet</SectionTitle>
+                  <p className="text-sm text-muted">
+                    When the agent matches an entrepreneur to you, their request appears here. You decide: accept with one of your usual
+                    times, or decline. You will not need to chase context or schedules.
+                  </p>
+                </Card>
+              )
             ) : (
               <>
                 <Card>
                   <SectionTitle aside={<SourceBadge source={b.brief_source} />}>Brief for your session</SectionTitle>
                   <p className="text-sm">
-                    <span className="font-semibold">{state.entrepreneur?.full_name}</span>, {formatDay(b.scheduled_at)}.{" "}
+                    <span className="font-semibold">{state.entrepreneur?.full_name}</span>, {formatSlot(b.scheduled_at)}.{" "}
                     {formatNu(b.fee)}, {b.funding_type === "ydf_credit" ? "funded by YDF credit" : "self-paid"}.
                   </p>
                   {state.entrepreneur && (

@@ -106,6 +106,8 @@ export const EVENT_TYPES = [
   "assessment.completed",
   "mentor.match.requested",
   "mentor.selected",
+  "mentor.request.declined",
+  "mentor.request.expired",
   "booking.confirmed",
   "session.completed",
   "action.due_soon",
@@ -115,6 +117,16 @@ export const EVENT_TYPES = [
   "escalation.requested",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
+
+export const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+/** A time a mentor is usually free each week, in Bhutan time (UTC+6). */
+export interface WeeklySlot {
+  day: Weekday;
+  /** "HH:MM", 24-hour clock. */
+  time: string;
+}
 
 /** A mentor as the matching engine and the UI see it (profiles + mentor_profiles). */
 export interface MentorRecord {
@@ -130,6 +142,8 @@ export interface MentorRecord {
   fee: number;
   slots_remaining: number;
   availability_summary: string | null;
+  /** When the mentor is usually free; requests offer the next of these times. */
+  weekly_slots: WeeklySlot[];
   sessions_delivered: number;
   verified: boolean;
   active: boolean;
@@ -206,5 +220,57 @@ export interface ProgressUpdateRecord {
   /** true = carried into the next session's agenda */
   agenda: boolean;
   source: "live_ai" | "fallback" | "human" | "system" | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Mentor requests: the agent asks a mentor, the mentor decides.
+// ---------------------------------------------------------------------------
+
+export const DECLINE_REASONS = ["no_time", "not_my_area", "other"] as const;
+export type DeclineReason = (typeof DECLINE_REASONS)[number];
+export const DECLINE_REASON_LABEL: Record<DeclineReason, string> = {
+  no_time: "No time this week",
+  not_my_area: "Not my area",
+  other: "Another reason",
+};
+
+export type RequestStatus = "pending" | "accepted" | "declined" | "expired" | "cancelled";
+
+/** What a mentor sees in a request: need-to-know only (no phone, no budget). */
+export interface MenteeSummary {
+  full_name: string;
+  location: string | null;
+  business_name: string | null;
+  business_stage: Stage | null;
+  sector: string | null;
+  needs: string[];
+  challenge: string | null;
+  preferred_language: Language;
+  /** Plain facts from the score: why the agent picked this mentor. */
+  why: string[];
+  /** true when the mentee has had a session with this mentor before. */
+  follow_up: boolean;
+}
+
+export interface MentorRequestRecord {
+  id: string;
+  entrepreneur_id: string;
+  mentor_id: string;
+  round_id: string;
+  attempt: number;
+  kind: "match" | "direct";
+  score: number | null;
+  funding_type: FundingType;
+  fee: number;
+  mentee_summary: MenteeSummary;
+  offered_slots: string[];
+  status: RequestStatus;
+  decline_reason: DeclineReason | null;
+  decline_note: string | null;
+  scheduled_at: string | null;
+  booking_id: string | null;
+  expires_at: string;
+  responded_at: string | null;
   created_at: string;
 }

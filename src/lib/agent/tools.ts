@@ -1,9 +1,11 @@
 import "server-only";
 import type { z } from "zod";
 import { loadActionItem, loadEntrepreneur, loadMentor, loadMentors } from "../data";
-import { isEligible, topMatches } from "../matching/score-mentor";
+import { fundingFor, isBookable, menteeSummary, REQUEST_TTL_HOURS } from "../matching/requests";
+import { isEligible, scoreMentor, topMatches } from "../matching/score-mentor";
+import { upcomingSlots } from "../matching/slots";
 import { db, DbError, must } from "../supabase/server";
-import type { ActionItemRecord, ActionStatus, ResourceRecord } from "../types";
+import type { ActionItemRecord, ActionStatus, MentorRequestRecord, ResourceRecord } from "../types";
 import { extractFromText } from "./extract";
 import { ToolInputs, type ToolName } from "./schemas";
 
@@ -12,7 +14,9 @@ import { ToolInputs, type ToolName } from "./schemas";
 // - every input is validated with a schema;
 // - each event type may only use its allowed tools (see ALLOWED_TOOLS);
 // - tools only touch the entities they are given and check ownership;
-// - nothing here approves credit, funding, payments or mentors.
+// - nothing here approves credit, funding, payments or mentors;
+// - the agent can ASK a mentor, but only the mentor can accept (and only
+//   then is anything booked or any credit used).
 
 export class ToolError extends Error {
   constructor(
@@ -95,21 +99,69 @@ async function find_matching_mentors(input: In<"find_matching_mentors">) {
   };
 }
 
-async function create_booking_request(input: In<"create_booking_request">) {
-  const res = await db().rpc("create_booking", {
-    p_entrepreneur_id: input.entrepreneur_id,
-    p_mentor_id: input.mentor_id,
-    p_funding_type: input.funding_type,
-    p_idempotency_key: input.idempotency_key,
-  });
-  if (res.error) {
-    const code = /^[A-Z_]+$/.test(res.error.message) ? res.error.message : "BOOKING_FAILED";
-    throw new ToolError(code, res.error.message);
-  }
-  const booking = res.data as { id: string; fee: number; funding_type: string; scheduled_at: string };
+/**
+ * Sends a mentoring request to one mentor. The mentor decides: nothing is
+ * booked and no credit is used until they accept and pick a time.
+ */
+async function send_mentor_request(input: In<"send_mentor_request">, env: ToolEnv) {
+  const [entrepreneur, mentor] = await Promise.all([loadEntrepreneur(input.entrepreneur_id), loadMentor(input.mentor_id)]);
+  if (!entrepreneur) throw new ToolError("NOT_FOUND", "Entrepreneur not found.");
+  if (!mentor || !isBookable(mentor)) throw new ToolError("NOT_BOOKABLE", "Mentor is not verified, active and available.");
+
+  // Idempotent: the same mentor in the same round is asked once.
+  const existing = must(
+    await db().from("mentor_requests").select("*").eq("round_id", input.round_id).eq("mentor_id", input.mentor_id).maybeSingle(),
+    "load request",
+  ) as MentorRequestRecord | null;
+  if (existing) return { result: { request: existing, mentor }, summary: `${mentor.full_name} was already asked in this round.` };
+
+  const offered = upcomingSlots(mentor.weekly_slots, env.now);
+  if (offered.length === 0) throw new ToolError("NO_TIMES", "Mentor has no upcoming times.");
+
+  const [credit, previous] = await Promise.all([
+    db()
+      .from("sponsorship_credits")
+      .select("amount_remaining, status")
+      .eq("entrepreneur_id", input.entrepreneur_id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle(),
+    db()
+      .from("bookings")
+      .select("id")
+      .eq("entrepreneur_id", input.entrepreneur_id)
+      .eq("mentor_id", input.mentor_id)
+      .eq("status", "completed")
+      .limit(1),
+  ]);
+  const activeCredit = must(credit, "load credit") as { amount_remaining: number; status: string } | null;
+  const followUp = (must(previous, "load previous sessions") as Array<{ id: string }>).length > 0;
+  const scored = scoreMentor(entrepreneur, mentor);
+
+  const res = await db()
+    .from("mentor_requests")
+    .insert({
+      entrepreneur_id: input.entrepreneur_id,
+      mentor_id: mentor.id,
+      round_id: input.round_id,
+      attempt: input.attempt,
+      kind: input.kind,
+      score: scored.score,
+      funding_type: fundingFor(activeCredit ? { ...activeCredit, amount_remaining: Number(activeCredit.amount_remaining) } : null, mentor.fee),
+      fee: mentor.fee,
+      mentee_summary: menteeSummary(entrepreneur, scored, followUp),
+      offered_slots: offered,
+      status: "pending",
+      expires_at: iso(new Date(env.now.getTime() + REQUEST_TTL_HOURS * 3_600_000)),
+      created_at: iso(env.now),
+    })
+    .select("*")
+    .single();
+  if (res.error?.code === "23505") throw new ToolError("REQUEST_OPEN", "This mentee already has an open mentor request.");
+  const request = must(res, "send request") as MentorRequestRecord;
   return {
-    result: booking,
-    summary: `Booking ${booking.id.slice(0, 8)} confirmed (${booking.funding_type}, Nu. ${booking.fee}).`,
+    result: { request, mentor },
+    summary: `Asked ${mentor.full_name} (request ${input.attempt}), offering ${offered.length} times; reply due in ${REQUEST_TTL_HOURS} hours.`,
   };
 }
 
@@ -117,7 +169,7 @@ async function create_session_brief(input: In<"create_session_brief">) {
   const booking = must(
     await db().from("bookings").select("*").eq("id", input.booking_id).maybeSingle(),
     "load booking",
-  ) as { id: string; entrepreneur_id: string; mentor_id: string; scheduled_at: string; fee: number } | null;
+  ) as { id: string; entrepreneur_id: string; mentor_id: string; scheduled_at: string; fee: number; idempotency_key: string } | null;
   if (!booking) throw new ToolError("NOT_FOUND", "Booking not found.");
   const [entrepreneur, mentor] = await Promise.all([loadEntrepreneur(booking.entrepreneur_id), loadMentor(booking.mentor_id)]);
   if (!entrepreneur || !mentor) throw new ToolError("NOT_FOUND", "Booking participants not found.");
@@ -378,7 +430,7 @@ async function request_mentor_help(input: In<"request_mentor_help">, env: ToolEn
 const IMPLEMENTATIONS = {
   get_entrepreneur_context,
   find_matching_mentors,
-  create_booking_request,
+  send_mentor_request,
   create_session_brief,
   extract_action_items,
   update_action_status,

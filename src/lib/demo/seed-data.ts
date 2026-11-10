@@ -15,7 +15,7 @@
 //     (never returned), so a permits blocker must go to YDF.
 
 import { DEMO_IDS } from "./ids";
-import type { Language, MentorRecord, ResourceRecord } from "../types";
+import type { Language, MentorRecord, ResourceRecord, WeeklySlot } from "../types";
 
 const M = DEMO_IDS.mentors;
 
@@ -23,7 +23,7 @@ interface SeedMentor extends MentorRecord {
   location: string;
 }
 
-export const SEED_MENTORS: SeedMentor[] = [
+const BASE_MENTORS: Array<Omit<SeedMentor, "weekly_slots">> = [
   {
     id: M.dekiWangmo,
     full_name: "Deki Wangmo",
@@ -281,6 +281,54 @@ export const SEED_MENTORS: SeedMentor[] = [
   },
 ];
 
+// When each mentor is usually free (Bhutan time). A request offers the next of
+// these times, and the mentor picks one when accepting.
+const WEEKLY_SLOTS: Record<string, WeeklySlot[]> = {
+  [M.dekiWangmo]: [
+    { day: "tue", time: "17:30" },
+    { day: "thu", time: "10:00" },
+    { day: "sat", time: "15:00" },
+  ],
+  [M.karmaTshering]: [{ day: "mon", time: "09:00" }],
+  [M.sonamChoden]: [
+    { day: "mon", time: "18:00" },
+    { day: "wed", time: "18:00" },
+    { day: "sat", time: "10:00" },
+  ],
+  [M.ugyenLhendup]: [
+    { day: "tue", time: "09:30" },
+    { day: "fri", time: "16:00" },
+  ],
+  [M.kinleyWangchuk]: [{ day: "wed", time: "10:00" }],
+  [M.chokiLhamo]: [
+    { day: "mon", time: "08:00" },
+    { day: "thu", time: "18:30" },
+  ],
+  [M.peldenYangzom]: [
+    { day: "fri", time: "10:00" },
+    { day: "sun", time: "11:00" },
+  ],
+  [M.jigmeNamgyel]: [
+    { day: "tue", time: "14:00" },
+    { day: "thu", time: "14:00" },
+  ],
+  [M.yeshiDema]: [
+    { day: "wed", time: "17:00" },
+    { day: "sat", time: "09:00" },
+  ],
+  [M.namgayWangdi]: [{ day: "mon", time: "10:00" }],
+  [M.dawaPenjor]: [{ day: "thu", time: "16:30" }],
+  [M.tshewangRinzin]: [],
+  [M.phuntshoWangmo]: [
+    { day: "mon", time: "15:00" },
+    { day: "fri", time: "09:00" },
+  ],
+  [M.sangayTenzin]: [{ day: "sat", time: "11:00" }],
+  [M.rinchenZangmo]: [{ day: "tue", time: "18:00" }],
+};
+
+export const SEED_MENTORS: SeedMentor[] = BASE_MENTORS.map((m) => ({ ...m, weekly_slots: WEEKLY_SLOTS[m.id] ?? [] }));
+
 export const SEED_PEMA = {
   id: DEMO_IDS.pema,
   full_name: "Pema Yangchen",
@@ -419,6 +467,7 @@ export function buildSeedPayload() {
       fee: m.fee,
       slots_remaining: m.slots_remaining,
       availability_summary: m.availability_summary,
+      weekly_slots: m.weekly_slots,
       sessions_delivered: m.sessions_delivered,
       verified: m.verified,
       active: m.active,

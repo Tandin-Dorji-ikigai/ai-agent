@@ -8,12 +8,12 @@ const VIEWS = [
   {
     href: "/entrepreneur",
     title: "Entrepreneur",
-    body: "Pema's phone: needs assessment, matched mentors, booking with YDF credit, session prep, actions and the agent inbox.",
+    body: "Pema's phone: needs assessment, matched mentors, the agent's mentor request, session prep, actions and the agent inbox.",
   },
   {
     href: "/mentor",
     title: "Mentor",
-    body: "The mentor's brief, quick session notes, and a check of the agent's draft actions before anything is saved.",
+    body: "Requests from the agent to accept (with a time) or decline, the brief, quick session notes, and a check of the agent's draft actions.",
   },
   {
     href: "/ydf",

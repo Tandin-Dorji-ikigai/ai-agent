@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// End-to-end check of the full 14-step demo against a running app.
+// End-to-end check of the full 14-step demo against a running app, plus the
+// mentor-request branches (decline, no reply, hand-over to YDF).
 //
 //   npm run dev            (in one terminal)
 //   npm run demo:e2e       (in another)
@@ -94,17 +95,50 @@ async function runOnce(n, fx) {
   check("4  every match has an explanation", s.matches.every((x) => x.explanation), s.matches.map((x) => x.explanation));
   check("   most-booked mentor is not in the top 3", s.most_booked && !s.matches.some((x) => x.mentor.id === s.most_booked.mentor.id), s.most_booked);
 
-  // 5-8. Booking with YDF credit
-  const key = `e2e-${n}-${Date.now()}`;
+  // 5-8. The agent asks the best match; the mentor decides and picks a time
   const deki = fx.ids.mentors.dekiWangmo;
-  const b1 = await call("POST", "/api/booking", { mentor_id: deki, funding_type: "ydf_credit", idempotency_key: key });
-  check("5-7 booking created with YDF credit", b1.status === 200 && b1.json.booking_id, b1.json);
-  const b2 = await call("POST", "/api/booking", { mentor_id: deki, funding_type: "ydf_credit", idempotency_key: key });
-  check("   repeat request returns the same booking", b2.json.booking_id === b1.json.booking_id, b2.json);
-  const b3 = await call("POST", "/api/booking", { mentor_id: deki, funding_type: "ydf_credit", idempotency_key: `${key}-other` });
-  check("   second booking with the same mentor is refused", b3.status === 409 && b3.json.code === "BOOKING_ALREADY_ACTIVE", b3.json);
+  const asked = s.pending_request;
+  check(
+    "5  agent asks the best match (Deki); nothing booked or paid yet",
+    asked?.mentor.id === deki && asked.status === "pending" && asked.attempt === 1 && !s.booking && s.credit?.amount_remaining === 3000,
+    { asked, booking: s.booking, credit: s.credit },
+  );
+  check("   the request offers Deki's own times, paid with YDF credit", asked?.offered_slots.length >= 1 && asked.funding_type === "ydf_credit", asked);
+  check(
+    "   Deki sees needs and why, not a phone number or budget",
+    asked?.mentee_summary.needs.length === 3 &&
+      asked.mentee_summary.why.length > 0 &&
+      !Object.keys(asked.mentee_summary).some((k) => /budget|phone/.test(k)) &&
+      !/1,?500|Nu\./.test(JSON.stringify(asked.mentee_summary)),
+    asked?.mentee_summary,
+  );
+  check(
+    "   Pema is told who was asked, and Sonam is next",
+    s.messages.some((x) => /asked Deki Wangmo/.test(x.body)) && s.request_round?.next_mentor?.mentor.full_name === "Sonam Choden",
+    { messages: s.messages.map((x) => x.body), next: s.request_round?.next_mentor },
+  );
+  check("   the mentor view shows Deki with the request", s.mentor_for_view?.id === deki, s.mentor_for_view);
+  const st1 = await call("POST", "/api/requests/start");
+  check("   auto-start does nothing while Deki is deciding", st1.status === 200 && st1.json.started === false && st1.json.reason === "already_asked", st1.json);
+  const badSlot = await call("POST", "/api/requests/accept", { request_id: asked?.id, scheduled_at: "2030-01-01T04:00:00.000Z" });
+  check("   accepting a time Deki did not offer is refused", badSlot.status === 409 && badSlot.json.code === "SLOT_NOT_OFFERED", badSlot.json);
+  const slot = asked?.offered_slots[0];
+  const b1 = await call("POST", "/api/requests/accept", { request_id: asked?.id, scheduled_at: slot });
+  check("6  Deki accepts and picks a time", b1.status === 200 && b1.json.booking_id && b1.json.outcome?.status === "completed", b1.json);
+  const b2 = await call("POST", "/api/requests/accept", { request_id: asked?.id, scheduled_at: slot });
+  check("   accepting twice returns the same booking", b2.json.booking_id === b1.json.booking_id && b2.json.outcome?.status === "skipped", b2.json);
+  const late = await call("POST", "/api/requests/decline", { request_id: asked?.id, reason: "no_time" });
+  check("   an accepted request cannot then be declined", late.status === 409 && late.json.code === "REQUEST_NOT_PENDING", late.json);
   s = await state();
-  check("   credit deducted exactly once (3,000 -> 1,500)", s.credit?.amount_remaining === 1500, s.credit);
+  check(
+    "7  booked at Deki's chosen time with YDF credit (3,000 -> 1,500, once)",
+    s.booking?.funding_type === "ydf_credit" && new Date(s.booking.scheduled_at).getTime() === new Date(slot).getTime() && s.credit?.amount_remaining === 1500,
+    { booking: s.booking, credit: s.credit },
+  );
+  check("   Pema is told Deki accepted, with the time", s.messages.some((x) => /Deki Wangmo accepted your request/.test(x.body)), s.messages.map((x) => x.body));
+  check("   the request round shows accepted", s.request_round?.status === "accepted" && !s.pending_request, s.request_round);
+  const st2 = await call("POST", "/api/requests/start");
+  check("   auto-start does nothing once a session is booked", st2.json.started === false && st2.json.reason === "booked", st2.json);
   check("8  entrepreneur and mentor briefs produced", !!s.booking?.entrepreneur_brief && !!s.booking?.mentor_brief, s.booking);
 
   // Handover contract: validation before anything is saved
@@ -192,9 +226,17 @@ async function runOnce(n, fx) {
   check("   dashboard shows 1 of 3 actions completed", s.metrics.actions_completed === 1 && s.metrics.actions_total === 3, s.metrics);
   check("   agenda includes the obstacle and the done action", s.agenda.some((a) => a.kind === "obstacle") && s.agenda.some((a) => a.kind === "done"), s.agenda);
 
-  const nb = await call("POST", "/api/booking", { mentor_id: deki, funding_type: "ydf_credit", idempotency_key: `${key}-followup` });
+  const fr = await call("POST", "/api/requests/ask", { mentor_id: deki });
   s = await state();
-  check("   next session: follow-up booked with YDF credit", nb.status === 200 && s.credit?.amount_remaining === 0, { nb: nb.json, credit: s.credit });
+  const fq = s.pending_request;
+  check(
+    "   next session: the agent asks Deki for a follow-up",
+    fr.status === 200 && fq?.mentor.id === deki && fq.kind === "direct" && fq.mentee_summary.follow_up === true,
+    { fr: fr.json, fq },
+  );
+  const fa = await call("POST", "/api/requests/accept", { request_id: fq?.id, scheduled_at: fq?.offered_slots[0] });
+  s = await state();
+  check("   Deki accepts; the follow-up uses the rest of the YDF credit", fa.status === 200 && s.credit?.amount_remaining === 0, { fa: fa.json, credit: s.credit });
   check(
     "   follow-up brief is built from progress",
     s.ai_mode === "live"
@@ -242,12 +284,79 @@ async function runOnce(n, fx) {
   s = await state();
   check(
     "reset restores the starting state",
-    reset2.status === 200 && !s.booking && s.actions.length === 0 && s.escalations.length === 0 && s.messages.length === 0 && s.runs.length === 0 && s.progress.length === 0 && s.clock.offset_days === 0 && s.credit?.amount_remaining === 3000,
+    reset2.status === 200 && !s.booking && !s.request_round && s.actions.length === 0 && s.escalations.length === 0 && s.messages.length === 0 && s.runs.length === 0 && s.progress.length === 0 && s.clock.offset_days === 0 && s.credit?.amount_remaining === 3000,
     { booking: s.booking, actions: s.actions.length, escalations: s.escalations.length, offset: s.clock.offset_days },
   );
 }
 
+// The other branches of the request loop: decline, no reply, YDF hand-over, starting again.
+async function declineRun(fx) {
+  console.log("\nMentor says no, or does not reply");
+  await call("POST", "/api/demo/reset");
+  await call("POST", "/api/assessment", fx.assessment);
+  await call("POST", "/api/matches");
+  let s = await state();
+  const first = s.pending_request;
+  check("   Deki is asked first", first?.mentor.full_name === "Deki Wangmo" && first.attempt === 1, first);
+
+  const d1 = await call("POST", "/api/requests/decline", { request_id: first?.id, reason: "no_time", note: "Travelling for the tshechu." });
+  check("   Deki declines (no time): the agent asks Sonam next", d1.status === 200 && d1.json.outcome?.decision === "Ask Sonam Choden next", d1.json);
+  const d1b = await call("POST", "/api/requests/decline", { request_id: first?.id, reason: "no_time" });
+  check("   declining twice does not ask another mentor", d1b.status === 200 && d1b.json.outcome?.status === "skipped", d1b.json);
+  s = await state();
+  check(
+    "   Pema is told why and who is next, without Deki's private note",
+    s.messages.some((x) => /Deki has no time.*Sonam Choden/.test(x.body)) && !s.messages.some((x) => /tshechu/i.test(x.body)),
+    s.messages.map((x) => x.body),
+  );
+  check("   still nothing booked or paid", !s.booking && s.credit?.amount_remaining === 3000, { booking: s.booking, credit: s.credit });
+  check("   the mentor view now shows Sonam's request", s.mentor_for_view?.full_name === "Sonam Choden" && s.pending_request?.attempt === 2, s.pending_request);
+
+  const ff = await call("POST", "/api/demo/fast-forward", { days: 3 });
+  check("   Sonam does not reply in 2 days: the request expires", ff.status === 200 && ff.json.expired_request_count === 1, ff.json);
+  s = await state();
+  check(
+    "   the agent asks Ugyen third, the last before YDF",
+    s.pending_request?.mentor.full_name === "Ugyen Lhendup" && s.pending_request.attempt === 3 && !s.request_round?.next_mentor,
+    s.request_round,
+  );
+
+  const d3 = await call("POST", "/api/requests/decline", { request_id: s.pending_request?.id, reason: "not_my_area" });
+  check("   after three mentors, the agent hands over to YDF", d3.json.outcome?.decision === "Hand over to YDF", d3.json);
+  s = await state();
+  check(
+    "   the YDF escalation lists who was asked and why",
+    s.escalations[0]?.reason === "no_mentor_available" &&
+      /Deki Wangmo \(no time this week\).*Sonam Choden \(no reply\).*Ugyen Lhendup \(not my area\)/.test(s.escalations[0].summary),
+    s.escalations,
+  );
+  check("   Pema sees the request is with YDF", s.request_round?.status === "escalated" && s.request_round.escalation_code === s.escalations[0]?.code, s.request_round);
+  const st3 = await call("POST", "/api/requests/start");
+  check("   auto-start does not ask again while YDF is handling it", st3.json.started === false && st3.json.reason === "with_ydf", st3.json);
+  check("   still nothing booked or paid", !s.booking && s.credit?.amount_remaining === 3000, s.credit);
+
+  await call("POST", "/api/matches");
+  s = await state();
+  const fresh = s.pending_request;
+  check("   matching again starts a new round with Deki", fresh?.mentor.full_name === "Deki Wangmo" && s.request_round?.requests.length === 1, s.request_round);
+  await call("POST", "/api/matches");
+  s = await state();
+  check(
+    "   changing answers replaces the open request (never two open)",
+    !!s.pending_request && s.pending_request.id !== fresh?.id && s.request_round?.requests.length === 1,
+    s.request_round,
+  );
+  check("   no agent run failed", s.runs.every((x) => x.status === "completed"), s.runs.filter((x) => x.status !== "completed"));
+  if (process.env.KEEP_END_STATE !== "1") await call("POST", "/api/demo/reset");
+}
+
 const fx = await (await fetch(`${BASE}/api/demo/fixtures`)).json();
-for (let i = 1; i <= RUNS; i++) await runOnce(i, fx);
+if (process.env.KEEP_END_STATE === "1") {
+  await declineRun(fx);
+  for (let i = 1; i <= RUNS; i++) await runOnce(i, fx);
+} else {
+  for (let i = 1; i <= RUNS; i++) await runOnce(i, fx);
+  await declineRun(fx);
+}
 console.log(failures === 0 ? `\nAll checks passed (${RUNS} runs).` : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
