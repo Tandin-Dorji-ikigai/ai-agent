@@ -2,6 +2,7 @@ import { CallConsentInputSchema } from "@/lib/agent/schemas";
 import { setConsent } from "@/lib/calls/calls";
 import { demoNow } from "@/lib/clock";
 import { handleError, ok, parseBody } from "@/lib/http";
+import { wrongSide } from "@/lib/viewer";
 
 // POST /api/calls/consent { call_id, role, consent: true | false }
 // Recording starts only when BOTH people agree. consent: false withdraws it
@@ -9,6 +10,8 @@ import { handleError, ok, parseBody } from "@/lib/http";
 export async function POST(req: Request) {
   const body = await parseBody(req, CallConsentInputSchema);
   if ("error" in body) return body.error;
+  const denied = await wrongSide(body.data.role);
+  if (denied) return denied;
   try {
     const { call_id, role, consent } = body.data;
     return ok(await setConsent(call_id, role, consent, await demoNow()));

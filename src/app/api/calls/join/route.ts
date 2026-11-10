@@ -2,6 +2,7 @@ import { CallJoinInputSchema } from "@/lib/agent/schemas";
 import { joinCall } from "@/lib/calls/calls";
 import { demoNow } from "@/lib/clock";
 import { handleError, ok, parseBody } from "@/lib/http";
+import { wrongSide } from "@/lib/viewer";
 
 // POST /api/calls/join { booking_id, role: "mentor" | "entrepreneur" }
 // Only for a CONFIRMED booking, only its two participants. Creates the room on
@@ -11,6 +12,8 @@ import { handleError, ok, parseBody } from "@/lib/http";
 export async function POST(req: Request) {
   const body = await parseBody(req, CallJoinInputSchema);
   if ("error" in body) return body.error;
+  const denied = await wrongSide(body.data.role);
+  if (denied) return denied;
   try {
     return ok(await joinCall(body.data.booking_id, body.data.role, await demoNow()));
   } catch (err) {

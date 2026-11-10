@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, Bell, CalendarDays, Check, Compass, Eye, EyeOff, FileText, Home,
+  ArrowLeft, ArrowRight, Bell, CalendarDays, Check, Compass, FileText, Home,
   Inbox, Leaf, Lightbulb, Plus, ShieldCheck, Sparkles, Trash2, UserRound, Users, Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import { VoiceIntro } from "@/components/voice/voice-intro";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { MatchList } from "@/components/match-list";
 import { MentorProgress } from "@/components/mentor-progress";
+import { SignInForm, SignOutButton } from "@/components/sign-in-form";
 
 const DAY_NAME = { sun: "Sunday", mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday" };
 const firstName = name => (name ?? "").split(" ")[0];
@@ -80,8 +81,11 @@ export default function App({ children }) {
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("no_time");
   const [declineNote, setDeclineNote] = useState("");
-  const [passwordVisible, setPasswordVisible] = useState(false);
   const booking = state?.booking;
+  // Who this device signed in as. Without sign-in (local development) everyone is "team".
+  const viewer = state?.viewer ?? { role: "team", signed_in: false };
+  const canLoadDemo = viewer.role === "team" || viewer.role === "ydf";
+  const loadDemoHint = "Ask the team to load the demo data.";
   // The agent's mentor request (asked automatically after matching; the mentor decides).
   const summary = requestSummary(state);
   const pendingRequest = state?.pending_request ?? null;
@@ -287,7 +291,7 @@ export default function App({ children }) {
         else void saveAssessment();
       }}>
         {registering && <Alert className="mb-6"><AlertTitle>{isMentor ? "Mentor application preview" : "Demo onboarding"}</AlertTitle><AlertDescription>{isMentor ? "This form is a design preview. No application is sent for review." : "No new account is created in this demo. Your business answers are saved to the demo profile; contact details and extra preferences stay in this tab."}</AlertDescription></Alert>}
-        {!isMentor && registering && state && !state.seeded && <Alert className="mb-6"><AlertTitle>Load the demo before saving</AlertTitle><AlertDescription>The connected assessment needs the fictional demo profile.<Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => act("reset", "/api/demo/reset")}>{busy === "reset" ? "Loading…" : "Load demo data"}</Button></AlertDescription></Alert>}
+        {!isMentor && registering && state && !state.seeded && <Alert className="mb-6"><AlertTitle>Load the demo before saving</AlertTitle><AlertDescription>The connected assessment needs the fictional demo profile.{canLoadDemo ? <Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => act("reset", "/api/demo/reset")}>{busy === "reset" ? "Loading…" : "Load demo data"}</Button> : ` ${loadDemoHint}`}</AlertDescription></Alert>}
         {registering && <><div className="signup-step-summary"><span>Step {activeStep + 1} of {steps.length}</span><strong>{steps[activeStep].title}</strong></div><div className="stepper" aria-label="Registration progress">
           {steps.map((item, index) => <div key={item.title} className={`registration-step ${index === step ? "current" : index < step ? "done" : ""}`} aria-current={index === step ? "step" : undefined}>
             <span className="step-bubble">{index < step ? <Check className="size-3.5" /> : index + 1}</span><span>{item.title}</span>
@@ -412,14 +416,8 @@ export default function App({ children }) {
     content = <div className="login-screen">
       <Button variant="ghost" className="self-start mb-5" onClick={() => go("welcome")}><ArrowLeft className="size-4" />Back</Button>
       <div className="page-header"><div><p className="kicker">{role === "mentor" ? "MENTOR SIGN IN" : "YOUR NEXT STEP IS WAITING"}</p><h1>Welcome back.</h1><p className="subtitle">{role === "mentor" ? "A little of your experience can make a big difference." : "Pick up your journey, one conversation at a time."}</p></div></div>
-      <Alert className="mb-6"><AlertTitle>Sign-in preview</AlertTitle><AlertDescription>Authentication is not connected. Continue to the shared demo workspace; these credentials are not sent or saved.</AlertDescription></Alert>
-      <Card><CardHeader><CardTitle>Sign in to your {role === "mentor" ? "mentor" : "entrepreneur"} account</CardTitle><CardDescription>Good to have you here again.</CardDescription></CardHeader><CardContent>
-        <form className="stack" onSubmit={event => { event.preventDefault(); go(role === "mentor" ? "mentor-dashboard" : "connect"); }}>
-          <div className="field"><Label htmlFor="login-email">Email address</Label><Input id="login-email" type="email" autoComplete="username" placeholder="you@example.com" /></div>
-          <div className="field"><Label htmlFor="login-password">Password</Label><div className="password-field"><Input id="login-password" type={passwordVisible ? "text" : "password"} autoComplete="current-password" placeholder="Enter your password" /><Button type="button" variant="ghost" size="icon" className="password-toggle" aria-label={passwordVisible ? "Hide password" : "Show password"} onClick={() => setPasswordVisible(visible => !visible)}>{passwordVisible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div>
-          <div className="checkbox-row login-remember"><Checkbox id="remember-login" /><Label htmlFor="remember-login">Remember me</Label></div>
-          <Button type="submit" className="w-full login-submit">Open demo workspace<ArrowRight className="size-4" /></Button>
-        </form>
+      <Card><CardHeader><CardTitle>Sign in as {role === "mentor" ? "the mentor" : "the entrepreneur"}</CardTitle><CardDescription>Enter the {role === "mentor" ? "mentor" : "entrepreneur"} password the team gave you. This test version has no personal accounts, so please don’t enter real personal details anywhere in it.</CardDescription></CardHeader><CardContent>
+        <SignInForm role={role} label={role === "mentor" ? "Mentor password" : "Entrepreneur password"} />
       </CardContent></Card>
       {role === "entrepreneur" ? <div className="login-footer"><p className="subtitle">New here? There’s a place for you.</p><Button variant="link" onClick={() => go("signup-choice")}>Start your journey<ArrowRight className="size-3.5" /></Button></div> : <p className="subtitle text-center mt-6">Your mentor account is provided by the programme.</p>}
     </div>;
@@ -466,7 +464,7 @@ export default function App({ children }) {
   if (isCall) return <>{children}{content}</>;
 
   if (!isPublic && (!state || !state.seeded)) {
-    content = <Card><CardContent className="empty-state"><Users className="size-8 text-primary" /><h1>{error ? "Mentorship data is unavailable" : state ? "Start the mentoring demo" : "Loading your workspace…"}</h1><p className="muted">{error ? error.message : state ? "Load the fictional entrepreneur, mentor profiles and sponsorship credit to explore the connected flow." : "Getting your latest mentorship information."}</p>{error ? <Button variant="outline" onClick={() => refresh()}>Try again</Button> : state && <Button disabled={Boolean(busy)} onClick={() => act("reset", "/api/demo/reset")}>{busy === "reset" ? "Loading…" : "Load demo data"}</Button>}</CardContent></Card>;
+    content = <Card><CardContent className="empty-state"><Users className="size-8 text-primary" /><h1>{error ? "Mentorship data is unavailable" : state ? "Start the mentoring demo" : "Loading your workspace…"}</h1><p className="muted">{error ? error.message : state ? "Load the fictional entrepreneur, mentor profiles and sponsorship credit to explore the connected flow." : "Getting your latest mentorship information."}</p>{error ? <Button variant="outline" onClick={() => refresh()}>Try again</Button> : state && (canLoadDemo ? <Button disabled={Boolean(busy)} onClick={() => act("reset", "/api/demo/reset")}>{busy === "reset" ? "Loading…" : "Load demo data"}</Button> : <p className="muted">{loadDemoHint}</p>)}</CardContent></Card>;
   }
 
   const notices = <>
@@ -485,7 +483,7 @@ export default function App({ children }) {
     <div className="entrepreneur-app">
       <header className="entrepreneur-topbar">
         <span className="app-area-label">Entrepreneur</span>
-        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar></div>
+        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar>{viewer.signed_in && <SignOutButton area="entrepreneur" iconOnly />}</div>
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
@@ -501,6 +499,7 @@ export default function App({ children }) {
         </nav>
         <div className="side-bottom">
           <Button variant="ghost" className="nav-item" onClick={() => go("welcome")}><ArrowLeft className="size-[18px]" /><span>Back to welcome</span></Button>
+          {viewer.signed_in && <SignOutButton area="mentor" className="nav-item" iconClassName="size-[18px]" />}
           <Separator className="my-3" />
           <div className="user-chip"><Avatar className="size-8"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar><div><strong>{mentor.name}</strong><p>Mentor</p></div></div>
         </div>

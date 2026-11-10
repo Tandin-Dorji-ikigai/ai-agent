@@ -1,17 +1,90 @@
-// The shared demo password (for a hosted test deployment). Not user accounts:
-// everyone types the same password once per device; it keeps strangers from
-// resetting the demo, using the AI and call quotas, or joining calls.
-// With DEMO_PASSWORD unset (local development) there is no gate.
-// Works in the proxy and in route handlers (Web Crypto only).
+// Sign-in for a hosted test deployment: one password per ROLE, not user
+// accounts. Whoever types the mentor password is "the mentor" on that device,
+// and the server (not the page) decides what that device may do.
+//
+//   ENTREPRENEUR_PASSWORD  the entrepreneur (Pema) screens and actions
+//   MENTOR_PASSWORD        the mentor workspace, accepting requests, notes
+//   YDF_PASSWORD           the YDF staff page and the demo controls
+//   DEMO_PASSWORD          the team: everything, for building and presenting
+//
+// With none of them set (local development) there is no sign-in at all.
+// Works in the proxy and in route handlers (Web Crypto only, no Node APIs).
+
+export const VIEWER_ROLES = ["entrepreneur", "mentor", "ydf", "team"] as const;
+export type ViewerRole = (typeof VIEWER_ROLES)[number];
+
+export const ROLE_PASSWORD_ENV: Record<ViewerRole, string> = {
+  entrepreneur: "ENTREPRENEUR_PASSWORD",
+  mentor: "MENTOR_PASSWORD",
+  ydf: "YDF_PASSWORD",
+  team: "DEMO_PASSWORD",
+};
+
+export const ROLE_LABEL: Record<ViewerRole, string> = {
+  entrepreneur: "the entrepreneur",
+  mentor: "the mentor",
+  ydf: "YDF staff",
+  team: "the team",
+};
 
 export const ACCESS_COOKIE = "mentorflow_access";
 export const ACCESS_DAYS = 30;
 
-/** What the cookie holds: a keyed hash of the password, never the password itself. */
-export async function accessToken(password: string): Promise<string> {
+export type RolePasswords = Partial<Record<ViewerRole, string>>;
+
+/** The role passwords that are set (empty values count as not set). */
+export function rolePasswords(env: Record<string, string | undefined> = process.env): RolePasswords {
+  const out: RolePasswords = {};
+  for (const role of VIEWER_ROLES) {
+    const value = env[ROLE_PASSWORD_ENV[role]];
+    if (value) out[role] = value;
+  }
+  return out;
+}
+
+/** Sign-in is on as soon as any role password is set. */
+export function gateOn(passwords: RolePasswords): boolean {
+  return Object.keys(passwords).length > 0;
+}
+
+/** A keyed hash of the password, bound to its role. Never the password itself. */
+export async function accessToken(role: ViewerRole, password: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode("mentorflow-demo-access-v1"));
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`mentorflow-access-v2:${role}`));
   return [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** What the cookie holds: "<role>.<keyed hash>". Changing a password signs that role out everywhere. */
+export async function accessCookieValue(role: ViewerRole, password: string): Promise<string> {
+  return `${role}.${await accessToken(role, password)}`;
+}
+
+/** The role a cookie proves, or null (missing, forged, or that role's password changed). */
+export async function roleFromCookie(value: string | undefined, passwords: RolePasswords): Promise<ViewerRole | null> {
+  if (!value) return null;
+  const dot = value.indexOf(".");
+  const role = value.slice(0, dot) as ViewerRole;
+  if (dot < 1 || !VIEWER_ROLES.includes(role)) return null;
+  const password = passwords[role];
+  if (!password) return null;
+  return sameText(value.slice(dot + 1), await accessToken(role, password)) ? role : null;
+}
+
+/**
+ * Which role a typed password belongs to. If two roles share a password,
+ * `prefer` (the sign-in page it was typed on) wins.
+ */
+export async function roleForPassword(given: string, passwords: RolePasswords, prefer?: ViewerRole): Promise<ViewerRole | null> {
+  const order = prefer ? [prefer, ...VIEWER_ROLES.filter((r) => r !== prefer)] : [...VIEWER_ROLES];
+  let found: ViewerRole | null = null;
+  for (const role of order) {
+    const password = passwords[role];
+    if (!password) continue;
+    // Compare keyed hashes (same length) and check every role, so timing says nothing.
+    const match = sameText(await accessToken(role, given), await accessToken(role, password));
+    if (match && !found) found = role;
+  }
+  return found;
 }
 
 /** Compares without leaking where two strings first differ. */
@@ -22,8 +95,97 @@ export function sameText(a: string, b: string): boolean {
   return diff === 0;
 }
 
+// ---------------------------------------------------------------------------
+// Who may open what. The team (DEMO_PASSWORD) may open everything.
+// ---------------------------------------------------------------------------
+
+/** Pages and endpoints anyone may open: the sign-in pages and the sign-in endpoint. */
+export const SIGN_IN_PAGES = ["/access", "/entrepreneur/login", "/mentor/login"] as const;
+
+type Rule = "public" | "any" | readonly ViewerRole[];
+
+const ENTREPRENEUR = ["entrepreneur"] as const;
+const MENTOR = ["mentor"] as const;
+const BOTH = ["entrepreneur", "mentor"] as const;
+const YDF = ["ydf"] as const;
+const TEAM_ONLY = [] as const;
+
+/** Every API route and who may call it. A route missing here is team-only (a test checks none is missing). */
+export const API_RULES: Record<string, Rule> = {
+  "/api/access": "public",
+  "/api/state": "any",
+  // Entrepreneur
+  "/api/assessment": ENTREPRENEUR,
+  "/api/assessment/draft": ENTREPRENEUR,
+  "/api/matches": ENTREPRENEUR,
+  "/api/requests/start": ENTREPRENEUR,
+  "/api/requests/ask": ENTREPRENEUR,
+  "/api/inbox/reply": ENTREPRENEUR,
+  "/api/actions/status": ENTREPRENEUR,
+  // Mentor
+  "/api/requests/accept": MENTOR,
+  "/api/requests/decline": MENTOR,
+  "/api/mentors/availability": MENTOR,
+  "/api/session/complete": MENTOR,
+  "/api/actions/confirm": MENTOR,
+  // Both sides of a call (each route also checks the side matches the sign-in)
+  "/api/calls/join": BOTH,
+  "/api/calls/consent": BOTH,
+  "/api/calls/track": BOTH,
+  "/api/calls/end": BOTH,
+  "/api/transcribe": BOTH,
+  // YDF staff: the demo controls and agent retries
+  "/api/demo/reset": YDF,
+  "/api/demo/fast-forward": YDF,
+  "/api/demo/fixtures": YDF,
+  "/api/agent/run": YDF,
+  // Developer tools
+  "/api/dev/extract": TEAM_ONLY,
+};
+
+function under(pathname: string, area: string): boolean {
+  return pathname === area || pathname.startsWith(`${area}/`);
+}
+
+export function ruleFor(pathname: string): Rule {
+  if ((SIGN_IN_PAGES as readonly string[]).includes(pathname)) return "public";
+  if (pathname.startsWith("/api/")) return API_RULES[pathname] ?? TEAM_ONLY;
+  if (under(pathname, "/entrepreneur")) return ENTREPRENEUR;
+  if (under(pathname, "/mentor")) return MENTOR;
+  if (under(pathname, "/ydf")) return YDF;
+  return "any"; // the welcome and get-started pages
+}
+
+export function mayOpen(role: ViewerRole | null, pathname: string): boolean {
+  const rule = ruleFor(pathname);
+  if (rule === "public") return true;
+  if (!role) return false;
+  return role === "team" || rule === "any" || rule.includes(role);
+}
+
+/** The sign-in page for a part of the app. */
+export function signInPathFor(pathname: string): string {
+  if (under(pathname, "/mentor")) return "/mentor/login";
+  if (under(pathname, "/ydf")) return "/access";
+  return "/entrepreneur/login";
+}
+
+/** Where a role starts after signing in. */
+export function homeFor(role: ViewerRole): string {
+  return { entrepreneur: "/entrepreneur/connect", mentor: "/mentor/dashboard", ydf: "/ydf", team: "/" }[role];
+}
+
 /** Only same-site paths, so the sign-in page cannot be used to send people elsewhere. */
 export function safeNext(next: string | null | undefined): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\") || next.startsWith("/access")) return "/";
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
+  if ((SIGN_IN_PAGES as readonly string[]).includes(next.split(/[?#]/)[0])) return "/";
   return next;
+}
+
+/** After signing in: the page they asked for if this role may open it, else the role's start page. */
+export function nextAfterSignIn(role: ViewerRole | null, next: string | null | undefined): string {
+  const target = safeNext(next);
+  if (!role) return target; // sign-in is off
+  if (target === "/" && role !== "team") return homeFor(role);
+  return mayOpen(role, target.split(/[?#]/)[0]) ? target : homeFor(role);
 }

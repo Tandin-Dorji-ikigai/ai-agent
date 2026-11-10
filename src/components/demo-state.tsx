@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
+import { SIGN_IN_PAGES } from "@/lib/access";
 import { asApiError } from "@/lib/client-api";
 import { frontendRequest } from "@/lib/frontend-api";
 import type { ApiError, DemoState } from "@/lib/state-types";
@@ -28,7 +30,10 @@ export function DemoStateProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [lastError, setLastError] = useState<ApiError | null>(null);
   const inFlight = useRef(false);
+  // The sign-in pages show nothing from the demo, and before signing in the API would only answer 401.
+  const onSignInPage = (SIGN_IN_PAGES as readonly string[]).includes(usePathname());
   const query = useQuery({
+    enabled: !onSignInPage,
     queryKey: STATE_KEY,
     queryFn: ({ signal }) => frontendRequest<DemoState>("/api/state", { signal }),
     networkMode: "always",

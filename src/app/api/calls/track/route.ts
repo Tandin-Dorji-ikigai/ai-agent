@@ -2,6 +2,7 @@ import { CallTrackFieldsSchema } from "@/lib/agent/schemas";
 import { MAX_AUDIO_BYTES, UNSUPPORTED_FORMAT_MESSAGE, isAcceptedFormat } from "@/lib/audio/formats";
 import { uploadPart } from "@/lib/calls/calls";
 import { fail, handleError, ok } from "@/lib/http";
+import { wrongSide } from "@/lib/viewer";
 
 // POST /api/calls/track (multipart): call_id, role, part (0, 1, 2, ...),
 // started_at_ms (when this part started, in SERVER time), file.
@@ -20,6 +21,8 @@ export async function POST(req: Request) {
     const first = fields.error.issues[0];
     return fail(400, "INVALID_INPUT", first ? `${first.path.join(".")}: ${first.message}` : "Invalid input.");
   }
+  const denied = await wrongSide(fields.data.role);
+  if (denied) return denied;
   const file = form.get("file");
   if (!(file instanceof File)) return fail(400, "INVALID_INPUT", "No recording received.");
   if (file.size === 0 || file.size > MAX_AUDIO_BYTES) return fail(400, "INVALID_INPUT", "Each part must be under 25 MB. Upload shorter parts.");

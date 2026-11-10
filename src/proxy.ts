@@ -1,27 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE, accessToken, sameText } from "@/lib/access";
+import { ACCESS_COOKIE, ROLE_LABEL, gateOn, mayOpen, roleFromCookie, rolePasswords, signInPathFor } from "@/lib/access";
 
-// The demo password gate (see src/lib/access.ts). Only active when
-// DEMO_PASSWORD is set, as on a hosted test deployment.
+// Role sign-in (see src/lib/access.ts). Only active when a role password is
+// set, as on a hosted test deployment. Pages send people to the right sign-in
+// page; API calls answer 401 (not signed in) or 403 (signed in as another role).
 export async function proxy(request: NextRequest) {
-  const password = process.env.DEMO_PASSWORD;
-  if (!password) return NextResponse.next();
-  const { pathname, search } = request.nextUrl;
-  if (pathname === "/access" || pathname === "/api/access") return NextResponse.next();
+  const passwords = rolePasswords();
+  if (!gateOn(passwords)) return NextResponse.next();
 
-  const cookie = request.cookies.get(ACCESS_COOKIE)?.value ?? "";
-  if (cookie && sameText(cookie, await accessToken(password))) return NextResponse.next();
+  const { pathname, search } = request.nextUrl;
+  const role = await roleFromCookie(request.cookies.get(ACCESS_COOKIE)?.value, passwords);
+  if (mayOpen(role, pathname)) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ ok: false, code: "ACCESS_REQUIRED", message: "Enter the demo password first." }, { status: 401 });
+    return role
+      ? NextResponse.json({ ok: false, code: "WRONG_ROLE", message: `You are signed in as ${ROLE_LABEL[role]}, who cannot do this.` }, { status: 403 })
+      : NextResponse.json({ ok: false, code: "ACCESS_REQUIRED", message: "Sign in first." }, { status: 401 });
   }
   const url = request.nextUrl.clone();
-  url.pathname = "/access";
-  url.search = `?next=${encodeURIComponent(pathname + search)}`;
+  url.pathname = signInPathFor(pathname);
+  const params = new URLSearchParams({ next: pathname + search });
+  if (role) params.set("signed_in_as", role); // the sign-in page explains why they are there
+  url.search = `?${params}`;
   return NextResponse.redirect(url);
 }
 
 export const config = {
-  // Everything except Next.js build files and the favicon.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Everything except Next.js build files, the favicon and the public images.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|[^/]+\\.svg$).*)"],
 };

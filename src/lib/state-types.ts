@@ -1,5 +1,6 @@
 // The JSON returned by GET /api/state. Shared by server and client code.
 
+import type { ViewerRole } from "./access";
 import type { ScoreBreakdown } from "./matching/score-mentor";
 import type { AgendaItem } from "./progress";
 import type {
@@ -187,6 +188,8 @@ export interface DemoStep {
 
 export interface DemoState {
   ok: true;
+  /** Who this device is signed in as. role "team" with signed_in false = sign-in is off (local development). */
+  viewer?: { role: ViewerRole; signed_in: boolean } | null;
   seeded: boolean;
   ai_mode: "fixture" | "live";
   clock: { now: string; offset_days: number };

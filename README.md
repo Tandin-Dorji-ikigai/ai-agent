@@ -140,7 +140,8 @@ scripts/demo-e2e.mjs  end-to-end check
 
 | Method | Path | Demo step |
 |---|---|---|
-| GET | `/api/state` | Everything every view needs |
+| GET | `/api/state` | Everything every view needs, plus `viewer` (who this device is signed in as) |
+| POST / DELETE | `/api/access` | Sign in with a role password `{ password, role?, next? }` → `{ role, next }` / sign out (hosted test version only) |
 | POST | `/api/assessment` | 1 |
 | POST | `/api/assessment/draft` | Voice intro: `{ transcript }` → `{ draft, missing, source }`. Saves nothing; the entrepreneur checks the form and submits it |
 | POST | `/api/matches` | 2-4 |
@@ -163,21 +164,32 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
 
-The demo endpoints have no user accounts. **Do not deploy publicly without `DEMO_PASSWORD`** (see "Deploy a test version"): without it, anyone could reset the data.
+There are no personal accounts. **Do not deploy publicly without the role passwords** (see "Deploy a test version"): without them, anyone could reset the data. With them, every route has a rule for who may call it (`API_RULES` in `src/lib/access.ts`; a test fails if a route is missing).
 
 ## Deploy a test version (Vercel, free)
 
 For testing on real phones: browsers only allow the microphone and camera over HTTPS, which Vercel provides.
 
 1. At vercel.com, sign in with the GitHub account that owns the repo, then **Add New → Project** and **Import** `ai-agent`. Vercel detects Next.js; keep the defaults.
-2. Under **Environment Variables**, add: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_MODE=live`, `GROQ_API_KEY`, `GROQ_TRANSCRIBE_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and **`DEMO_PASSWORD`** (pick one and share it with the team). Never put these in the repo.
-3. **Deploy.** Open the `https://….vercel.app` address, enter the demo password once per device, and follow the demo script. Every push to `main` redeploys.
+2. Under **Environment Variables**, add: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_MODE=live`, `GROQ_API_KEY`, `GROQ_TRANSCRIBE_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and the four sign-in passwords below (all different). Never put these in the repo.
+3. **Deploy.** Open the `https://….vercel.app` address, sign in once per device, and follow the demo script. Every push to `main` redeploys; a changed password applies after the next deploy.
+
+Sign-in is by role, not by person. The password a device types decides what it may open and do; the server checks it on every page and API call, not the page you happen to be on:
+
+| Password | Signs in as | Starts at | May open and do |
+| --- | --- | --- | --- |
+| `ENTREPRENEUR_PASSWORD` | the entrepreneur (Pema) | `/entrepreneur/login` → `/entrepreneur/connect` | entrepreneur screens, needs assessment, mentor requests, replies, the entrepreneur side of calls |
+| `MENTOR_PASSWORD` | the mentor | `/mentor/login` → `/mentor/dashboard` | mentor workspace, accept/decline, availability, session notes, confirming actions, the mentor side of calls |
+| `YDF_PASSWORD` | YDF staff | `/access` → `/ydf` | the YDF page and the demo controls (reset, fast-forward, agent retries) |
+| `DEMO_PASSWORD` | the team | any sign-in page | everything (building, presenting) |
+
+Opening another role's page sends you to that role's sign-in page with a note saying who you are signed in as; another role's API answers `403 WRONG_ROLE`. **Sign out** is in the entrepreneur top bar and the mentor sidebar. The cookie (a keyed hash bound to the role, never the password) lasts 30 days; changing a role's password signs that role out everywhere.
 
 What to know:
-- **The password is not accounts.** Everyone types the same one; it keeps strangers from resetting the demo, using the AI and call quotas, or joining calls. Who you are still comes from the page you open (`/entrepreneur/…` = Pema, `/mentor/…` = her mentor). Do not enter real personal details.
+- **Roles, not accounts.** Everyone with the mentor password is "the mentor" (who answers for whichever mentor the agent is asking), and everyone with the entrepreneur password is Pema. It keeps strangers out and the two sides apart; it does not tell people apart. Do not enter real personal details.
 - **Same demo data as the laptops:** the hosted app uses the shared Supabase project, so a **Reset demo** anywhere resets it for everyone.
 - **Limits on the free plan:** a request may run up to 5 minutes (enough for transcription and long calls; keep Fluid compute on, the default), and may carry at most 4.5 MB. The app records speech at 32 kbps, sends calls in 3-minute parts, and refuses bigger uploads with a clear message.
-- `npm run demo:e2e` is for local or test databases; it does not send the demo password.
+- `npm run demo:e2e` is for local or test databases; it does not sign in.
 
 ## Responsibility boundaries
 
