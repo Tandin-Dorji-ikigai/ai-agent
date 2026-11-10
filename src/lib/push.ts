@@ -122,8 +122,9 @@ export function callJoinedMessage(joiner: PushRole, joinerName: string, bookingI
     to,
     message: {
       title: `${first} is in the session room`,
-      body: "Tap to join your mentoring call.",
-      url: to === "mentor" ? "/mentor/call" : "/entrepreneur/call",
+      // Tapping joins at once, so the notice that the call is recorded comes first, here.
+      body: "Tap to join. The call is recorded for your notes.",
+      url: to === "mentor" ? "/mentor/call?join=1" : "/entrepreneur/call?join=1",
       tag: `call-${bookingId}`,
     },
   };

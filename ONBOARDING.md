@@ -282,7 +282,7 @@ POST /api/session/complete
   2. Recording starts on its own once both have joined: the server counts each person's FIRST join as agreeing (the screen says the call is recorded, before and during it). **Stop recording** → `/api/calls/consent { consent: false }` stops it for both and deletes that person's parts; **Record again** → `{ consent: true }`. Rejoining never switches a stopped recording back on. State: `GET /api/state` → `call.consent`.
   3. Records **only its own microphone** (the LiveKit microphone track) with `MediaRecorder`, a new part every `part_seconds`, each stamped in server time.
   4. Uploads each part to `/api/calls/track` (retries up to 3 times). The audio is transcribed and thrown away.
-  5. Leave: uploads the last part, then `/api/calls/end`. When both have left (or the mentor chooses "Finish now"), the agent gets the merged transcript and drafts actions in the mentor's session workspace.
+  5. Leave (one tap, ends the call for both): uploads the last part, then `/api/calls/end`; the other phone sees it and does the same. When both have finished (or after 20 seconds if the other phone has gone, `force: true`), the agent gets the merged transcript and drafts actions in the mentor's session workspace.
 - **Test it without AI:** `E2E_SOURCE=call npm run demo:e2e` runs the whole demo with a call (saved recordings stand in for Whisper when `AI_MODE=fixture`). Announce the reset first (section 7).
 - **For the demo:** use two devices (laptop and phone). Two tabs on one laptop share one microphone, so both recordings would hear both people.
 

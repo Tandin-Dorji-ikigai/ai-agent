@@ -243,7 +243,8 @@ export async function finishCall(callId: string, role: CallRole, force: boolean,
   }
   const bothDone = !!call.mentor_done_at && !!call.entrepreneur_done_at;
   const base = { call_id: callId, transcript_turns: 0, session_id: null, processing: false, outcome: null };
-  if (!bothDone && !(force && role === "mentor") && call.status === "open") {
+  // Either person may end it for both (force), e.g. when the other phone has gone.
+  if (!bothDone && !force && call.status === "open") {
     return { ...base, finalized: false, waiting_for: call.mentor_done_at ? "entrepreneur" : "mentor" };
   }
 

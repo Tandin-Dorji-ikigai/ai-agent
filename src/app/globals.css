@@ -390,3 +390,5 @@ h3 { font-weight: 650; font-size: 13px; }
 /* Outline buttons on the dark call stage (Leave without finishing, Back to dashboard). */
 .call-room .call-participant [data-slot="button"][data-variant="outline"] { background: transparent; color: var(--call-foreground); border-color: var(--call-border); }
 .call-room .call-participant [data-slot="button"][data-variant="outline"]:hover { background: var(--call-surface); color: var(--call-foreground); }
+.join-cta { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 260px; }
+.join-note { font-size: 12px; line-height: 1.4; color: var(--muted-foreground); }

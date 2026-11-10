@@ -6,12 +6,12 @@ describe("call notifications", () => {
   it("tells the other side, by first name, and opens their call screen", () => {
     expect(callJoinedMessage("entrepreneur", "Pema Yangchen", "b1")).toEqual({
       to: "mentor",
-      message: { title: "Pema is in the session room", body: "Tap to join your mentoring call.", url: "/mentor/call", tag: "call-b1" },
+      message: { title: "Pema is in the session room", body: "Tap to join. The call is recorded for your notes.", url: "/mentor/call?join=1", tag: "call-b1" },
     });
     const m = callJoinedMessage("mentor", "Deki Wangmo", "b1");
     expect(m.to).toBe("entrepreneur");
     expect(m.message.title).toBe("Deki is in the session room");
-    expect(m.message.url).toBe("/entrepreneur/call");
+    expect(m.message.url).toBe("/entrepreneur/call?join=1");
   });
 
   it("still reads well without a name", () => {

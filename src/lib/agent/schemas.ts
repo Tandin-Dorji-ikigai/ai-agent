@@ -101,7 +101,7 @@ export const CallTrackFieldsSchema = z.object({
   started_at_ms: z.coerce.number().int().positive(),
 });
 
-/** One person has finished; force (mentor only) ends it for both, e.g. if the other person left. */
+/** One person has finished; force ends it for both (either person), e.g. if the other phone has gone. */
 export const CallEndInputSchema = z.object({
   call_id: z.uuid(),
   role: CallRoleSchema,

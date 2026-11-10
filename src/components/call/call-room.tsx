@@ -3,19 +3,24 @@
 // The real call screen (replaces PR #2's preview). Same layout and controls,
 // now with:
 //   - live video/audio through LiveKit (a personal pass from /api/calls/join);
-//   - a "before you join" step that says the call is recorded; nothing is sent
-//     to the server until the person taps Join (joining is agreeing);
+//   - one tap to join: the Join buttons, the Join now banner and the push
+//     notification all say the call is recorded, and arrive with ?join=1, so
+//     the call starts at once. Opening the page any other way shows a "before
+//     you join" step first (joining is agreeing to recording);
 //   - recording starts on its own once BOTH people are in the call, and either
 //     person can stop it, which deletes what their microphone recorded;
 //   - each browser records ONLY its own microphone, in parts, and uploads
 //     them (/api/calls/track), so the transcript's speakers are certain;
-//   - Leave uploads the last part and ends the call (/api/calls/end); when both
-//     have ended, the agent reads the transcript and drafts actions. If ending
-//     fails, the screen stays with Try again (the notes depend on it).
+//   - one tap to leave, and the call ends for both: the other phone sees it
+//     (a room message, or the polled state) and leaves by itself, saving its
+//     last part. When both have ended, the agent reads the transcript and
+//     drafts actions. If the other phone has gone, the call is finished anyway
+//     after ENDING_WAIT_MS. If ending fails, the screen stays with Try again.
 // Without LiveKit settings there is no video, but recording still works
 // (people can talk on a phone call or in person).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, MessageCircle, Mic, MicOff, PhoneOff, ShieldCheck, Video, VideoOff, X } from "lucide-react";
 import { Room, RoomEvent, Track, type RemoteParticipant, type RemoteTrack } from "livekit-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -43,6 +48,8 @@ interface ChatMessage {
 }
 
 const UPLOAD_TRIES = 3;
+/** After pressing Leave, how long to wait for the other phone to save its last part before ending the call anyway. */
+const ENDING_WAIT_MS = 20_000;
 
 async function post<T>(path: string, body: unknown): Promise<{ ok: true } & T | { ok: false; code: string; message: string }> {
   try {
@@ -83,10 +90,15 @@ export function CallRoom({
   onRefresh: () => void;
 }) {
   const otherFirst = otherName.split(" ")[0];
-  const [phase, setPhase] = useState<"before_join" | "joining" | "ready" | "error" | "leaving" | "waiting_other" | "end_failed">("before_join");
-  // Joining agrees to recording, so it waits for the person to tap Join after reading that.
-  const [joinTapped, setJoinTapped] = useState(false);
+  // Arriving from a Join button, the banner or a notification (?join=1): they read
+  // that the call is recorded and tapped to join, so join at once.
+  const autoJoin = useSearchParams().get("join") === "1";
+  const [phase, setPhase] = useState<"before_join" | "joining" | "ready" | "error" | "leaving" | "ending_for_both" | "end_failed">(autoJoin ? "joining" : "before_join");
+  // Joining agrees to recording, so without ?join=1 it waits for a tap after the notice.
+  const [joinTapped, setJoinTapped] = useState(autoJoin);
   const endForce = useRef(false);
+  // The other person pressed Leave: this phone leaves too.
+  const [endedByOther, setEndedByOther] = useState(false);
   const [info, setInfo] = useState<JoinInfo | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -163,6 +175,7 @@ export function CallRoom({
             try {
               const msg = JSON.parse(new TextDecoder().decode(payload)) as { type: string; body: string };
               if (msg.type === "chat" && participant) setMessages((m) => [...m, { id: crypto.randomUUID(), mine: false, body: msg.body.slice(0, 1000) }]);
+              if (msg.type === "end" && participant) setEndedByOther(true);
             } catch {
               // Not a chat message.
             }
@@ -339,8 +352,11 @@ export function CallRoom({
   }
 
   async function leave(force = false) {
+    if (leavingRef.current) return;
     leavingRef.current = true;
     setPhase("leaving");
+    // Tell the other phone at once (it also notices through the shared state).
+    await roomRef.current?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "end" })), { reliable: true }).catch(() => undefined);
     await stopRecording();
     await uploadsRef.current;
     void roomRef.current?.disconnect();
@@ -366,10 +382,44 @@ export function CallRoom({
       finalized = res.finalized;
     }
     onRefresh();
-    // The mentor may finish for both if the other person has gone; otherwise go back.
-    if (!finalized && role === "mentor") setPhase("waiting_other");
+    // The other phone is still saving its last part: wait for it (see below).
+    if (!finalized) setPhase("ending_for_both");
     else onLeft();
   }
+
+  // Effects below call the latest leave/finishCall without re-running on every update.
+  const leaveRef = useRef(leave);
+  const finishRef = useRef(finishCall);
+  useEffect(() => {
+    leaveRef.current = leave;
+    finishRef.current = finishCall;
+  });
+
+  // The other person left (a room message, or the shared state): leave too, saving this phone's last part.
+  const otherLeft = endedByOther || (role === "mentor" ? !!call?.done.entrepreneur : !!call?.done.mentor);
+  useEffect(() => {
+    if (phase === "ready" && otherLeft) void leaveRef.current();
+  }, [phase, otherLeft]);
+
+  // This person left first: wait for the other phone to finish too (polling), and
+  // if it never does (closed tab, no signal), end the call for both anyway.
+  useEffect(() => {
+    if (phase !== "ending_for_both") return;
+    const poll = setInterval(onRefresh, 2000);
+    const giveUp = setTimeout(() => void finishRef.current(true), ENDING_WAIT_MS);
+    return () => {
+      clearInterval(poll);
+      clearTimeout(giveUp);
+    };
+  }, [phase, onRefresh]);
+  const callFinished = !!call?.transcript_built || call?.status === "ended";
+  const wentBack = useRef(false);
+  useEffect(() => {
+    if (phase === "ending_for_both" && callFinished && !wentBack.current) {
+      wentBack.current = true;
+      onLeft();
+    }
+  }, [phase, callFinished, onLeft]);
 
   // ---- Screen ---------------------------------------------------------------
   const status = !open
@@ -383,11 +433,13 @@ export function CallRoom({
       : phase === "error"
         ? (problem ?? "Could not join the call.")
         : phase === "leaving"
-          ? pendingUploads > 0
-            ? "Saving the recording for the agent…"
-            : "Ending the call…"
-          : phase === "waiting_other"
-            ? `You have left. The transcript is built when ${otherFirst} leaves too.`
+          ? otherLeft
+            ? `${otherFirst} ended the call. Saving your part for the agent…`
+            : pendingUploads > 0
+              ? "Saving the recording for the agent…"
+              : "Ending the call…"
+          : phase === "ending_for_both"
+            ? `Ending the call for both of you. Saving ${otherFirst}'s part…`
             : !video
               ? "Video is not set up, so talk by phone or in person. This page can still record your microphone for the agent's notes."
               : remotePresent
@@ -407,7 +459,7 @@ export function CallRoom({
           </div>
         </div>
         <Badge variant="outline" className="call-preview-badge">
-          {phase === "before_join" ? "Not joined yet" : ["leaving", "end_failed", "waiting_other"].includes(phase) ? "Ended" : video ? "Live" : "Audio for notes"}
+          {phase === "before_join" ? "Not joined yet" : ["leaving", "end_failed", "ending_for_both"].includes(phase) ? "Ended" : video ? "Live" : "Audio for notes"}
         </Badge>
       </header>
 
@@ -455,13 +507,10 @@ export function CallRoom({
                 </Button>
               </div>
             )}
-            {phase === "waiting_other" && (
+            {phase === "ending_for_both" && (
               <div className="row wrap mt-4">
-                <Button size="sm" onClick={() => void leave(true)}>
-                  Finish now without waiting
-                </Button>
-                <Button size="sm" variant="outline" onClick={onLeft}>
-                  Back to dashboard
+                <Button size="sm" variant="outline" onClick={() => void finishCall(true)}>
+                  Finish now
                 </Button>
               </div>
             )}

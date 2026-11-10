@@ -149,14 +149,14 @@ export default function App({ children }) {
     : null;
   const { stalled: autoStalled } = useAutoRequest(autoKey, refresh);
 
-  function go(nextPage) {
+  function go(nextPage, search = "") {
     setStep(0);
     setFormError("");
     setPreviewNotice("");
     setDeclineOpen(false);
     if (nextPage === "register-without-idea") setSignupPath("exploring");
     if (nextPage === "register-entrepreneur") setSignupPath("idea");
-    router.push(pagePaths[nextPage]);
+    router.push(pagePaths[nextPage] + search);
   }
 
   async function saveAssessment() {
@@ -240,10 +240,15 @@ export default function App({ children }) {
     </span>
   );
   // Calls are only for a confirmed booking; only its two participants can join.
+  const callPage = role === "mentor" ? "mentor-call" : "video-call";
+  const RECORDING_NOTICE = "The call is recorded and transcribed for your notes. Either of you can stop it.";
   const joinButton = booking && booking.status === "confirmed" && (role === "entrepreneur" || myBooking) ? (
-    <Button size="sm" onClick={() => go(role === "mentor" ? "mentor-call" : "video-call")}>
-      <Video className="size-3.5" /> Join session
-    </Button>
+    <div className="join-cta">
+      <Button size="sm" onClick={() => go(callPage, "?join=1")}>
+        <Video className="size-3.5" /> Join session
+      </Button>
+      <p className="join-note">{RECORDING_NOTICE}</p>
+    </div>
   ) : null;
   const notificationButton = (
     <Button variant="ghost" size="icon" className="notification-button" aria-label="Notifications"
@@ -473,7 +478,7 @@ export default function App({ children }) {
   const otherWaiting = !isCall && !isPublic && booking?.status === "confirmed" && (role === "entrepreneur" || myBooking) && state?.call?.status === "open"
     && (role === "mentor" ? state.call.joined.entrepreneur && !state.call.joined.mentor : state.call.joined.mentor && !state.call.joined.entrepreneur);
   const notices = <>
-    {otherWaiting && <Alert className="mb-6"><Video className="size-4" /><AlertTitle>{role === "mentor" ? firstName(state?.entrepreneur?.full_name) || "Your mentee" : firstName(mentor.name) || "Your mentor"} is in the session room</AlertTitle><AlertDescription>Join now to start your mentoring call.<Button size="sm" className="self-start mt-2" onClick={() => go(role === "mentor" ? "mentor-call" : "video-call")}>Join now<ArrowRight className="size-4" /></Button></AlertDescription></Alert>}
+    {otherWaiting && <Alert className="mb-6"><Video className="size-4" /><AlertTitle>{role === "mentor" ? firstName(state?.entrepreneur?.full_name) || "Your mentee" : firstName(mentor.name) || "Your mentor"} is in the session room</AlertTitle><AlertDescription>Join now to start your mentoring call. {RECORDING_NOTICE}<Button size="sm" className="self-start mt-2" onClick={() => go(callPage, "?join=1")}>Join now<ArrowRight className="size-4" /></Button></AlertDescription></Alert>}
     {lastError && <Alert variant="destructive" className="mb-6"><AlertTitle>That didn’t work</AlertTitle><AlertDescription>{lastError.message}<Button type="button" variant="link" className="self-start px-0" onClick={clearLastError}>Dismiss</Button></AlertDescription></Alert>}
     {formError && <Alert variant="destructive" className="mb-6"><AlertTitle>Please check your answers</AlertTitle><AlertDescription>{formError}</AlertDescription></Alert>}
     {previewNotice && <Alert className="mb-6"><AlertTitle>Saved</AlertTitle><AlertDescription>{previewNotice}</AlertDescription></Alert>}
