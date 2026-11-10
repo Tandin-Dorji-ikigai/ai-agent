@@ -1,5 +1,5 @@
 import "server-only";
-import { emitAndRun, processEvent, type RunOutcome } from "./agent/runner";
+import { emitAndRun, type RunOutcome } from "./agent/runner";
 import { ToolError } from "./agent/tools";
 import { demoNow } from "./clock";
 import { loadEntrepreneur } from "./data";
@@ -87,7 +87,12 @@ export async function expireDueRequests(now: Date): Promise<RunOutcome[]> {
   return outcomes;
 }
 
-function closedEvent(req: MentorRequestRecord, type: "mentor.request.declined" | "mentor.request.expired") {
+/**
+ * The agent's next step after a "no" (or no reply). Keyed by the request, so it
+ * runs once however many places trigger it: the decline itself, expiry, or
+ * ensureMentorRequest picking up an unfinished step.
+ */
+function closedEvent(req: Pick<MentorRequestRecord, "id" | "entrepreneur_id">, type: "mentor.request.declined" | "mentor.request.expired") {
   return {
     event_type: type,
     entity_type: "mentor_request",
@@ -150,13 +155,13 @@ export async function ensureMentorRequest(entrepreneurId: string): Promise<{ sta
   const escalation = (must(escalations, "load escalations") as Array<{ created_at: string }>)[0];
   if (escalation && Date.parse(escalation.created_at) >= roundStart) return { started: false, reason: "with_ydf" };
 
-  // The last mentor said no (or did not reply) but the agent's next step failed: finish that step.
+  // The last mentor said no (or did not reply) and nobody new is being asked:
+  // run the agent's next step for that request. It is the same keyed event the
+  // decline creates, so it can never run twice, even if both happen at once.
   if (latest && (latest.status === "declined" || latest.status === "expired")) {
-    const stuck = must(
-      await db().from("agent_events").select("id").eq("entity_id", latest.id).in("status", ["pending", "failed"]).limit(1),
-      "load unfinished event",
-    ) as Array<{ id: string }>;
-    if (stuck[0]) return { started: true, reason: "retried", outcome: await processEvent(stuck[0].id) };
+    const type = latest.status === "declined" ? "mentor.request.declined" : "mentor.request.expired";
+    const outcome = await emitAndRun(closedEvent({ id: latest.id, entrepreneur_id: entrepreneurId }, type));
+    return { started: outcome.status !== "skipped", reason: "retried", outcome };
   }
 
   // Nobody is being asked: matching runs again and the agent asks the best match.

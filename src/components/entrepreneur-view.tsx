@@ -41,7 +41,7 @@ const OUTCOME_TONE: Record<MentorRequestView["status"], "info" | "success" | "ne
 };
 
 /** "Your mentor request": the agent asks, the mentor decides, the mentee is kept informed. */
-function RequestStatus({ state }: { state: DemoState }) {
+function RequestStatus({ state, stalled }: { state: DemoState; stalled: boolean }) {
   const round = state.request_round!;
   const current = round.requests.find((r) => r.status === "pending");
   const label = { waiting: "Waiting for a reply", accepted: "Booked", escalated: "With YDF", stopped: "Stopped" }[round.status];
@@ -82,7 +82,12 @@ function RequestStatus({ state }: { state: DemoState }) {
             : `No available mentor fits your needs well enough right now, so a YDF programme officer will help (${round.escalation_code}).`}
         </Notice>
       )}
-      {round.status === "stopped" && <AgentWorking text="The request stopped before a mentor said yes. I am picking it up again." />}
+      {round.status === "stopped" &&
+        (stalled ? (
+          <p className="text-sm text-muted">{STALLED}</p>
+        ) : (
+          <AgentWorking text="The request stopped before a mentor said yes. I am picking it up again." />
+        ))}
       {round.requests.length > 0 && (
         <ol className="mt-3 space-y-2" aria-label="Mentors asked">
           {round.requests.map((r) => (
@@ -107,32 +112,59 @@ function AgentWorking({ text }: { text: string }) {
   );
 }
 
+const AUTO_TRIES = 3;
+const AUTO_RETRY_MS = 5000;
+
 /**
  * The agent keeps going by itself: whenever there are matches but no mentor is
  * being asked (older data, or a step that failed), it asks the best match.
- * No button. It acts once per situation; the server ignores repeats.
+ * No button, and no error banner for work the person did not start: it retries
+ * quietly (3 tries), then says calmly that it will try again later.
+ * The server ignores repeats.
  */
-function useAutoRequest(state: DemoState, editing: boolean): boolean {
-  const { act } = useDemo();
+function useAutoRequest(state: DemoState, editing: boolean): { asking: boolean; stalled: boolean } {
+  const { refresh } = useDemo();
   const round = state.request_round;
   const needed =
     !editing && !!state.entrepreneur?.assessment_completed_at && state.matches.length > 0 && !state.booking && (!round || round.status === "stopped");
   const key = needed ? `${state.entrepreneur?.assessment_completed_at}:${round?.round_id ?? "none"}:${round?.requests.at(-1)?.id ?? ""}` : null;
-  const handled = useRef<string | null>(null);
+  const tries = useRef(new Map<string, number>());
+  const [retry, setRetry] = useState(0);
+  const [stalledKey, setStalledKey] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!key || handled.current === key) return;
-    handled.current = key;
-    void act("auto-request", "/api/requests/start");
-  }, [key, act]);
-  return needed;
+    if (!key || stalledKey === key) return;
+    const n = tries.current.get(key) ?? 0;
+    if (n >= AUTO_TRIES) return;
+    // Counted when it fires, so React's development double-run does not use up a try.
+    const timer = setTimeout(() => {
+      tries.current.set(key, n + 1);
+      fetch("/api/requests/start", { method: "POST" })
+        .then((res) => res.json())
+        .then((json: { ok: boolean }) => {
+          if (!json.ok) throw new Error("start failed");
+          return refresh();
+        })
+        .catch(() => (n + 1 >= AUTO_TRIES ? setStalledKey(key) : setRetry((r) => r + 1)));
+    }, n === 0 ? 0 : AUTO_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [key, retry, stalledKey, refresh]);
+
+  return { asking: needed, stalled: !!key && stalledKey === key };
 }
 
+const STALLED = "I could not reach a mentor just now. I will try again when you next open this page.";
+
 /** Matches exist and the agent is about to ask the best one. */
-function AskingNow() {
+function AskingNow({ stalled }: { stalled: boolean }) {
   return (
     <Card>
       <SectionTitle>Your mentor request</SectionTitle>
-      <AgentWorking text="I am asking your best-matched mentor now. That mentor decides." />
+      {stalled ? (
+        <p className="text-sm text-muted">{STALLED}</p>
+      ) : (
+        <AgentWorking text="I am asking your best-matched mentor now. That mentor decides." />
+      )}
     </Card>
   );
 }
@@ -298,7 +330,7 @@ function Actions({ state }: { state: DemoState }) {
 
 function EntrepreneurBody({ state }: { state: DemoState }) {
   const [editing, setEditing] = useState(false);
-  const asking = useAutoRequest(state, editing);
+  const auto = useAutoRequest(state, editing);
   const e = state.entrepreneur!;
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -329,8 +361,8 @@ function EntrepreneurBody({ state }: { state: DemoState }) {
       ) : (
         <>
           {state.messages.length > 0 && <Inbox state={state} />}
-          {state.request_round && state.request_round.status !== "accepted" && <RequestStatus state={state} />}
-          {asking && !state.request_round && <AskingNow />}
+          {state.request_round && state.request_round.status !== "accepted" && <RequestStatus state={state} stalled={auto.stalled} />}
+          {auto.asking && !state.request_round && <AskingNow stalled={auto.stalled} />}
           {state.booking ? <SessionCard state={state} /> : <Recommendations state={state} onChangeAnswers={() => setEditing(true)} />}
           <Actions state={state} />
           {e.assessment_summary && (
