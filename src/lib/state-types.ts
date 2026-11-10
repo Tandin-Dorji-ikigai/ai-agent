@@ -60,6 +60,10 @@ export interface SessionView {
   summary_source: "live_ai" | "fallback" | null;
   summary_confirmed: boolean;
   completed_at: string | null;
+  /** Where the session text came from (handover contract). */
+  notes_source: "typed" | "voice_note" | "call_recording";
+  /** Length of the stored call transcript, 0 if none (the text itself is not sent to the browser). */
+  transcript_chars: number;
 }
 
 export interface MessageView {

@@ -31,6 +31,20 @@ export const DEMO_SESSION_NOTES = [
   "- Within 10 days: write a one-line positioning statement for the homestay and walk",
 ].join("\n");
 
+/**
+ * A short sample call transcript (no speaker labels, as Whisper returns it),
+ * for testing the call_recording path. Same agreements as DEMO_SESSION_NOTES.
+ */
+export const DEMO_CALL_TRANSCRIPT = [
+  "Kuzu zangpo la Pema, thank you for joining. Tell me about the homestay.",
+  "We have two rooms in my family house and a half day walk through the village. A few guests came through friends last year but I do not really know who my guests are.",
+  "That is the main thing to find out. And the price, Nu. 1,200 a night, may not cover your costs, so we will come back to that after you talk to guests.",
+  "So we agree on three things. Within four days, check which permits the guided village walk needs before you advertise it.",
+  "Within a week, interview five past guests or local guides about why they came.",
+  "And within ten days, write a one line positioning statement for the homestay and the walk.",
+  "Okay, I can do that. Thank you, Deki.",
+].join(" ");
+
 /** What the agent extracts from DEMO_SESSION_NOTES (saved fallback). */
 export const DEMO_EXTRACTED_ACTIONS = {
   summary:

@@ -30,10 +30,28 @@ export const BookingInputSchema = z.object({
   idempotency_key: z.string().min(8).max(100),
 });
 
-export const SessionCompleteInputSchema = z.object({
-  booking_id: z.uuid(),
-  notes: shortText(4000),
-});
+/** Where a session's text came from (handover contract, see ONBOARDING.md section 9). */
+export const NOTES_SOURCES = ["typed", "voice_note", "call_recording"] as const;
+export type NotesSource = (typeof NOTES_SOURCES)[number];
+
+/**
+ * Longest text the agent reads in one pass on the Groq free tier
+ * (8,000 tokens a minute): about 20 to 25 minutes of speech.
+ * Longer transcripts are refused with TRANSCRIPT_TOO_LONG until the agent
+ * learns to split and summarise them.
+ */
+export const SINGLE_PASS_MAX_CHARS = 18_000;
+
+export const SessionCompleteInputSchema = z
+  .object({
+    booking_id: z.uuid(),
+    /** The mentor's typed or voice-note notes. */
+    notes: z.string().trim().max(4000).optional(),
+    /** The full call transcript (from the call / audio-to-text work). */
+    transcript: z.string().trim().max(200_000).optional(),
+    source: z.enum(NOTES_SOURCES).default("typed"),
+  })
+  .refine((v) => !!v.notes || !!v.transcript, { message: "Send notes, a transcript, or both." });
 
 export const ConfirmActionsInputSchema = z.object({
   session_id: z.uuid(),
@@ -170,7 +188,11 @@ export const ToolInputs = {
     idempotency_key: z.string().min(8).max(100),
   }),
   create_session_brief: z.object({ booking_id: z.uuid() }),
-  extract_action_items: z.object({ session_id: z.uuid(), notes: shortText(4000) }),
+  extract_action_items: z.object({
+    session_id: z.uuid(),
+    notes: shortText(SINGLE_PASS_MAX_CHARS + 4100),
+    source: z.enum(NOTES_SOURCES).default("typed"),
+  }),
   update_action_status: z.object({
     entrepreneur_id: z.uuid(),
     action_id: z.uuid(),

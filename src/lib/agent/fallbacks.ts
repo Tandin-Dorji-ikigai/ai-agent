@@ -4,7 +4,7 @@
 // Every fallback is built ONLY from supplied data, so it can never invent
 // qualifications or reasons. Outputs match the same schemas as live AI.
 
-import { DEMO_EXTRACTED_ACTIONS, DEMO_SESSION_NOTES } from "../demo/fixtures";
+import { DEMO_CALL_TRANSCRIPT, DEMO_EXTRACTED_ACTIONS, DEMO_SESSION_NOTES } from "../demo/fixtures";
 import type { ScoredMentor } from "../matching/score-mentor";
 import type { AgendaItem } from "../progress";
 import {
@@ -158,6 +158,7 @@ const normalise = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
  */
 export function fallbackExtraction(notes: string): Extraction {
   if (normalise(notes) === normalise(DEMO_SESSION_NOTES)) return DEMO_EXTRACTED_ACTIONS;
+  if (normalise(notes).includes(normalise(DEMO_CALL_TRANSCRIPT))) return DEMO_EXTRACTED_ACTIONS;
 
   const lines = notes.split("\n").map((l) => l.trim());
   const bullets = lines

@@ -153,7 +153,7 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
     task: "extract_action_items",
     schema: ExtractionSchema,
     fallback: () => fallbackExtraction(input.notes),
-    live: live.extraction(input.notes),
+    live: live.extraction(input.notes, input.source),
     validate: rejectGenderedText,
   });
 

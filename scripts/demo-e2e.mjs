@@ -7,6 +7,8 @@
 // Options (environment variables):
 //   BASE_URL   default http://localhost:3000
 //   RUNS       how many reset-to-finish runs to do, default 2
+//   E2E_SOURCE typed (default) or call_recording: send the sample call
+//              transcript instead of typed notes (handover contract test)
 //   PACE_MS    pause after each action, e.g. 4000 with live AI to stay under
 //              the free tier's tokens-per-minute limit (default 0)
 //
@@ -18,6 +20,7 @@
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const RUNS = Number(process.env.RUNS ?? 2);
 const PACE_MS = Number(process.env.PACE_MS ?? 0);
+const VIA_CALL = process.env.E2E_SOURCE === "call_recording";
 
 let failures = 0;
 function check(label, condition, detail) {
@@ -83,12 +86,26 @@ async function runOnce(n, fx) {
   check("   credit deducted exactly once (3,000 -> 1,500)", s.credit?.amount_remaining === 1500, s.credit);
   check("8  entrepreneur and mentor briefs produced", !!s.booking?.entrepreneur_brief && !!s.booking?.mentor_brief, s.booking);
 
-  // 9-10. Session notes and extraction
-  const c1 = await call("POST", "/api/session/complete", { booking_id: b1.json.booking_id, notes: fx.session_notes });
-  check("9  mentor notes submitted", c1.status === 200 && c1.json.outcome?.status === "completed", c1.json);
-  const c2 = await call("POST", "/api/session/complete", { booking_id: b1.json.booking_id, notes: fx.session_notes });
+  // Handover contract: validation before anything is saved
+  const bad1 = await call("POST", "/api/session/complete", { booking_id: b1.json.booking_id });
+  check("   contract: notes or transcript required", bad1.status === 400 && bad1.json.code === "INVALID_INPUT", bad1.json);
+  const bad2 = await call("POST", "/api/session/complete", {
+    booking_id: b1.json.booking_id,
+    transcript: "word ".repeat(6000),
+    source: "call_recording",
+  });
+  check("   contract: over-long transcript refused clearly", bad2.status === 422 && bad2.json.code === "TRANSCRIPT_TOO_LONG", bad2.json);
+
+  // 9-10. Session notes (or call transcript) and extraction
+  const completeBody = VIA_CALL
+    ? { booking_id: b1.json.booking_id, transcript: fx.call_transcript, source: "call_recording" }
+    : { booking_id: b1.json.booking_id, notes: fx.session_notes };
+  const c1 = await call("POST", "/api/session/complete", completeBody);
+  check(`9  mentor ${VIA_CALL ? "call transcript" : "notes"} submitted`, c1.status === 200 && c1.json.outcome?.status === "completed", c1.json);
+  const c2 = await call("POST", "/api/session/complete", completeBody);
   check("   repeat submit reuses the session, no second run", c2.json.session_id === c1.json.session_id && c2.json.outcome?.status === "skipped", c2.json);
   s = await state();
+  check("   session records where the text came from", s.session?.notes_source === (VIA_CALL ? "call_recording" : "typed"), s.session);
   const drafts = s.actions.filter((x) => x.status === "draft");
   check("10 three draft actions extracted", drafts.length === 3, s.actions);
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEMO_BLOCKER_REPLY,
+  DEMO_CALL_TRANSCRIPT,
   DEMO_DONE_REPLY,
   DEMO_EXTRACTED_ACTIONS,
   DEMO_FAST_FORWARD_DAYS,
@@ -92,6 +93,10 @@ describe("match explanations use only supplied evidence", () => {
 describe("action extraction fallback", () => {
   it("returns the saved demo actions for the demo notes", () => {
     expect(fallbackExtraction(DEMO_SESSION_NOTES)).toEqual(DEMO_EXTRACTED_ACTIONS);
+  });
+
+  it("returns the saved demo actions for the sample call transcript, as the route sends it", () => {
+    expect(fallbackExtraction(`Call transcript:\n${DEMO_CALL_TRANSCRIPT}`)).toEqual(DEMO_EXTRACTED_ACTIONS);
   });
 
   it("gives every demo action a SMART measure of success", () => {

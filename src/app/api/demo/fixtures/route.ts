@@ -1,5 +1,6 @@
 import {
   DEMO_BLOCKER_REPLY,
+  DEMO_CALL_TRANSCRIPT,
   DEMO_DONE_REPLY,
   DEMO_FAST_FORWARD_DAYS,
   DEMO_OBSTACLE_REPLY,
@@ -15,6 +16,7 @@ export async function GET() {
     ids: DEMO_IDS,
     assessment: PEMA_ASSESSMENT_ANSWERS,
     session_notes: DEMO_SESSION_NOTES,
+    call_transcript: DEMO_CALL_TRANSCRIPT,
     blocker_reply: DEMO_BLOCKER_REPLY,
     on_track_reply: DEMO_ON_TRACK_REPLY,
     obstacle_reply: DEMO_OBSTACLE_REPLY,

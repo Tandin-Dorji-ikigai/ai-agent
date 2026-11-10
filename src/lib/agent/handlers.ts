@@ -249,9 +249,11 @@ const bookingConfirmed: Handler = async ({ event, tools, now }) => {
 const sessionCompleted: Handler = async ({ event, tools }) => {
   if (!event.entity_id) throw new Error("Event has no session.");
   const notes = String(event.payload.notes ?? "");
-  const out = await tools.call("extract_action_items", { session_id: event.entity_id, notes });
+  const source = (["typed", "voice_note", "call_recording"] as const).find((s) => s === event.payload.source) ?? "typed";
+  const out = await tools.call("extract_action_items", { session_id: event.entity_id, notes, source });
+  const label = { typed: "typed notes", voice_note: "voice note", call_recording: "call transcript" }[source];
   return {
-    input_summary: "Mentor session notes",
+    input_summary: `Mentor session ${label} (${notes.length.toLocaleString("en-IN")} characters)`,
     output: `${out.actions.length} draft SMART actions extracted. Waiting for a human to confirm them.`,
     source: out.source,
   };

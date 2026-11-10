@@ -142,7 +142,7 @@ export const live = {
       }),
 
   extraction:
-    (notes: string): Live =>
+    (notes: string, source: "typed" | "voice_note" | "call_recording" = "typed"): Live =>
     (signal) =>
       structured({
         task: "extract_action_items",
@@ -156,7 +156,13 @@ export const live = {
             "For each action: title starts with a verb and is specific (under 100 characters); description is one sentence; " +
             "success_measure says how we will know it is done, in measurable terms; " +
             "due_in_days uses the timeframe in the notes (a week = 7), or 7 if none is given; " +
-            "owner is entrepreneur unless the notes say the mentor will do it. summary: 1 to 2 sentences.",
+            "owner is entrepreneur unless the notes say the mentor will do it. summary: 1 to 2 sentences." +
+            (source === "call_recording"
+              ? " The input includes a transcript of the mentoring call: speakers are not labelled and it may contain " +
+                "transcription errors. Only extract actions both people clearly agreed on."
+              : source === "voice_note"
+                ? " The notes were dictated and transcribed, so expect spoken language."
+                : ""),
         ),
         user: notes,
       }),

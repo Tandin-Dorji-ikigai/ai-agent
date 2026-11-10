@@ -1,5 +1,6 @@
 import { aiMode } from "@/lib/agent/ai";
-import { RateLimitError, apiKey, transcribe } from "@/lib/agent/llm";
+import { RateLimitError, apiKey } from "@/lib/agent/llm";
+import { transcribe } from "@/lib/audio/transcribe";
 import { fail, ok } from "@/lib/http";
 
 // POST /api/transcribe (multipart, field "file"): a mentor's voice note -> text

@@ -68,12 +68,14 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 
 | Gap | Notes | Suggested owner |
 |---|---|---|
-| Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Person 3 (fluent speaker) |
-| Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Voice-notes owner (section 9) |
-| YDF acting on escalations | The queue is read-only, with no assign or resolve buttons | Person 1 or 2, if time allows |
-| UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Person 2 |
-| Reliability target | The plan asks for 5 reset-to-finish runs in a row; 2 done so far | Person 1 |
-| Pitch | Interviews for real quotes, slides, demo script, backup video, rehearsals | Person 3 (video: Person 2) |
+| Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Any fluent speaker on the team |
+| Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Audio-to-text teammate |
+| Calls | No call yet. Plan: a "Join call" link to a hosted meeting, with an audio-only option | Calls teammate |
+| Long call transcripts | The agent reads up to about 20 to 25 minutes of speech at once; longer is refused clearly (`TRANSCRIPT_TOO_LONG`) | Agent (Tandin) |
+| YDF acting on escalations | The queue is read-only. **Deferred** by team decision | Nobody for now |
+| UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Frontend teammate |
+| Reliability target | The plan asks for 5 reset-to-finish runs in a row; 2 done so far | Agent (Tandin) |
+| Pitch | Interviews for real quotes, slides, demo script, backup video, rehearsals | Shared: agree who at check-in |
 | Out of scope on purpose | Real login, real payments, SMS or WhatsApp, a public URL | Nobody. Present them as next steps in the pitch |
 
 ---
@@ -201,7 +203,10 @@ scripts/demo-e2e.mjs      automatic check of all 14 steps
 | YDF dashboard | `src/components/ydf-view.tsx` |
 | Mentors, resources, Pema's starting data | `src/lib/demo/seed-data.ts`, then **Reset demo** |
 | Pema's pre-filled answers, session notes, blocker reply | `src/lib/demo/fixtures.ts` |
-| The Dzongkha follow-up message | `src/lib/demo/dzongkha.ts` (see section 9, Person 3) |
+| The Dzongkha follow-up message | `src/lib/demo/dzongkha.ts` (see section 9) |
+| Voice-note recording UI | `src/components/mentor/voice-note.tsx` |
+| Audio to text (Whisper) | `src/lib/audio/transcribe.ts`, `src/app/api/transcribe/route.ts` |
+| What the agent accepts after a session (handover contract) | `src/app/api/session/complete/route.ts`, `SessionCompleteInputSchema` in `src/lib/agent/schemas.ts` |
 | Saved AI responses (wording) | `src/lib/agent/fallbacks.ts` |
 | How the agent reads replies and picks resource / own mentor / other mentor / escalate | `src/lib/agent/policy.ts` |
 | Mentor progress feed and next-session agenda | `src/lib/progress.ts` |
@@ -213,24 +218,57 @@ If you change seed data, fixtures or ranking, run `npm test`. Some tests check t
 
 ## 9. Who does what
 
-| | Person 1: agent and backend | Person 2: screens and demo | Person 3: product, data and pitch |
-|---|---|---|---|
-| **Owns** | `src/lib/agent`, `src/app/api`, `supabase/` | `src/components`, `src/app/*/page.tsx`, `globals.css` | `src/lib/demo`, prompts and wording, slides |
-| **Next task** | Keep live AI healthy (watch the `[ai]` lines in the terminal, tune prompts in `live.ts`); get 5 reset-to-finish runs in a row | Polish the three views; check the phone layout on a real phone | Write and verify the Dzongkha message; interview 2 to 3 founders and 1 mentor for real quotes |
-| **Then** | Optional: assign/resolve buttons for YDF escalations | Record the backup demo video (Day 2 evening) | Slides (8 to 10), demo script, run rehearsals |
+| | Agent (Tandin) | Frontend | Calls | Audio to text |
+|---|---|---|---|---|
+| **Owns** | `src/lib/agent`, `src/lib/matching`, `src/lib/progress.ts`, `src/app/api` (except `transcribe`), `supabase/` | `src/components` (except the two folders on the right), `src/app/*/page.tsx`, `globals.css` | New `src/components/call/` (plus one line in each view to show it) | `src/components/mentor/voice-note.tsx`, `src/lib/audio/`, `src/app/api/transcribe/` |
+| **Next task** | Long transcripts within the free tier (split and summarise); 3 to 5 sample transcripts to measure extraction quality | Polish the three views; check the phone layout on a real phone | A "Join call" button on each booking for Pema and the mentor, opening a hosted meeting; offer audio-only | Test voice notes on real phones and microphones; turn a call recording into a transcript |
+| **Then** | 5 reset-to-finish runs in a row; tune prompts | Backup demo video (Day 2 evening) | Recording consent: both people agree before anything is recorded | Long recordings (over 25 MB): split, transcribe, join; delete audio after use |
 
-**Person 3, the Dzongkha task:** open `src/lib/demo/dzongkha.ts`. Write the Dzongkha version of the English message in `dzongkha`, ideally have a second fluent speaker read it, then set `verified: true` and fill in `reviewedBy`. Until then the app shows English with a "Dzongkha version pending review" label. **Do not paste machine translation.**
+If you need to change a file someone else owns, say so at check-in first.
 
-**Voice notes owner:** a basic working version already exists. Start from it, not from scratch.
+### The handover contract: how calls and audio reach the agent
+
+The agent only needs **text**. When a session ends, send it to the existing endpoint:
+
+```text
+POST /api/session/complete
+{
+  "booking_id": "<uuid of the booking>",
+  "notes":      "optional: the mentor's typed or voice-note notes (max 4,000 characters)",
+  "transcript": "optional: the full call transcript",
+  "source":     "typed" | "voice_note" | "call_recording"
+}
+```
+
+- Send `notes`, a `transcript`, or both. If neither is sent, you get `400 INVALID_INPUT`.
+- The agent reads up to about 18,000 characters of transcript at once (20 to 25 minutes of speech). Longer gets `422 TRANSCRIPT_TOO_LONG` until the agent splits long calls itself; until then, send the most important part.
+- The agent then extracts SMART draft actions, and the mentor confirms them in the Mentor view, exactly as with typed notes. The Mentor view shows where the text came from.
+- To test your part without any AI key, run `E2E_SOURCE=call_recording npm run demo:e2e`. It sends a sample call transcript through the whole demo. Announce the reset first (section 7).
+- Need a new database field (for example a meeting link on a booking)? Ask the agent owner for a migration. Never change tables in the dashboard.
+
+### Notes per role
+
+**Audio to text:** a basic version already works. Start from it, not from scratch.
 - **Code:**
-  - the `VoiceNote` component in `src/components/mentor-view.tsx`
-  - the endpoint `src/app/api/transcribe/route.ts`
-  - `transcribe()` in `src/lib/agent/llm.ts`, which uses Groq's `whisper-large-v3-turbo` (max 25 MB per file)
-- **How it works:** the mentor records with the browser microphone, or uploads a file. The text appears in the notes box for the mentor to check. **Complete session** then runs the same SMART extraction as typed notes.
-- **Tested:** uploading one computer-generated English recording, which came back word for word.
+  - `VoiceNote` in `src/components/mentor/voice-note.tsx` (record with the browser microphone, or upload)
+  - `/api/transcribe`
+  - `transcribe()` in `src/lib/audio/transcribe.ts`, which uses Groq `whisper-large-v3-turbo`, max 25 MB per file
+- **Tested:** only by uploading one computer-generated English recording.
 - **Not tested yet:** the **Record** button with a real microphone; phones (iPhone Safari records `audio/mp4`, Chrome records `audio/webm`); background noise.
-- **Still to decide:** what to tell Dzongkha speakers, since Whisper does not list Dzongkha. Optionally, let Pema reply to check-ins by voice.
+- **Still to decide:** what to tell Dzongkha speakers, since Whisper does not list Dzongkha.
 - **Needs live AI on:** `AI_MODE=live` plus `GROQ_API_KEY`.
+
+**Calls:** keep it small.
+- Do not build video calling. A hosted meeting link (for example Jitsi Meet, no account needed) is enough.
+- Offer audio-only, because rural founders often have weak internet.
+- Embedded meetings usually cannot give us their audio. So the simplest recording path is: with both people's consent, the mentor records on their own device and uploads the file through the audio-to-text flow.
+
+**Dzongkha message (any fluent speaker):**
+1. Open `src/lib/demo/dzongkha.ts` and write the Dzongkha version of the English message in `dzongkha`.
+2. Ideally, have a second fluent speaker read it.
+3. Set `verified: true` and fill in `reviewedBy`.
+
+Until then, the app shows English with a "Dzongkha version pending review" label. **Do not paste machine translation.**
 
 **Check-ins:** start of day, lunch, dinner, 15 minutes each. Everyone says: what works, what is blocked, what they are cutting.
 
@@ -263,7 +301,7 @@ From `CLAUDE_WORKING_PLAN.md`. These are what make the agent trustworthy, and ju
 6. Every AI step has a saved fallback. A slow AI must never stop the demo.
 7. Dashboard numbers come from the database. We do not invent impact statistics.
 8. No unreviewed Dzongkha on screen.
-9. **Out of scope:** real payments, video calls, production SMS or WhatsApp, native apps, full translation, multiple agents, vector databases, production login.
+9. **Out of scope:** real payments, building our own video calling (a link to a hosted meeting is fine), production SMS or WhatsApp, native apps, full translation, multiple agents, vector databases, production login.
 
 ## 12. Troubleshooting
 

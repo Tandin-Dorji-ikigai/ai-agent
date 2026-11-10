@@ -110,7 +110,9 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
         }
       : null;
 
-  const sessions = must(sessionRows, "load sessions") as Array<SessionView & { bookings: unknown }>;
+  const sessions = must(sessionRows, "load sessions") as Array<
+    Omit<SessionView, "transcript_chars"> & { bookings: unknown; transcript: string | null }
+  >;
   const sessionRow = booking ? sessions.find((s) => s.booking_id === booking.id) : undefined;
   const session: SessionView | null = sessionRow
     ? {
@@ -121,6 +123,8 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
         summary_source: sessionRow.summary_source,
         summary_confirmed: sessionRow.summary_confirmed,
         completed_at: sessionRow.completed_at,
+        notes_source: sessionRow.notes_source ?? "typed",
+        transcript_chars: sessionRow.transcript?.length ?? 0,
       }
     : null;
 

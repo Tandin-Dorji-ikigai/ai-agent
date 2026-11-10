@@ -14,7 +14,6 @@ export const MODELS = {
   main: process.env.AI_MODEL ?? "openai/gpt-oss-120b",
   /** Light steps: summaries, check-in messages, reading replies. Separate per-model rate limit. */
   light: process.env.AI_MODEL_LIGHT ?? "openai/gpt-oss-20b",
-  transcribe: process.env.AI_MODEL_TRANSCRIBE ?? "whisper-large-v3-turbo",
 };
 
 export function apiKey(): string | undefined {
@@ -29,7 +28,8 @@ export class RateLimitError extends Error {
 
 export class ProviderError extends Error {}
 
-async function post(path: string, body: BodyInit, signal: AbortSignal, json = true): Promise<Record<string, unknown>> {
+/** Low-level POST to the provider. Shared by the agent (here) and audio (src/lib/audio). */
+export async function providerPost(path: string, body: BodyInit, signal: AbortSignal, json = true): Promise<Record<string, unknown>> {
   const key = apiKey();
   if (!key) throw new ProviderError("No AI API key configured.");
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -75,7 +75,7 @@ export async function structured(opts: {
     { role: "system", content: opts.system },
     { role: "user", content: opts.user },
   ];
-  const data = await post(
+  const data = await providerPost(
     "/chat/completions",
     JSON.stringify({
       model,
@@ -112,7 +112,7 @@ export async function chooseTool(opts: {
   signal: AbortSignal;
 }): Promise<{ name: string; args: unknown }> {
   const model = opts.model ?? MODELS.main;
-  const data = await post(
+  const data = await providerPost(
     "/chat/completions",
     JSON.stringify({
       model,
@@ -134,15 +134,4 @@ export async function chooseTool(opts: {
     ?.message?.tool_calls?.[0];
   if (!call) throw new ProviderError("The model did not call a tool.");
   return { name: call.function.name, args: JSON.parse(call.function.arguments || "{}") };
-}
-
-/** Speech-to-text (Whisper). */
-export async function transcribe(file: Blob, filename: string, signal: AbortSignal): Promise<string> {
-  const form = new FormData();
-  form.append("file", file, filename);
-  form.append("model", MODELS.transcribe);
-  form.append("response_format", "json");
-  const data = await post("/audio/transcriptions", form, signal, false);
-  console.info(`[ai] transcribe via ${MODELS.transcribe}: ${Math.round(file.size / 1024)} KB`);
-  return String(data.text ?? "").trim();
 }

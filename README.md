@@ -96,7 +96,9 @@ supabase/migrations/
   20261110000001_schema.sql          tables, constraints, RLS
   20261110000002_demo_functions.sql  create_booking, confirm_action_items, fast_forward_demo, reset_demo
   20261110000003_checkin_loop.sql    SMART measure, check-in schedule, progress_updates, new event types
+  20261110000004_session_sources.sql where session text came from (typed / voice note / call) + transcript
 src/lib/
+  audio/       transcribe.ts (Whisper)
   agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, prompts
                ai.ts (fallback wrapper and guards), llm.ts (Groq client), live.ts (live prompts),
                json-schema.ts (zod schema to strict JSON schema)
@@ -120,7 +122,7 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/assessment` | 1 |
 | POST | `/api/matches` | 2-4 |
 | POST | `/api/booking` | 5-8 (idempotent on `idempotency_key`) |
-| POST | `/api/session/complete` | 9-10 |
+| POST | `/api/session/complete` | 9-10. Handover contract: `{ booking_id, notes?, transcript?, source: typed \| voice_note \| call_recording }`; `422 TRANSCRIPT_TOO_LONG` above about 18,000 characters |
 | POST | `/api/actions/confirm` | 11 (idempotent) |
 | POST | `/api/actions/status` | Pema marks an action done |
 | POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins) |
@@ -232,7 +234,7 @@ The header shows progress (x/14), and the YDF view has the checklist.
 ## Out of scope for the hackathon
 
 - Real payments or seed-fund disbursement
-- Video calling
+- Building our own video calling (a link to a hosted meeting is fine)
 - Production SMS or WhatsApp
 - Native apps
 - Full multilingual translation

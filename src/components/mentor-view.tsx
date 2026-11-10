@@ -1,102 +1,22 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { DEMO_SESSION_NOTES } from "@/lib/demo/fixtures";
 import { formatDay, formatDayTime, formatNu, relativeDue } from "@/lib/format";
 import type { AgendaItem, DemoState, ProgressView } from "@/lib/state-types";
 import { expertiseLabel, LANGUAGE_LABEL } from "@/lib/types";
 import { DemoGate, LastError } from "./demo-gate";
+import { VoiceNote } from "./mentor/voice-note";
 import { useDemo } from "./demo-state";
 import { Badge, Button, Card, Notice, SectionTitle, SourceBadge, StatusBadge, inputClass } from "./ui";
 
 // The mentor's side: less coordination, more guidance. A brief arrives,
 // they talk, they leave short notes, and the agent does the rest.
 
-/** Record or upload a voice note; Whisper turns it into text the mentor can edit. */
-function VoiceNote({ available, onText }: { available: boolean; onText: (text: string) => void }) {
-  const [phase, setPhase] = useState<"idle" | "recording" | "transcribing">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const recorder = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<Blob[]>([]);
-
-  async function upload(blob: Blob, name: string) {
-    setPhase("transcribing");
-    setError(null);
-    const form = new FormData();
-    form.append("file", blob, name);
-    try {
-      const res = await fetch("/api/transcribe", { method: "POST", body: form });
-      const json = (await res.json()) as { ok: boolean; text?: string; message?: string };
-      if (json.ok && json.text) onText(json.text);
-      else setError(json.message ?? "Could not transcribe the audio.");
-    } catch {
-      setError("Cannot reach the app server.");
-    } finally {
-      setPhase("idle");
-    }
-  }
-
-  async function start() {
-    setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const rec = new MediaRecorder(stream, { mimeType: mime });
-      chunks.current = [];
-      rec.ondataavailable = (e) => chunks.current.push(e.data);
-      rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        void upload(new Blob(chunks.current, { type: mime }), mime === "audio/webm" ? "voice-note.webm" : "voice-note.m4a");
-      };
-      rec.start();
-      recorder.current = rec;
-      setPhase("recording");
-    } catch {
-      setError("The microphone is not available. Allow access, or upload an audio file.");
-    }
-  }
-
-  if (!available) {
-    return <p className="text-xs text-muted">Voice notes are available when live AI is switched on.</p>;
-  }
-  return (
-    <div className="rounded-lg border border-line p-3">
-      <p className="text-sm font-medium">Or record a voice note</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {phase === "recording" ? (
-          <Button type="button" variant="danger" onClick={() => recorder.current?.stop()}>
-            Stop and transcribe
-          </Button>
-        ) : (
-          <Button type="button" variant="secondary" busy={phase === "transcribing"} onClick={start}>
-            {phase === "transcribing" ? "Transcribing..." : "Record voice note"}
-          </Button>
-        )}
-        <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm font-semibold text-accent hover:bg-accent-soft">
-          Upload audio
-          <input
-            type="file"
-            accept="audio/*"
-            className="sr-only"
-            disabled={phase !== "idle"}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f, f.name);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        {phase === "recording" && <Badge tone="danger">Recording</Badge>}
-      </div>
-      <p className="mt-2 text-xs text-muted">The audio is sent to Groq (Whisper) to turn it into text. Check the text before you submit.</p>
-      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
-    </div>
-  );
-}
-
 function NotesForm({ state }: { state: DemoState }) {
   const { act, busy } = useDemo();
   const [notes, setNotes] = useState(DEMO_SESSION_NOTES);
+  const [source, setSource] = useState<"typed" | "voice_note">("typed");
   return (
     <Card>
       <SectionTitle>After the session: quick notes</SectionTitle>
@@ -104,7 +24,7 @@ function NotesForm({ state }: { state: DemoState }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void act("notes", "/api/session/complete", { booking_id: state.booking!.id, notes });
+          void act("notes", "/api/session/complete", { booking_id: state.booking!.id, notes, source });
         }}
         className="space-y-3"
       >
@@ -114,7 +34,10 @@ function NotesForm({ state }: { state: DemoState }) {
         <textarea id="notes" rows={8} className={`${inputClass} font-mono`} value={notes} onChange={(e) => setNotes(e.target.value)} required />
         <VoiceNote
           available={state.ai_mode === "live"}
-          onText={(text) => setNotes((n) => (n === DEMO_SESSION_NOTES || !n.trim() ? text : `${n.trim()}\n${text}`))}
+          onText={(text) => {
+            setNotes((n) => (n === DEMO_SESSION_NOTES || !n.trim() ? text : `${n.trim()}\n${text}`));
+            setSource("voice_note");
+          }}
         />
         <Button type="submit" busy={busy === "notes"}>
           {busy === "notes" ? "Extracting actions..." : "Complete session"}
@@ -123,6 +46,8 @@ function NotesForm({ state }: { state: DemoState }) {
     </Card>
   );
 }
+
+const NOTES_SOURCE_LABEL = { typed: "typed notes", voice_note: "voice note", call_recording: "call recording" } as const;
 
 function DraftReview({ state }: { state: DemoState }) {
   const { act, busy } = useDemo();
@@ -138,7 +63,16 @@ function DraftReview({ state }: { state: DemoState }) {
 
   return (
     <Card>
-      <SectionTitle aside={<SourceBadge source={state.session?.summary_source} />}>Check the agent&apos;s draft actions</SectionTitle>
+      <SectionTitle
+        aside={
+          <span className="flex items-center gap-1.5">
+            {state.session && <Badge>From {NOTES_SOURCE_LABEL[state.session.notes_source]}</Badge>}
+            <SourceBadge source={state.session?.summary_source} />
+          </span>
+        }
+      >
+        Check the agent&apos;s draft actions
+      </SectionTitle>
       {state.session?.agent_summary && <p className="mb-3 text-sm text-muted">{state.session.agent_summary}</p>}
       <Notice tone="warning">Nothing is saved as an action until you confirm. Untick anything that is wrong.</Notice>
       <ul className="mt-3 space-y-2">
