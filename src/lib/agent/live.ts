@@ -202,7 +202,8 @@ export const live = {
                 "keeping each one's owner. Merge duplicates. Add nothing else."
               : source === "call_recording"
               ? " The input includes a transcript of the mentoring call. Speakers may be labelled as [Mentor] and " +
-                "[Entrepreneur]; if labels are missing, infer from the words. It may contain transcription errors. " +
+                "[Entrepreneur]; if labels are missing, infer from the words. With labels, a speaker's own \"I'll ...\" " +
+                "is that speaker's task and \"you ...\" is the other person's. It may contain transcription errors. " +
                 "Only extract actions both people clearly agreed on."
               : source === "voice_note"
                 ? " The notes were dictated and transcribed, so expect spoken language."
@@ -227,6 +228,7 @@ export const live = {
             "keeping \"you\" or \"I'll\" (e.g. \"you call the three guides for referrals\", \"I'll send you the kit\"); who; and the timeframe in their words. " +
             "Not possibilities (\"might be worth\", \"maybe later\") and not decisions to NOT do something. " +
             "who: an offer like \"I'll send you\" or \"I'll introduce you\" from the adviser is the mentor; tasks for the business owner are the entrepreneur. " +
+            "If lines are labelled, a speaker's own \"I'll ...\" is that speaker's task and \"you ...\" is the other person's. " +
             "If someone corrects a timeframe, keep the corrected one. Keep each item under 200 characters. " +
             "context: up to 5 key facts or decisions, including ideas they decided NOT to pursue. Never invent anything.",
         ),

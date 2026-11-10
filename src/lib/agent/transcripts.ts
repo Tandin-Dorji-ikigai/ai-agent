@@ -129,17 +129,50 @@ export interface FoundAgreement {
   due_in_days: number | null;
 }
 
+const SPEAKER_LABEL = /^\[(Mentor|Entrepreneur)\]\s*/;
+const FIRST_PERSON = /\b(i'll|i will|i am going to|i'm going to|let me)\b/i;
+const SECOND_PERSON = /\b(you|your|you'll)\b/i;
+
+type Speaker = "mentor" | "entrepreneur";
+
+/** true when the text has [Mentor] / [Entrepreneur] turns (for example from a call recorded per person). */
+export function hasSpeakerLabels(text: string): boolean {
+  return /^\[(Mentor|Entrepreneur)\]\s/m.test(text);
+}
+
+/**
+ * Who does it, when the speaker is KNOWN: a speaker's own "I will..." is
+ * their task; "you..." is the other person's; anything else (an instruction
+ * or a summary like "within four days, check the permits") is the entrepreneur's.
+ */
+export function ownerFromSpeaker(sentence: string, speaker: Speaker): Speaker {
+  if (FIRST_PERSON.test(sentence)) return speaker;
+  if (SECOND_PERSON.test(sentence)) return speaker === "mentor" ? "entrepreneur" : "mentor";
+  return "entrepreneur";
+}
+
+/** Sentences with their speaker (null when the text, or that line, has no speaker label). */
+function sentencesWithSpeakers(text: string): Array<{ sentence: string; speaker: Speaker | null }> {
+  if (!hasSpeakerLabels(text)) return splitSentences(text).map((sentence) => ({ sentence, speaker: null }));
+  return text.split(/\n+/).flatMap((line) => {
+    const m = SPEAKER_LABEL.exec(line.trim());
+    const speaker: Speaker | null = m ? (m[1] === "Mentor" ? "mentor" : "entrepreneur") : null;
+    return splitSentences(m ? line.trim().slice(m[0].length) : line).map((sentence) => ({ sentence, speaker }));
+  });
+}
+
 export function findAgreements(text: string): FoundAgreement[] {
   const out: FoundAgreement[] = [];
   const seen = new Set<string>();
-  for (const s of splitSentences(text.replace(/[‘’]/g, "'"))) {
+  for (const { sentence: s, speaker } of sentencesWithSpeakers(text.replace(/[‘’]/g, "'"))) {
     if (!AGREEMENT.test(s) || REJECTED.test(s) || s.endsWith("?")) continue;
     const what = cleanTitle(s);
     if (what.length < 8) continue;
     const key = what.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ what, sentence: s.slice(0, 300), who: MENTOR_OFFER.test(s) ? "mentor" : "entrepreneur", due_in_days: parseDueInDays(s) });
+    const who = speaker ? ownerFromSpeaker(s, speaker) : MENTOR_OFFER.test(s) ? "mentor" : "entrepreneur";
+    out.push({ what, sentence: s.slice(0, 300), who, due_in_days: parseDueInDays(s) });
   }
   return out.slice(0, 8);
 }

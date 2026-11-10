@@ -6,7 +6,7 @@ import { live } from "./live";
 import { MODELS } from "./llm";
 import { rejectGenderedText } from "./prompts";
 import { ChunkNotesSchema, ExtractionSchema, SINGLE_PASS_MAX_CHARS, type ChunkNotes, type Extraction, type NotesSource } from "./schemas";
-import { CHUNK_CHARS, MAX_CHUNKS, findAgreements, parseDueInDays, splitIntoChunks } from "./transcripts";
+import { CHUNK_CHARS, MAX_CHUNKS, findAgreements, hasSpeakerLabels, parseDueInDays, splitIntoChunks } from "./transcripts";
 
 // Session text -> SMART draft actions.
 //
@@ -57,6 +57,29 @@ export function fixOwner(a: Agreement): Agreement {
   if (/\b(i'll|i will|i am going to|i'm going to)\b/i.test(a.what)) return { ...a, who: "mentor" };
   if (/\b(you|your)\b/i.test(a.what)) return { ...a, who: "entrepreneur" };
   return { ...a, who: a.who === "unclear" ? "entrepreneur" : a.who };
+}
+
+/**
+ * For a transcript with [Mentor] / [Entrepreneur] labels: the owner comes from
+ * the labelled sentence the agreement was taken from. If none matches, the
+ * AI's choice is kept (it saw the labels too).
+ */
+export function ownerFromLabelledText(text: string): (a: Agreement) => Agreement {
+  const found = findAgreements(text);
+  return (a) => {
+    const words = contentWords(a.what);
+    let best: (typeof found)[number] | null = null;
+    let bestShared = 1;
+    for (const f of found) {
+      const shared = [...contentWords(`${f.what} ${f.sentence}`)].filter((w) => words.has(w)).length;
+      if (shared > bestShared) {
+        bestShared = shared;
+        best = f;
+      }
+    }
+    if (best && best.who !== "unclear") return { ...a, who: best.who };
+    return { ...a, who: a.who === "unclear" ? "entrepreneur" : a.who };
+  };
 }
 
 /** All agreements from all parts, duplicates merged. */
@@ -209,7 +232,9 @@ export async function extractFromText(text: string, source: NotesSource): Promis
       liveParts += 1;
       // Owners in AI notes are decided by the speaker's words, not the AI's guess.
       // (The rule-based reader already decided them from the full sentence.)
-      notes.push({ ...step.value, agreements: step.value.agreements.map(fixOwner) });
+      // With speaker labels, the labelled line decides (see ownerFromSpeaker).
+      const owner = hasSpeakerLabels(chunks[i]) ? ownerFromLabelledText(chunks[i]) : fixOwner;
+      notes.push({ ...step.value, agreements: step.value.agreements.map(owner) });
     } else {
       notes.push(step.value);
     }

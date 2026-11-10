@@ -72,3 +72,27 @@ describe("rule-based agreement finder (fallback)", () => {
     expect(found.some((a) => /website/i.test(a.what))).toBe(false);
   });
 });
+
+describe("owners when the speaker is known ([Mentor] / [Entrepreneur] lines)", () => {
+  it("a speaker's own 'I will' is theirs; 'you' is the other person's; instructions are the entrepreneur's", async () => {
+    const { findAgreements } = await import("./transcripts");
+    const call = [
+      "[Mentor] So we agree on three things. Within four days, check which permits the walk needs.",
+      "[Entrepreneur] Okay, I will interview five past guests by Friday.",
+      "[Mentor] And I will send you a short pricing worksheet tomorrow.",
+      "[Entrepreneur] So you will introduce me to the guide association next week.",
+    ].join("\n");
+    const who = Object.fromEntries(findAgreements(call).map((a) => [a.what.split(" ").slice(0, 3).join(" "), a.who]));
+    expect(who).toEqual({
+      "Check which permits": "entrepreneur", // the mentor's instruction
+      "Interview five past": "entrepreneur", // Pema's own "I will"
+      "Send you a": "mentor", // the mentor's own "I will"
+      "Introduce me to": "mentor", // Pema says "you will" to the mentor
+    });
+  });
+
+  it("unlabelled text keeps the old rule ('I'll send' = the mentor)", async () => {
+    const { findAgreements } = await import("./transcripts");
+    expect(findAgreements("I will send you a short pricing worksheet tomorrow.")[0]?.who).toBe("mentor");
+  });
+});

@@ -51,15 +51,38 @@ export const DEMO_SESSION_NOTES = [
  * A short sample call transcript (no speaker labels, as Whisper returns it),
  * for testing the call_recording path. Same agreements as DEMO_SESSION_NOTES.
  */
-export const DEMO_CALL_TRANSCRIPT = [
-  "Kuzu zangpo la Pema, thank you for joining. Tell me about the homestay.",
-  "We have two rooms in my family house and a half day walk through the village. A few guests came through friends last year but I do not really know who my guests are.",
-  "That is the main thing to find out. And the price, Nu. 1,200 a night, may not cover your costs, so we will come back to that after you talk to guests.",
-  "So we agree on three things. Within four days, check which permits the guided village walk needs before you advertise it.",
-  "Within a week, interview five past guests or local guides about why they came.",
-  "And within ten days, write a one line positioning statement for the homestay and the walk.",
-  "Okay, I can do that. Thank you, Deki.",
-].join(" ");
+/** The demo call, turn by turn: who said what (used for recordings in saved-response mode). */
+export const DEMO_CALL_TURNS: ReadonlyArray<{ role: "mentor" | "entrepreneur"; text: string }> = [
+  { role: "mentor", text: "Kuzu zangpo la Pema, thank you for joining. Tell me about the homestay." },
+  {
+    role: "entrepreneur",
+    text: "We have two rooms in my family house and a half day walk through the village. A few guests came through friends last year but I do not really know who my guests are.",
+  },
+  {
+    role: "mentor",
+    text: "That is the main thing to find out. And the price, Nu. 1,200 a night, may not cover your costs, so we will come back to that after you talk to guests.",
+  },
+  { role: "mentor", text: "So we agree on three things. Within four days, check which permits the guided village walk needs before you advertise it." },
+  { role: "mentor", text: "Within a week, interview five past guests or local guides about why they came." },
+  { role: "mentor", text: "And within ten days, write a one line positioning statement for the homestay and the walk." },
+  { role: "entrepreneur", text: "Okay, I can do that. Thank you, Deki." },
+];
+
+export const DEMO_CALL_TRANSCRIPT = DEMO_CALL_TURNS.map((t) => t.text).join(" ");
+
+/** Seconds each demo turn takes in the saved recordings. */
+const DEMO_TURN_SECONDS = 8;
+
+/**
+ * Saved-response mode for call recordings: what Whisper would have heard on
+ * one person's microphone in the demo call (their own turns, with timings).
+ * Merging both people's saved recordings rebuilds the conversation in order.
+ */
+export function demoTrackSegments(role: "mentor" | "entrepreneur"): Array<{ start: number; end: number; text: string }> {
+  return DEMO_CALL_TURNS.flatMap((t, i) =>
+    t.role === role ? [{ start: i * DEMO_TURN_SECONDS, end: i * DEMO_TURN_SECONDS + DEMO_TURN_SECONDS - 1, text: t.text }] : [],
+  );
+}
 
 /**
  * A long (about 30 minutes) call transcript for testing long-call handling:

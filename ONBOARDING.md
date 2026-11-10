@@ -74,7 +74,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 |---|---|---|
 | Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Any fluent speaker on the team |
 | Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Audio-to-text teammate |
-| Calls | No call yet. Plan: a "Join call" link to a hosted meeting, with an audio-only option | Calls teammate |
+| Calls: the screen | The **backend is built and tested** (see "Calls" in section 9). Still needed: the call screen (embed the room, the consent step, record your own microphone, upload parts, end) | Frontend |
 | Real transcripts in the test set | The 5 test cases are written by us. Real (anonymised, consented) transcripts would give honest accuracy numbers | Agent (Tandin), with audio-to-text |
 | YDF acting on escalations | The queue is read-only. **Deferred** by team decision | Nobody for now |
 | UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Frontend teammate |
@@ -249,7 +249,7 @@ POST /api/session/complete
 - Short text is read straight away, and the response includes the result.
 - **Long transcripts** (over about 22,000 characters, or 25 minutes of speech) get `202 { "processing": true }`. The agent reads them in the background, and the drafts appear in the Mentor view when ready (a 30-minute call takes about a minute). The hard limit is 200,000 characters, about four hours.
 - The agent then extracts SMART draft actions, and the mentor confirms them in the Mentor view, exactly as with typed notes. The Mentor view shows where the text came from.
-- To test your part without any AI key, run `E2E_SOURCE=call_recording npm run demo:e2e`. It sends a sample call transcript through the whole demo, plus a 30-minute call through the background flow. Announce the reset first (section 7).
+- To test your part without any AI key, run `E2E_SOURCE=call_recording npm run demo:e2e` (an uploaded call transcript) or `E2E_SOURCE=call npm run demo:e2e` (a call, one recording per person). It sends a sample call transcript through the whole demo, plus a 30-minute call through the background flow. Announce the reset first (section 7).
 - Need a new database field (for example a meeting link on a booking)? Ask the agent owner for a migration. Never change tables in the dashboard.
 
 ### Notes per role
@@ -269,10 +269,18 @@ POST /api/session/complete
 - **Needs live AI on:** `AI_MODE=live` plus `GROQ_API_KEY`.
 - **Separate speech-to-text key (optional):** `GROQ_TRANSCRIBE_API_KEY`, from a different Groq account, is used for all transcription (voice notes, voice intros, call and video recordings); the agent keeps `GROQ_API_KEY`. If it is not set, transcription uses `GROQ_API_KEY`.
 
-**Calls:** keep it small.
-- Do not build video calling. A hosted meeting link (for example Jitsi Meet, no account needed) is enough.
-- Offer audio-only, because rural founders often have weak internet.
-- Embedded meetings usually cannot give us their audio. So the simplest recording path is: with both people's consent, the mentor records on their own device and uploads the file through the audio-to-text flow.
+**Calls (backend built; the screen is next):**
+- **Video:** Daily (daily.co) "Prebuilt" rooms, embedded in our page. 10,000 free minutes a month; participants need no account. The room is private: only the personal `join_url` from `/api/calls/join` works. Public Jitsi (meet.jit.si) is out: it now makes the room creator sign in and caps meetings at 95 minutes.
+  - Set `DAILY_API_KEY` (dashboard → Developers) in `.env.local`. Without it, calls still work with no video (`provider: "none"`, `join_url: null`): joining, consent, recording and transcripts all work, which is fine for in-person sessions and for tests.
+- **Why each person records their own microphone:** Whisper cannot tell voices apart, so guessing who said what goes wrong (a test call had 2 of 3 action owners wrong). With one recording per person, every line's speaker is certain (a test call had 3 of 3 right, and an echo from a speaker was removed).
+- **The screen, step by step** (all `POST`; `role` is `"mentor"` or `"entrepreneur"`):
+  1. `/api/calls/join { booking_id, role }` → `{ call_id, provider, join_url, recording, server_time_ms, part_seconds }`. Only for a **confirmed** booking. Embed `join_url` with Daily Prebuilt (`DailyIframe.createFrame()` then `.join({ url: join_url })`, or an `<iframe src>` with `allow="camera; microphone"`). Offer **audio-only** (start with the camera off) for weak connections. Keep `offset = server_time_ms - Date.now()`.
+  2. Ask: "Record this call for the agent's notes?" Then `/api/calls/consent { call_id, role, consent: true }`. Recording is allowed only when `recording.allowed` is true (both agreed; `GET /api/state` shows `call.consent`). `consent: false` withdraws and deletes your recorded parts.
+  3. Record **only your own microphone** (`getUserMedia({ audio: { echoCancellation: true } })` + `MediaRecorder`), starting a new part every `part_seconds` (5 minutes). Before each part starts, note `started_at_ms = Date.now() + offset`.
+  4. Upload each finished part: multipart `/api/calls/track` with `call_id`, `role`, `part` (0, 1, 2, ...), `started_at_ms`, `file`. Safe to retry: the same part is never stored twice. The audio is transcribed and thrown away.
+  5. On hang-up: upload the last part, then `/api/calls/end { call_id, role }`. When both have ended (or the mentor sends `force: true`, for example if the other person left), the agent gets the merged `[Mentor]` / `[Entrepreneur]` transcript, the session completes, and draft actions appear for the mentor to confirm.
+- **Test it without AI:** `E2E_SOURCE=call npm run demo:e2e` runs the whole demo with a call (saved recordings stand in for Whisper when `AI_MODE=fixture`). Announce the reset first (section 7).
+- **For the demo:** use two devices (laptop and phone). Two tabs on one laptop share one microphone, so both recordings would hear both people.
 
 **Dzongkha message (any fluent speaker):**
 1. Open `src/lib/demo/dzongkha.ts` and write the Dzongkha version of the English message in `dzongkha`.

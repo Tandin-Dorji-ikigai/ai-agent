@@ -1,5 +1,6 @@
 import { aiMode } from "@/lib/agent/ai";
 import { ProviderError, RateLimitError, transcribeApiKey } from "@/lib/agent/llm";
+import { MAX_AUDIO_BYTES, UNSUPPORTED_FORMAT_MESSAGE, isAcceptedFormat } from "@/lib/audio/formats";
 import { CALL_SPEAKERS } from "@/lib/audio/speakers";
 import { TRANSCRIBE_LANGUAGES, transcribe, transcribeCallRecording, type TranscribeLanguage } from "@/lib/audio/transcribe";
 import { fail, ok } from "@/lib/http";
@@ -11,34 +12,8 @@ import { fail, ok } from "@/lib/http";
 //     speaker guess finishes safely ("labeled": true), otherwise the plain transcript
 // See ONBOARDING.md section 9 (Area 1: Audio).
 
-const MAX_BYTES = 25 * 1024 * 1024; // Groq free-tier upload limit
 const VOICE_TIMEOUT_MS = 30_000;
 const CALL_TIMEOUT_MS = 120_000;
-
-// What Groq Whisper accepts. Anything else (for example iPhone .mov, .mkv, .aac)
-// is refused here, before a long upload fails at Groq.
-const ACCEPTED_EXTENSIONS = /\.(flac|mp3|mp4|mpeg|mpga|m4a|ogg|wav|webm)$/i;
-const ACCEPTED_TYPES = new Set([
-  "audio/flac",
-  "audio/x-flac",
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/mp4",
-  "audio/m4a",
-  "audio/x-m4a",
-  "audio/ogg",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/wave",
-  "audio/webm",
-  "video/mp4",
-  "video/mpeg",
-  "video/webm",
-]);
-
-function isAcceptedFormat(file: File, filename: string): boolean {
-  return ACCEPTED_EXTENSIONS.test(filename) || ACCEPTED_TYPES.has(file.type.split(";")[0].trim().toLowerCase());
-}
 
 /** The HTTP status Groq returned, if any (ProviderError messages start with it). */
 function providerStatus(err: unknown): number | null {
@@ -58,7 +33,7 @@ export async function POST(req: Request) {
   }
   const file = form.get("file");
   if (!(file instanceof File)) return fail(400, "INVALID_INPUT", "No audio file received.");
-  if (file.size === 0 || file.size > MAX_BYTES) return fail(400, "INVALID_INPUT", "The audio must be under 25 MB.");
+  if (file.size === 0 || file.size > MAX_AUDIO_BYTES) return fail(400, "INVALID_INPUT", "The audio must be under 25 MB.");
 
   const lang = form.get("language");
   const language = (TRANSCRIBE_LANGUAGES as readonly string[]).includes(String(lang)) ? (lang as TranscribeLanguage) : undefined;
@@ -67,7 +42,7 @@ export async function POST(req: Request) {
   const mode = modeRaw === "call_recording" ? "call_recording" : "voice_note";
   const filename = file.name || (mode === "call_recording" ? "call-recording.webm" : "voice-note.webm");
   if (!isAcceptedFormat(file, filename)) {
-    return fail(400, "UNSUPPORTED_FORMAT", "Use an mp3, m4a, wav, ogg, flac, webm or mp4 file. Other formats (such as .mov) are not accepted.");
+    return fail(400, "UNSUPPORTED_FORMAT", UNSUPPORTED_FORMAT_MESSAGE);
   }
 
   const timeoutMs = mode === "call_recording" ? CALL_TIMEOUT_MS : VOICE_TIMEOUT_MS;

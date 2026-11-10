@@ -8,7 +8,8 @@
 // Options (environment variables):
 //   BASE_URL   default http://localhost:3000
 //   RUNS       how many reset-to-finish runs to do, default 2
-//   E2E_SOURCE typed (default) or call_recording: send the sample call
+//   E2E_SOURCE typed (default), call (the session as a call: each person's
+//              microphone uploaded and merged), or call_recording: send the sample call
 //              transcript instead of typed notes (handover contract test)
 //   PACE_MS    pause after each action, e.g. 4000 with live AI to stay under
 //              the free tier's tokens-per-minute limit (default 0)
@@ -22,6 +23,58 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const RUNS = Number(process.env.RUNS ?? 2);
 const PACE_MS = Number(process.env.PACE_MS ?? 0);
 const VIA_CALL = process.env.E2E_SOURCE === "call_recording";
+// E2E_SOURCE=call: the session happens as a call; each person's microphone is
+// uploaded separately and merged into a transcript with certain speakers.
+const VIA_TRACKS = process.env.E2E_SOURCE === "call";
+
+/** A tiny valid WAV (silence): with AI_MODE=fixture the server uses the saved demo recordings. */
+function tinyWav() {
+  const samples = 1600;
+  const buf = new ArrayBuffer(44 + samples * 2);
+  const v = new DataView(buf);
+  const str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + samples * 2, true); str(8, "WAVE"); str(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true);
+  v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, samples * 2, true);
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+async function upload(fields, file = tinyWav(), name = "track.wav") {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
+  form.append("file", file, name);
+  const res = await fetch(`${BASE}/api/calls/track`, { method: "POST", body: form });
+  return { status: res.status, json: await res.json() };
+}
+
+/** The session as a call: join, agree, upload each microphone, end. Returns the final /api/calls/end response. */
+async function callSession(bookingId) {
+  const jE = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
+  const jM = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "mentor" });
+  check("9  call: both join the same room for the confirmed booking", jE.status === 200 && jM.json.call_id === jE.json.call_id, { jE: jE.json, jM: jM.json });
+  check("   call: a personal link only when a video provider is set up", jE.json.provider === "daily" ? !!jE.json.join_url : jE.json.join_url === null, jE.json);
+  const callId = jE.json.call_id;
+  const early = await upload({ call_id: callId, role: "mentor", part: 0, started_at_ms: jM.json.server_time_ms });
+  check("   call: no recording before both agree", early.status === 409 && early.json.code === "RECORDING_NOT_ALLOWED", early.json);
+  await call("POST", "/api/calls/consent", { call_id: callId, role: "entrepreneur", consent: true });
+  const cM = await call("POST", "/api/calls/consent", { call_id: callId, role: "mentor", consent: true });
+  check("   call: recording allowed once both agree", cM.json.recording?.allowed === true, cM.json);
+  const mov = await upload({ call_id: callId, role: "mentor", part: 0, started_at_ms: jM.json.server_time_ms }, new Blob(["x"], { type: "video/quicktime" }), "clip.mov");
+  check("   call: formats Groq rejects are refused before upload", mov.status === 400 && mov.json.code === "UNSUPPORTED_FORMAT", mov.json);
+  const start = jM.json.server_time_ms;
+  const uM = await upload({ call_id: callId, role: "mentor", part: 0, started_at_ms: start });
+  const uE = await upload({ call_id: callId, role: "entrepreneur", part: 0, started_at_ms: start });
+  check("   call: each person's microphone uploaded and transcribed", uM.status === 200 && uE.status === 200 && uM.json.segments > 0 && uE.json.segments > 0, { uM: uM.json, uE: uE.json });
+  const again = await upload({ call_id: callId, role: "mentor", part: 0, started_at_ms: start });
+  check("   call: uploading the same part again is safe", again.json.reused === true && again.json.part_id === uM.json.part_id, again.json);
+  const eE = await call("POST", "/api/calls/end", { call_id: callId, role: "entrepreneur" });
+  check("   call: waits for the mentor to finish too", eE.json.finalized === false && eE.json.waiting_for === "mentor", eE.json);
+  const eM = await call("POST", "/api/calls/end", { call_id: callId, role: "mentor" });
+  check("   call ends: transcript with certain speakers goes to the agent", eM.status === 200 && eM.json.finalized && eM.json.transcript_turns >= 2 && eM.json.outcome?.status === "completed", eM.json);
+  const late = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
+  check("   call: the room is closed once the session is complete", late.status === 409 && late.json.code === "CALL_ENDED", late.json);
+  return eM;
+}
 
 let failures = 0;
 function check(label, condition, detail) {
@@ -151,16 +204,29 @@ async function runOnce(n, fx) {
   });
   check("   contract: transcripts over the hard cap are refused", bad2.status === 400 && bad2.json.code === "INVALID_INPUT", bad2.json);
 
-  // 9-10. Session notes (or call transcript) and extraction
+  // 9-10. Session notes (or call transcript, or a call) and extraction
   const completeBody = VIA_CALL
     ? { booking_id: b1.json.booking_id, transcript: fx.call_transcript, source: "call_recording" }
     : { booking_id: b1.json.booking_id, notes: fx.session_notes };
-  const c1 = await call("POST", "/api/session/complete", completeBody);
-  check(`9  mentor ${VIA_CALL ? "call transcript" : "notes"} submitted`, c1.status === 200 && c1.json.outcome?.status === "completed", c1.json);
-  const c2 = await call("POST", "/api/session/complete", completeBody);
-  check("   repeat submit reuses the session, no second run", c2.json.session_id === c1.json.session_id && c2.json.outcome?.status === "skipped", c2.json);
+  let c1;
+  if (VIA_TRACKS) {
+    c1 = await callSession(b1.json.booking_id);
+    const c2 = await call("POST", "/api/calls/end", { call_id: c1.json.call_id, role: "mentor" });
+    check("   ending again changes nothing, no second run", c2.json.finalized === true && !c2.json.outcome, c2.json);
+    s = await state();
+    check(
+      "   the session keeps the merged transcript; one part from each person",
+      s.session?.transcript_chars > 0 && s.call?.transcript_built === true && s.call.parts.mentor === 1 && s.call.parts.entrepreneur === 1 && s.call.status === "ended",
+      { session: s.session, call: s.call },
+    );
+  } else {
+    c1 = await call("POST", "/api/session/complete", completeBody);
+    check(`9  mentor ${VIA_CALL ? "call transcript" : "notes"} submitted`, c1.status === 200 && c1.json.outcome?.status === "completed", c1.json);
+    const c2 = await call("POST", "/api/session/complete", completeBody);
+    check("   repeat submit reuses the session, no second run", c2.json.session_id === c1.json.session_id && c2.json.outcome?.status === "skipped", c2.json);
+  }
   s = await state();
-  check("   session records where the text came from", s.session?.notes_source === (VIA_CALL ? "call_recording" : "typed"), s.session);
+  check("   session records where the text came from", s.session?.notes_source === (VIA_CALL || VIA_TRACKS ? "call_recording" : "typed"), s.session);
   const drafts = s.actions.filter((x) => x.status === "draft");
   check("10 three draft actions extracted", drafts.length === 3, s.actions);
 

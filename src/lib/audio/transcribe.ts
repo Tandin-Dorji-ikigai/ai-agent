@@ -94,3 +94,45 @@ export async function transcribeCallRecording(
     return { text, raw_text: text, labeled: false };
   }
 }
+
+/** A timed piece of one person's recording (seconds from the part's start). */
+export interface TimedSegment {
+  start: number;
+  end: number;
+  text: string;
+  /** Whisper's confidence in the words (closer to 0 = more confident). */
+  avg_logprob?: number;
+  /** Whisper's estimate that this piece is really silence (0 to 1). */
+  no_speech_prob?: number;
+}
+
+/**
+ * Transcribe ONE person's microphone recording with timings, for a call
+ * transcript with certain speakers (see src/lib/calls/merge.ts).
+ */
+export async function transcribeSegments(
+  file: Blob,
+  filename: string,
+  signal: AbortSignal,
+  language?: TranscribeLanguage,
+): Promise<TimedSegment[]> {
+  const form = new FormData();
+  form.append("file", file, filename);
+  form.append("model", TRANSCRIBE_MODEL);
+  form.append("response_format", "verbose_json");
+  form.append("timestamp_granularities[]", "segment");
+  if (language) form.append("language", language);
+  form.append("prompt", VOCABULARY_HINT);
+  const data = await providerPost("/audio/transcriptions", form, signal, false, transcribeApiKey());
+  console.info(`[ai] transcribe(track) via ${TRANSCRIBE_MODEL} (${transcribeKeyName()}): ${Math.round(file.size / 1024)} KB`);
+  const raw = Array.isArray(data.segments) ? data.segments : [];
+  return raw
+    .map((s) => {
+      const r = s as { start?: unknown; end?: unknown; text?: unknown; avg_logprob?: unknown; no_speech_prob?: unknown };
+      const seg: TimedSegment = { start: Number(r.start) || 0, end: Number(r.end) || 0, text: String(r.text ?? "").trim() };
+      if (typeof r.avg_logprob === "number") seg.avg_logprob = r.avg_logprob;
+      if (typeof r.no_speech_prob === "number") seg.no_speech_prob = r.no_speech_prob;
+      return seg;
+    })
+    .filter((s) => s.text.length > 0);
+}

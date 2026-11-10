@@ -163,6 +163,22 @@ export interface RequestRoundView {
   escalation_code: string | null;
 }
 
+/** The call for the current booking (join links are personal and never part of the shared state). */
+export interface CallView {
+  id: string;
+  provider: "daily" | "none";
+  status: "open" | "ended";
+  joined: { mentor: boolean; entrepreneur: boolean };
+  /** Recording needs both. */
+  consent: { mentor: boolean; entrepreneur: boolean };
+  /** Parts uploaded per person (each about 5 minutes of their own microphone). */
+  parts: { mentor: number; entrepreneur: number };
+  /** Each person said they have finished. */
+  done: { mentor: boolean; entrepreneur: boolean };
+  /** The merged transcript has gone to the agent. */
+  transcript_built: boolean;
+}
+
 export interface DemoStep {
   n: number;
   label: string;
@@ -199,6 +215,8 @@ export interface DemoState {
   steps: DemoStep[];
   /** The agent's current round of mentor requests (null before matching). */
   request_round: RequestRoundView | null;
+  /** The call for the current booking, if anyone has joined it. */
+  call: CallView | null;
   /** The open request, if a mentor is deciding right now. */
   pending_request: MentorRequestView | null;
   /** Mentor shown in the mentor view: the one deciding on a request, else the booked mentor, else the top match. */

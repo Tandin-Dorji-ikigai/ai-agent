@@ -78,6 +78,36 @@ export const DeclineRequestInputSchema = z.object({
   note: z.string().trim().max(300).optional(),
 });
 
+/** Calls: who is acting (no login in the prototype; identity comes from the booking). */
+const CallRoleSchema = z.enum(["mentor", "entrepreneur"]);
+
+export const CallJoinInputSchema = z.object({
+  booking_id: z.uuid(),
+  role: CallRoleSchema,
+});
+
+/** Recording needs both people to agree; consent: false withdraws and deletes that person's parts. */
+export const CallConsentInputSchema = z.object({
+  call_id: z.uuid(),
+  role: CallRoleSchema,
+  consent: z.boolean().default(true),
+});
+
+/** Multipart fields of POST /api/calls/track (the file is checked separately). */
+export const CallTrackFieldsSchema = z.object({
+  call_id: z.uuid(),
+  role: CallRoleSchema,
+  part: z.coerce.number().int().min(0).max(500),
+  started_at_ms: z.coerce.number().int().positive(),
+});
+
+/** One person has finished; force (mentor only) ends it for both, e.g. if the other person left. */
+export const CallEndInputSchema = z.object({
+  call_id: z.uuid(),
+  role: CallRoleSchema,
+  force: z.boolean().default(false),
+});
+
 /** The mentee asks for a specific mentor (a follow-up, or the agent's suggestion). */
 export const AskMentorInputSchema = z.object({
   mentor_id: z.uuid(),

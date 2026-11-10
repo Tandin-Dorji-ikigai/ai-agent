@@ -10,6 +10,7 @@ import { buildAgenda } from "./progress";
 import type {
   AgentRunView,
   BookingView,
+  CallView,
   DemoState,
   DemoStep,
   EscalationView,
@@ -58,6 +59,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       steps: stepsFor(null),
       request_round: null,
       pending_request: null,
+      call: null,
       mentor_for_view: null,
     };
   }
@@ -240,6 +242,8 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
 
   const mentor_for_view: MentorRecord | null = pending_request?.mentor ?? booking?.mentor ?? matches[0]?.mentor ?? null;
 
+  const call = booking ? await loadCallView(booking.id) : null;
+
   return {
     ...base,
     seeded: true,
@@ -259,7 +263,25 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     steps: stepsFor({ entrepreneur, matches, booking, session, actions, runs, requests }),
     request_round,
     pending_request,
+    call,
     mentor_for_view,
+  };
+}
+
+async function loadCallView(bookingId: string): Promise<CallView | null> {
+  const row = must(await db().from("calls").select("*").eq("booking_id", bookingId).maybeSingle(), "load call") as Record<string, unknown> | null;
+  if (!row) return null;
+  const parts = must(await db().from("call_track_parts").select("role").eq("call_id", row.id), "load call parts") as Array<{ role: string }>;
+  const count = (role: string) => parts.filter((p) => p.role === role).length;
+  return {
+    id: String(row.id),
+    provider: row.provider as CallView["provider"],
+    status: row.status as CallView["status"],
+    joined: { mentor: !!row.mentor_joined_at, entrepreneur: !!row.entrepreneur_joined_at },
+    consent: { mentor: !!row.mentor_consent_at, entrepreneur: !!row.entrepreneur_consent_at },
+    parts: { mentor: count("mentor"), entrepreneur: count("entrepreneur") },
+    done: { mentor: !!row.mentor_done_at, entrepreneur: !!row.entrepreneur_done_at },
+    transcript_built: !!row.transcript_built_at,
   };
 }
 

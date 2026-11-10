@@ -1,6 +1,7 @@
 import "server-only";
 import type { z } from "zod";
 import { ToolError } from "./agent/tools";
+import { CallProviderError } from "./calls/provider";
 import { ConfigError, DbError, MigrationsRequiredError } from "./supabase/server";
 
 // Small helpers so every route returns the same JSON error shape:
@@ -52,6 +53,13 @@ const USER_MESSAGES: Record<string, [number, string]> = {
   SLOT_NOT_OFFERED: [409, "Pick one of the times offered in the request."],
   SLOT_IN_PAST: [409, "That time has already passed. Pick a later one."],
   NOT_BOOKABLE: [409, "This mentor has no open sessions right now."],
+  BOOKING_CANCELLED: [409, "This booking was cancelled."],
+  CALL_NOT_AVAILABLE: [409, "Calls are only for confirmed sessions."],
+  CALL_NOT_OPEN_YET: [409, "The call is not open yet. It opens shortly before the session."],
+  CALL_ENDED: [409, "This call has ended."],
+  RECORDING_NOT_ALLOWED: [409, "Recording needs both people to agree first."],
+  RATE_LIMITED: [429, "The service is busy. Try again in a minute."],
+  TRANSCRIPTION_FAILED: [502, "This part could not be transcribed. Upload it again."],
 };
 
 /** Converts thrown errors into safe JSON responses (no stack traces or secrets). */
@@ -65,6 +73,7 @@ export function handleError(err: unknown): Response {
       "The database is missing tables or columns this version of the app needs. Apply the new migrations (npx supabase db push); for a brand-new, empty project, run supabase/APPLY_ALL.sql instead. The server log has the details.",
     );
   }
+  if (err instanceof CallProviderError) return fail(502, "CALL_PROVIDER_FAILED", `${err.message} Try again, or meet another way.`);
   if (err instanceof ToolError) {
     const known = USER_MESSAGES[err.code];
     return fail(known?.[0] ?? 400, err.code, known?.[1] ?? err.message);

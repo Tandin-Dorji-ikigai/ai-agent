@@ -55,6 +55,7 @@ npm run typecheck
 npm run demo:e2e     # all 14 demo steps and every check-in branch, twice, then a mentor declining, not replying, and the YDF hand-over. RESETS THE DEMO DATA
 PACE_MS=3000 RUNS=1 npm run demo:e2e   # with AI_MODE=live: stays under the free tier, prints live vs saved counts
 E2E_SOURCE=call_recording npm run demo:e2e   # the same demo from a call transcript, plus a 30-minute call read in the background
+E2E_SOURCE=call npm run demo:e2e             # the same demo as a call: join, consent, one recording per person, merged transcript
 npm run eval:extraction   # scores extraction on evals/extraction-cases.json (rule-based with AI_MODE=fixture, live AI with AI_MODE=live)
 npm run eval:assessment   # scores drafting the assessment from speech on evals/assessment-cases.json (3 cases)
 ```
@@ -96,6 +97,7 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 - **Agent events:** an event runs immediately after it is created, so the demo never waits for a worker. `agent_events` still records every event; a failed event can be retried from the YDF log (`POST /api/agent/run`).
 - **Check-in loop (team workflow):** confirmed actions are SMART (with a "done when" measure) and get a check-in two days before they are due. Each reply is read as done, on track, or stuck (with or without needing help). Then the agent marks it done, confirms the next check-in, records the obstacle, recommends an approved resource, asks the mentee's own mentor (onto the next session's agenda), suggests another mentor, or escalates to YDF for sensitive topics. Every outcome goes into the mentor's progress feed, and a follow-up booking is briefed from it.
 - **Mentor requests (the mentor decides):** after matching, the agent sends a request to the best-ranked mentor who is verified, active and has open sessions (never one below 40/100). The mentor sees only what they need: the mentee's needs, stage, sector, challenge, language and why they were picked (no phone number or budget). They accept by picking one of their usual weekly times (Bhutan time), or decline with a reason. Only then is anything booked or any YDF credit used (`accept_mentor_request` in SQL, one transaction). On a decline, or no reply within 2 days, the agent asks the next best mentor and tells the mentee why; after three mentors it creates a YDF escalation. A mentee can also ask for a specific mentor (a follow-up, or one the agent suggested), and the same rules apply.
+- **Calls (backend):** one private Daily room per confirmed booking, only for its two participants; it closes when the session completes. With both people's consent, each browser records only its own microphone and uploads it in 5-minute parts; each part is transcribed (speech-to-text key) and the audio is discarded. When the call ends, the parts are merged by time into `[Mentor]` / `[Entrepreneur]` turns (Whisper's silence inventions and speaker echoes dropped), and the session completes like typed notes do. With labelled lines, a speaker's own "I will..." is their action and "you..." the other person's. Without `DAILY_API_KEY` there is no video, but everything else works.
 - **Demo clock:** fast-forward moves an offset stored in `demo_state`, and the whole app reads time through it (`demo_now()` in SQL, `getDemoClock()` in TypeScript). The real clock is never changed.
 
 ### Repository layout
@@ -107,6 +109,7 @@ supabase/migrations/
   20261110000003_checkin_loop.sql    SMART measure, check-in schedule, progress_updates, new event types
   20261110000004_session_sources.sql where session text came from (typed / voice note / call) + transcript
   20261110000005_mentor_requests.sql mentor_requests, weekly times, accept_mentor_request, new events
+  20261110000006_calls.sql           calls (one room per booking) and call_track_parts (text only, per person)
 src/lib/
   audio/       transcribe.ts (Whisper)
   agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, prompts
@@ -144,6 +147,10 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins; mentor requests past their deadline expire) |
 | POST | `/api/inbox/reply` | 13 (one decision per check-in or follow-up) |
 | POST | `/api/agent/run` | Retry a failed event |
+| POST | `/api/calls/join` | Join the call for a confirmed booking: `{ booking_id, role }` → personal `join_url` (Daily), `call_id`, `server_time_ms` |
+| POST | `/api/calls/consent` | `{ call_id, role, consent }`. Recording only when both agree |
+| POST | `/api/calls/track` | Multipart: one part of ONE person's microphone (`call_id, role, part, started_at_ms, file`). Transcribed, audio discarded |
+| POST | `/api/calls/end` | `{ call_id, role, force? }`. When both end: merged transcript with certain speakers → session completed → agent drafts actions |
 | POST | `/api/transcribe` | Audio to text (Whisper); live AI only. `mode=voice_note` (default, optional `language=en`) or `mode=call_recording` (speaker-labelled when the guess finishes safely: `labeled: true`) |
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
