@@ -9,14 +9,6 @@ export class ConfigError extends Error {
   code = "SUPABASE_NOT_CONFIGURED" as const;
 }
 
-/** Connected to Supabase, but schema/migrations are missing (e.g. no demo_state). */
-export class MigrationsRequiredError extends Error {
-  code = "MIGRATIONS_REQUIRED" as const;
-  constructor(message = "Database tables are missing. Apply supabase/migrations (see APPLY_ALL.sql).") {
-    super(message);
-  }
-}
-
 let cached: SupabaseClient | null = null;
 
 function supabaseKey(): string | undefined {
@@ -43,21 +35,22 @@ export function db(): SupabaseClient {
 }
 
 /**
+ * Error codes meaning "this table, column or function is not in the database",
+ * i.e. a migration has not been applied: PostgREST PGRST205 (table), PGRST202
+ * (function), PGRST204 (column); Postgres 42P01 (table), 42703 (column).
+ * Codes, not message text, so ordinary query bugs are not mistaken for this.
+ */
+const MISSING_SCHEMA_CODES = new Set(["PGRST205", "PGRST202", "PGRST204", "42P01", "42703"]);
+
+/**
  * Throws on a Supabase error so callers can use plain values.
  * With .maybeSingle() the returned value can still be null (not found).
  */
-function isMissingSchema(message: string): boolean {
-  return /Could not find the table|schema cache|does not exist/i.test(message);
-}
-
 export function must<T>(result: { data: T | null; error: { message: string; code?: string } | null }, what: string): T {
   if (result.error) {
-    if (isMissingSchema(result.error.message)) {
-      throw new MigrationsRequiredError(
-        `${what}: ${result.error.message}. Open Supabase SQL Editor and run supabase/APPLY_ALL.sql`,
-      );
-    }
-    throw new DbError(`${what}: ${result.error.message}`, result.error.code, result.error.message);
+    const { message, code } = result.error;
+    if (code && MISSING_SCHEMA_CODES.has(code)) throw new MigrationsRequiredError(`${what}: ${message}`, code, message);
+    throw new DbError(`${what}: ${message}`, code, message);
   }
   return result.data as T;
 }
@@ -70,4 +63,9 @@ export class DbError extends Error {
   ) {
     super(message);
   }
+}
+
+/** Connected to Supabase, but a table, column or function is missing: migrations not applied. */
+export class MigrationsRequiredError extends DbError {
+  code = "MIGRATIONS_REQUIRED" as const;
 }

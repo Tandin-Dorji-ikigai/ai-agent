@@ -142,7 +142,7 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/demo/fast-forward` | 12 (overdue follow-ups and due check-ins; mentor requests past their deadline expire) |
 | POST | `/api/inbox/reply` | 13 (one decision per check-in or follow-up) |
 | POST | `/api/agent/run` | Retry a failed event |
-| POST | `/api/transcribe` | Voice note to text (Whisper); live AI only |
+| POST | `/api/transcribe` | Audio to text (Whisper); live AI only. `mode=voice_note` (default, optional `language=en`) or `mode=call_recording` (speaker-labelled when the guess finishes safely: `labeled: true`) |
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
 

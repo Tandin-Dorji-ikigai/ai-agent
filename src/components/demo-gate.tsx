@@ -31,19 +31,22 @@ export function DemoGate({ children }: { children: (state: DemoState) => ReactNo
   if (error?.code === "MIGRATIONS_REQUIRED") {
     return (
       <Card className="mx-auto max-w-xl">
-        <h1 className="text-lg font-semibold">Create the database tables</h1>
+        <h1 className="text-lg font-semibold">Update the database</h1>
         <p className="mt-2 text-sm text-muted">
-          Supabase is connected, but the app tables (including <code className="font-mono text-ink">demo_state</code>) are not there yet.
+          Supabase is connected, but it is missing tables or columns this version of the app needs. The server log names what is missing.
         </p>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted">
+        <h2 className="mt-4 text-sm font-semibold">A project that is already set up (most likely)</h2>
+        <p className="mt-1 text-sm text-muted">
+          Apply only the new migrations: run <code className="font-mono text-ink">npx supabase db push</code>, or ask the backend owner to.
+          Do not run APPLY_ALL.sql here: it would stop at the first table that already exists.
+        </p>
+        <h2 className="mt-4 text-sm font-semibold">A brand-new, empty project</h2>
+        <ol className="mt-1 list-decimal space-y-2 pl-5 text-sm text-muted">
           <li>
             Open your Supabase project → <span className="font-medium text-ink">SQL Editor</span> → New query.
           </li>
           <li>
-            Open <code className="font-mono text-ink">ai-agent/supabase/APPLY_ALL.sql</code> in VS Code, copy everything, paste into the SQL Editor.
-          </li>
-          <li>
-            Click <span className="font-medium text-ink">Run</span>. Wait until it finishes without errors.
+            Paste all of <code className="font-mono text-ink">supabase/APPLY_ALL.sql</code> and click <span className="font-medium text-ink">Run</span>.
           </li>
           <li>Refresh this page, then click <span className="font-medium text-ink">Load demo data</span>.</li>
         </ol>

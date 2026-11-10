@@ -1,129 +1,129 @@
 import "server-only";
 import { z } from "zod";
-import { MODELS, structured } from "../agent/llm";
+import { aiStep } from "../agent/ai";
+import { BACKGROUND_MAX_WAIT_MS, MODELS, structured } from "../agent/llm";
 
-/** Roles used in mentoring call transcripts (handover to the agent). */
+// Speaker labels for a mentoring call transcript (handover to the agent).
+// Groq Whisper cannot tell voices apart, so this is a GUESS from the words.
+// Safety rules:
+//   - the AI only returns a label per numbered line; it never rewrites words,
+//     so nothing can be invented or dropped;
+//   - labels are all or nothing: if any part fails (error, rate limit, bad
+//     output, running out of time), the plain transcript is returned instead,
+//     and the agent infers owners from the words as before.
+// When calls record each person's microphone separately, speakers will be
+// known for certain and this guess is no longer needed.
+
+/** Roles used in mentoring call transcripts. */
 export const CALL_SPEAKERS = ["Mentor", "Entrepreneur"] as const;
 export type CallSpeaker = (typeof CALL_SPEAKERS)[number];
 
+/** One piece of Whisper output (verbose_json segment). */
 export interface TranscriptSegment {
-  start: number;
-  end: number;
   text: string;
 }
 
-export interface LabeledLine {
-  speaker: CallSpeaker;
+export interface LabelResult {
+  /** "[Mentor] ...\n[Entrepreneur] ..." when labelled, else the plain transcript. */
   text: string;
-  start?: number;
-  end?: number;
+  labeled: boolean;
 }
 
-const LabeledTranscriptSchema = z.object({
-  lines: z
-    .array(
-      z.object({
-        speaker: z.enum(CALL_SPEAKERS),
-        text: z.string().trim().min(1).max(2000),
-      }),
-    )
-    .min(1)
-    .max(80),
-});
+/** Most lines and characters sent in one AI call (labels-only output stays small). */
+const PART_LINES = 120;
+const PART_CHARS = 12_000;
+/** Stop labelling with this much time left, so the transcript always comes back. */
+const SAFETY_MS = 8_000;
 
-/** Format labeled turns the way the agent expects to read them. */
-export function formatLabeledTranscript(lines: LabeledLine[]): string {
-  return lines
-    .map((l) => `[${l.speaker}] ${l.text.trim()}`)
-    .filter((line) => line.length > 10)
-    .join("\n");
+const LabelsSchema = z.object({ speakers: z.array(z.enum(CALL_SPEAKERS)) });
+
+/** Whisper segments (or the text) split into sentences: the units that get a label. */
+export function transcriptLines(text: string, segments?: TranscriptSegment[]): string[] {
+  const pieces = segments && segments.length > 0 ? segments.map((s) => s.text) : [text];
+  return pieces
+    .flatMap((p) => p.split(/(?<=[.?!])\s+/))
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
+
+/** Groups lines into parts small enough for one AI call. */
+export function partitionLines(lines: string[], maxLines = PART_LINES, maxChars = PART_CHARS): string[][] {
+  const parts: string[][] = [];
+  let current: string[] = [];
+  let chars = 0;
+  for (const line of lines) {
+    if (current.length > 0 && (current.length >= maxLines || chars + line.length > maxChars)) {
+      parts.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(line);
+    chars += line.length + 1;
+  }
+  if (current.length > 0) parts.push(current);
+  return parts;
+}
+
+/** Joins labelled lines into turns, merging consecutive lines from the same speaker. */
+export function formatLabeled(lines: string[], speakers: CallSpeaker[]): string {
+  const turns: Array<{ speaker: CallSpeaker; text: string }> = [];
+  lines.forEach((line, i) => {
+    const speaker = speakers[i];
+    const last = turns.at(-1);
+    if (last && last.speaker === speaker) last.text += ` ${line}`;
+    else turns.push({ speaker, text: line });
+  });
+  return turns.map((t) => `[${t.speaker}] ${t.text}`).join("\n");
+}
+
+const SYSTEM =
+  "You label speakers in a YDF mentoring call transcript between exactly two people. " +
+  "Mentor: the adviser (asks questions, gives advice, offers to send or introduce something, e.g. \"I'll send you\"). " +
+  "Entrepreneur: the business owner (describes the business and challenges, agrees to do owner tasks, e.g. \"I'll call the suppliers\"). " +
+  "You get numbered lines in order. Return speakers: exactly one label per line, in the same order. " +
+  "Speakers usually alternate in turns; a reply like \"Okay, I will...\" follows the other person. Do not output any text from the lines.";
 
 /**
- * Assign Mentor / Entrepreneur labels to an unlabeled Whisper transcript.
- * Groq Whisper has no diarization; this uses dialogue cues (advice vs business
- * context) so the agent can tell owners apart when extracting actions.
+ * Labels a call transcript as Mentor / Entrepreneur turns, or returns it
+ * unlabelled if labelling cannot finish safely before `deadline` (epoch ms).
  */
-export async function labelMentorAndEntrepreneur(
-  transcript: string,
-  signal: AbortSignal,
-  segments?: TranscriptSegment[],
-): Promise<string> {
+export async function labelMentorAndEntrepreneur(transcript: string, segments: TranscriptSegment[] | undefined, deadline: number): Promise<LabelResult> {
   const plain = transcript.trim();
-  if (!plain) return "";
+  const unlabeled = { text: plain, labeled: false };
+  const lines = transcriptLines(plain, segments);
+  if (lines.length < 2) return unlabeled;
 
-  const parts = splitForLabeling(plain, segments);
-  const labeled: LabeledLine[] = [];
-
+  const speakers: CallSpeaker[] = [];
+  const parts = partitionLines(lines);
   for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!;
-    const prior = labeled
-      .slice(-4)
-      .map((l) => `[${l.speaker}] ${l.text}`)
-      .join("\n");
-    const raw = await structured({
+    const part = parts[i];
+    const timeLeft = deadline - Date.now() - SAFETY_MS;
+    if (timeLeft <= 0) return unlabeled;
+    const before = speakers.length > 0 ? `The line just before this part was said by the ${speakers.at(-1)}.\n` : "";
+    const step = await aiStep({
       task: "label_call_speakers",
-      model: MODELS.light,
-      maxTokens: 1600,
-      schema: LabeledTranscriptSchema,
-      signal,
-      system:
-        "You label speakers in a YDF mentoring call transcript. " +
-        "There are exactly two roles: Mentor (adviser: asks questions, gives advice, offers to send/help) " +
-        "and Entrepreneur (business owner: describes the business, challenges, and commits to owner tasks). " +
-        "Rewrite the input as consecutive dialogue turns. Keep the speakers' words; do not invent content. " +
-        "Merge short fragments from the same speaker. Prefer Mentor for advisory offers like \"I'll send you\"; " +
-        "prefer Entrepreneur for business facts and \"I'll call the suppliers\" style owner commitments. " +
-        "If unsure, keep alternating from the last clear speaker. Output only the lines array.",
-      user:
-        (prior ? `Recent labeled turns (for consistency):\n${prior}\n\n` : "") +
-        (parts.length > 1 ? `This is part ${i + 1} of ${parts.length}.\n\n` : "") +
-        `Unlabeled transcript:\n${part}`,
+      schema: LabelsSchema,
+      fallback: () => ({ speakers: [] }),
+      timeoutMs: timeLeft,
+      validate: (v) => (v.speakers.length === part.length ? null : `expected ${part.length} labels, got ${v.speakers.length}`),
+      live: (signal) =>
+        structured({
+          task: "label_call_speakers",
+          model: MODELS.light,
+          maxTokens: 600 + part.length * 8,
+          maxWaitMs: Math.min(BACKGROUND_MAX_WAIT_MS, timeLeft),
+          schema: LabelsSchema,
+          signal,
+          system: SYSTEM,
+          user:
+            before +
+            (parts.length > 1 ? `Part ${i + 1} of ${parts.length}. ` : "") +
+            `${part.length} lines:\n` +
+            part.map((l, n) => `${n + 1}. ${l}`).join("\n"),
+        }),
     });
-    const parsed = LabeledTranscriptSchema.safeParse(raw);
-    if (!parsed.success) continue;
-    for (const line of parsed.data.lines) {
-      labeled.push({ speaker: line.speaker, text: line.text });
-    }
+    if (step.source !== "live_ai") return unlabeled;
+    speakers.push(...step.value.speakers);
   }
-
-  if (labeled.length === 0) {
-    // Soft fallback so the mentor can still edit: treat whole text as one block.
-    return `[Mentor] ${plain}`;
-  }
-  return formatLabeledTranscript(labeled);
-}
-
-const LABEL_CHUNK_CHARS = 4_500;
-
-function splitForLabeling(text: string, segments?: TranscriptSegment[]): string[] {
-  if (segments && segments.length > 0) {
-    const chunks: string[] = [];
-    let buf = "";
-    for (const seg of segments) {
-      const piece = seg.text.trim();
-      if (!piece) continue;
-      if (buf.length + piece.length + 1 > LABEL_CHUNK_CHARS && buf) {
-        chunks.push(buf.trim());
-        buf = "";
-      }
-      buf += `${piece} `;
-    }
-    if (buf.trim()) chunks.push(buf.trim());
-    return chunks.length > 0 ? chunks : [text];
-  }
-  if (text.length <= LABEL_CHUNK_CHARS) return [text];
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = Math.min(start + LABEL_CHUNK_CHARS, text.length);
-    if (end < text.length) {
-      const slice = text.slice(start, end);
-      const breakAt = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "));
-      if (breakAt > LABEL_CHUNK_CHARS / 2) end = start + breakAt + 1;
-    }
-    chunks.push(text.slice(start, end).trim());
-    start = end;
-  }
-  return chunks.filter(Boolean);
+  return { text: formatLabeled(lines, speakers), labeled: true };
 }

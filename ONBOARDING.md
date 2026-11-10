@@ -259,7 +259,8 @@ POST /api/session/complete
 **Audio to text:** a basic version already works. Start from it, not from scratch.
 - **Code:**
   - `VoiceNote` in `src/components/mentor/voice-note.tsx` (record with the browser microphone, or upload)
-  - `/api/transcribe` — `mode=voice_note` (plain text) or `mode=call_recording` (audio/video → `[Mentor]` / `[Entrepreneur]` transcript via `src/lib/audio/speakers.ts`)
+  - `/api/transcribe` — `mode=voice_note` (plain text) or `mode=call_recording` (audio/video → `[Mentor]` / `[Entrepreneur]` transcript via `src/lib/audio/speakers.ts`). The labels are a **guess from the words** (Groq Whisper cannot tell voices apart), and the response says `labeled: true` or `false`. If the guess cannot finish safely, you get the plain transcript, never an error. For certain speakers, record each person's microphone as a separate track in the call feature.
+  - Accepted formats: mp3, m4a, wav, ogg, flac, webm, mp4 (under 25 MB). Others, such as iPhone `.mov`, get `400 UNSUPPORTED_FORMAT` before uploading to Groq.
   - `transcribe()` / `transcribeCallRecording()` in `src/lib/audio/transcribe.ts`, Groq `whisper-large-v3-turbo`, max 25 MB per file
   - Optional local pyannote diarization: `scripts/whisper_diarize.py`
 - **Tested:** only by uploading one computer-generated English recording.

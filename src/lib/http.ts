@@ -58,10 +58,11 @@ const USER_MESSAGES: Record<string, [number, string]> = {
 export function handleError(err: unknown): Response {
   if (err instanceof ConfigError) return fail(503, err.code, err.message);
   if (err instanceof MigrationsRequiredError) {
+    console.error("[db] migrations missing:", err.message);
     return fail(
       503,
       err.code,
-      "Database tables are missing. In Supabase → SQL Editor, paste and run the file supabase/APPLY_ALL.sql, then refresh.",
+      "The database is missing tables or columns this version of the app needs. Apply the new migrations (npx supabase db push); for a brand-new, empty project, run supabase/APPLY_ALL.sql instead. The server log has the details.",
     );
   }
   if (err instanceof ToolError) {

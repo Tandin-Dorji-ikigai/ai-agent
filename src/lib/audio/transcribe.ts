@@ -58,36 +58,38 @@ async function transcribeVerbose(file: Blob, filename: string, signal: AbortSign
   const text = String(data.text ?? "").trim();
   const raw = Array.isArray(data.segments) ? data.segments : [];
   const segments: TranscriptSegment[] = raw
-    .map((s) => {
-      const row = s as { start?: unknown; end?: unknown; text?: unknown };
-      return {
-        start: Number(row.start) || 0,
-        end: Number(row.end) || 0,
-        text: String(row.text ?? "").trim(),
-      };
-    })
+    .map((s) => ({ text: String((s as { text?: unknown }).text ?? "").trim() }))
     .filter((s) => s.text.length > 0);
   return { text, segments };
 }
 
 export interface CallTranscription {
-  /** Labeled dialogue: [Mentor] / [Entrepreneur] lines. */
+  /** [Mentor] / [Entrepreneur] turns when labelled, otherwise the plain transcript. */
   text: string;
-  /** Raw Whisper text before speaker labeling. */
+  /** Whisper's text before any labels. */
   raw_text: string;
+  /** false when the speaker guess could not finish safely (the plain transcript is returned). */
+  labeled: boolean;
 }
 
 /**
- * Transcribe a mentoring call recording (audio or video) and label the two
- * speakers as Mentor and Entrepreneur for the session handover contract.
+ * Transcribe a mentoring call recording (audio or video) and, if it can be
+ * done safely before `deadline` (epoch ms), label the two speakers as Mentor
+ * and Entrepreneur. A labelling failure never loses the transcript.
  */
 export async function transcribeCallRecording(
   file: Blob,
   filename: string,
   signal: AbortSignal,
+  deadline: number,
 ): Promise<CallTranscription> {
   const { text, segments } = await transcribeVerbose(file, filename, signal);
-  if (!text) return { text: "", raw_text: "" };
-  const labeled = await labelMentorAndEntrepreneur(text, signal, segments);
-  return { text: labeled || text, raw_text: text };
+  if (!text) return { text: "", raw_text: "", labeled: false };
+  try {
+    const labeled = await labelMentorAndEntrepreneur(text, segments, deadline);
+    return { text: labeled.text || text, raw_text: text, labeled: labeled.labeled };
+  } catch (err) {
+    console.warn("[ai] label_call_speakers failed; returning the plain transcript:", err instanceof Error ? err.message.slice(0, 200) : "error");
+    return { text, raw_text: text, labeled: false };
+  }
 }
