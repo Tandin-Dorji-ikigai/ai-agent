@@ -1,4 +1,5 @@
 import "server-only";
+import { coachComesFirst } from "./agent/coach";
 import { emitAndRun, type RunOutcome } from "./agent/runner";
 import { ToolError } from "./agent/tools";
 import { demoNow } from "./clock";
@@ -102,7 +103,7 @@ function closedEvent(req: Pick<MentorRequestRecord, "id" | "entrepreneur_id">, t
   } as const;
 }
 
-export type EnsureReason = "asked" | "retried" | "already_asked" | "in_progress" | "booked" | "with_ydf";
+export type EnsureReason = "asked" | "retried" | "already_asked" | "in_progress" | "booked" | "with_ydf" | "coach_first";
 
 /** Agent events that move a mentor request along. */
 const REQUEST_EVENTS = ["mentor.match.requested", "mentor.selected", "mentor.request.declined", "mentor.request.expired"];
@@ -119,6 +120,7 @@ const IN_PROGRESS_MS = 2 * 60_000;
 export async function ensureMentorRequest(entrepreneurId: string): Promise<{ started: boolean; reason: EnsureReason; outcome?: RunOutcome }> {
   const e = await loadEntrepreneur(entrepreneurId);
   if (!e?.assessment_completed_at) throw new ToolError("ASSESSMENT_REQUIRED", "Needs assessment not completed.");
+  if (await coachComesFirst(e)) return { started: false, reason: "coach_first" };
   const now = await demoNow();
 
   const [requests, bookings, escalations, busy] = await Promise.all([

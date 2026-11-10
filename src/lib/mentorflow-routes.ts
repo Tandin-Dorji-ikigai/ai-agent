@@ -7,6 +7,7 @@ export const pagePaths: Record<string, string> = {
   "video-call": "/entrepreneur/call",
   "mentor-call": "/mentor/call",
   connect: "/entrepreneur/connect",
+  coach: "/entrepreneur/coach",
   assessment: "/entrepreneur/needs",
   bookings: "/entrepreneur/bookings",
   notifications: "/entrepreneur/notifications",

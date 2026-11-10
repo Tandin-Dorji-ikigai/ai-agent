@@ -6,6 +6,9 @@ import { DECLINE_REASONS, EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES,
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
 
+/** Longest report the beginner coach reads in one reply. */
+export const COACH_REPLY_MAX_CHARS = 2000;
+
 // ---------------------------------------------------------------------------
 // API request bodies
 // ---------------------------------------------------------------------------
@@ -359,6 +362,67 @@ export const ToolInputs = {
     action_id: z.uuid(),
     summary: shortText(600),
   }),
+  // Beginner coach (src/lib/agent/coach.ts)
+  set_coach_mission: z.object({
+    entrepreneur_id: z.uuid(),
+    step: z.number().int().min(1).max(4),
+    mission: shortText(420),
+    why: z.string().trim().max(220),
+    done_when: shortText(220),
+    example: z.string().trim().max(360),
+    source: z.enum(["live_ai", "fallback", "system"]),
+  }),
+  record_coach_reply: z.object({
+    entrepreneur_id: z.uuid(),
+    step: z.number().int().min(1).max(4),
+    // Everything sent for this step so far (people add details in parts).
+    reply: shortText(COACH_REPLY_MAX_CHARS * 3),
+    accepted: z.boolean(),
+    feedback: shortText(420),
+    learnings: z.array(z.string().trim().min(1).max(200)).max(4),
+    source: z.enum(["live_ai", "fallback", "system"]),
+  }),
+  finish_coach_journey: z.object({
+    entrepreneur_id: z.uuid(),
+    summary: z.lazy(() => CoachSummarySchema),
+    source: z.enum(["live_ai", "fallback", "system"]),
+  }),
 } as const;
 
 export type ToolName = keyof typeof ToolInputs;
+
+// ---------------------------------------------------------------------------
+// Beginner coach: what the AI must return, and what the screen sends
+// ---------------------------------------------------------------------------
+
+/** What the AI writes for a step (what counts as done is fixed in coach-steps.ts). */
+export const CoachMissionSchema = z.object({
+  mission: z.string().min(20).max(420),
+  why: z.string().min(10).max(220),
+  example: z.string().min(10).max(360),
+});
+export type CoachMission = z.infer<typeof CoachMissionSchema>;
+
+export const CoachReviewSchema = z.object({
+  outcome: z.enum(["complete", "needs_more"]),
+  feedback: z.string().min(10).max(420),
+  // Up to 6 from the AI; the coach keeps at most 4 that match what the person wrote.
+  learnings: z.array(z.string().min(3).max(200)).max(6),
+});
+export type CoachReview = z.infer<typeof CoachReviewSchema>;
+
+export const CoachSummarySchema = z.object({
+  problem: z.string().min(5).max(300),
+  who_has_it: z.string().min(3).max(240),
+  idea: z.string().min(5).max(300),
+  evidence: z.array(z.string().min(3).max(220)).min(1).max(4),
+  questions_for_mentor: z.array(z.string().min(5).max(200)).min(1).max(3),
+});
+export type CoachSummary = z.infer<typeof CoachSummarySchema>;
+
+/** POST /api/coach/reply */
+export const CoachReplyInputSchema = z.object({
+  step: z.number().int().min(1).max(4),
+  reply: z.string().trim().min(1, "Write what you found first.").max(COACH_REPLY_MAX_CHARS),
+  source: z.enum(["typed", "voice_note"]).default("typed"),
+});

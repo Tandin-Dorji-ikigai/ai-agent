@@ -16,7 +16,8 @@ import {
   type EntrepreneurRecord,
   type MentorRecord,
 } from "../types";
-import type { AssessmentSummary, Briefs, Extraction, FollowUp, MatchExplanations } from "./schemas";
+import type {
+  CoachSummary, AssessmentSummary, Briefs, Extraction, FollowUp, MatchExplanations } from "./schemas";
 
 const nu = (n: number) => `Nu. ${n.toLocaleString("en-IN")}`;
 
@@ -97,7 +98,7 @@ export function fallbackMatchExplanations(e: EntrepreneurRecord, matches: Scored
 // Session briefs
 // ---------------------------------------------------------------------------
 
-export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduledAt: Date, agenda: AgendaItem[] = []): Briefs {
+export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduledAt: Date, agenda: AgendaItem[] = [], coach: CoachSummary | null = null): Briefs {
   const when = scheduledAt.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   if (agenda.length > 0) return followUpBriefs(e, m, when, agenda);
   const needs = e.expertise_needs.map((n) => expertiseLabel(n).toLowerCase());
@@ -123,13 +124,16 @@ export function fallbackBriefs(e: EntrepreneurRecord, m: MentorRecord, scheduled
           ? `${stageLabel(e.business_stage).replace(" ", "-")} ${sectorWord(e.sector)}business.`
           : `Aspiring entrepreneur at the idea stage${sectorWord(e.sector) ? `, interested in ${sectorWord(e.sector).trim()}` : ""}.`,
         e.business_description ?? "",
-        e.primary_challenge ? `Main challenge in their words: "${e.primary_challenge}"` : "",
+        coach ? `With the AI coach: the problem is "${coach.problem}"; the idea is "${coach.idea}"; evidence: ${coach.evidence.join("; ")}.` : "",
+        !coach && e.primary_challenge ? `Main challenge in their words: "${e.primary_challenge}"` : "",
         `Prefers ${LANGUAGE_LABEL[e.preferred_language]}.`,
       ]
         .filter(Boolean)
         .join(" ")
         .slice(0, 600),
-      focus: (shared.length > 0 ? shared : needs).slice(0, 3).map((n) => `Help with ${n}`),
+      focus: coach
+        ? coach.questions_for_mentor.slice(0, 3).map((q) => q.slice(0, 200))
+        : (shared.length > 0 ? shared : needs).slice(0, 3).map((n) => `Help with ${n}`),
     },
   };
 }

@@ -8,10 +8,13 @@ import { MAX_REQUESTS_PER_ROUND, pickNextMentor } from "./matching/requests";
 import { rankMentors, scoreMentor, type ScoreBreakdown } from "./matching/score-mentor";
 import { buildAgenda } from "./progress";
 import { CALL_PROVIDERS } from "./state-types";
+import { COACH_STEPS } from "./coach-steps";
 import type {
   AgentRunView,
   BookingView,
   CallProvider,
+  CoachStepView,
+  CoachView,
   CallView,
   DemoState,
   DemoStep,
@@ -62,6 +65,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       request_round: null,
       pending_request: null,
       call: null,
+      coach: null,
       mentor_for_view: null,
     };
   }
@@ -244,7 +248,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
 
   const mentor_for_view: MentorRecord | null = pending_request?.mentor ?? booking?.mentor ?? matches[0]?.mentor ?? null;
 
-  const call = booking ? await loadCallView(booking.id) : null;
+  const [call, coach] = await Promise.all([booking ? loadCallView(booking.id) : null, loadCoachView(entrepreneurId)]);
 
   return {
     ...base,
@@ -266,7 +270,37 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     request_round,
     pending_request,
     call,
+    coach,
     mentor_for_view,
+  };
+}
+
+async function loadCoachView(entrepreneurId: string): Promise<CoachView | null> {
+  const [journeyRes, stepRes] = await Promise.all([
+    db().from("coach_journeys").select("status, readiness_summary").eq("entrepreneur_id", entrepreneurId).maybeSingle(),
+    db().from("coach_steps").select("*").eq("entrepreneur_id", entrepreneurId).order("step"),
+  ]);
+  const journey = must(journeyRes, "load coach journey") as { status: CoachView["status"]; readiness_summary: CoachView["summary"] } | null;
+  if (!journey) return null;
+  const rows = must(stepRes, "load coach steps") as Array<Omit<CoachStepView, "title" | "goal">>;
+  return {
+    status: journey.status,
+    summary: journey.readiness_summary ?? null,
+    steps: rows.map((r) => ({
+      step: r.step,
+      title: COACH_STEPS[r.step - 1]?.title ?? `Step ${r.step}`,
+      goal: COACH_STEPS[r.step - 1]?.goal ?? "",
+      mission: r.mission,
+      why: r.why,
+      done_when: r.done_when,
+      example: r.example,
+      status: r.status,
+      attempts: r.attempts,
+      last_reply: r.last_reply,
+      feedback: r.feedback,
+      learnings: r.learnings ?? [],
+      source: r.source,
+    })),
   };
 }
 

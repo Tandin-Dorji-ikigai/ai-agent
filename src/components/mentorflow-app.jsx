@@ -37,6 +37,7 @@ import { MatchList } from "@/components/match-list";
 import { MentorProgress } from "@/components/mentor-progress";
 import { SignInForm, SignOutButton } from "@/components/sign-in-form";
 import { CallAlerts } from "@/components/push/call-alerts";
+import { BeginnerCoach } from "@/components/coach/beginner-coach";
 
 const DAY_NAME = { sun: "Sunday", mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday" };
 const firstName = name => (name ?? "").split(" ")[0];
@@ -144,7 +145,9 @@ export default function App({ children }) {
   }, [page, role, isPublic, isLogin, isCall]);
 
   // No button: when there are matches but nobody is being asked, the agent asks the best match.
-  const autoKey = role === "entrepreneur" && !isPublic && state?.entrepreneur?.assessment_completed_at && (state?.matches.length ?? 0) > 0 && !booking && (summary.phase === "none" || summary.phase === "stopped")
+  const savedExploring = isExploring(state?.entrepreneur);
+  const coachFirst = savedExploring && !["ready", "skipped"].includes(state?.coach?.status ?? "");
+  const autoKey = role === "entrepreneur" && !isPublic && !coachFirst && state?.entrepreneur?.assessment_completed_at && (state?.matches.length ?? 0) > 0 && !booking && (summary.phase === "none" || summary.phase === "stopped")
     ? `${state.entrepreneur.assessment_completed_at}:${state.request_round?.round_id ?? "none"}:${state.request_round?.requests.at(-1)?.id ?? ""}`
     : null;
   const { stalled: autoStalled } = useAutoRequest(autoKey, refresh);
@@ -174,7 +177,7 @@ export default function App({ children }) {
       if (matched.ok) {
         setDraft({});
         setSupportDraft(null);
-        go("connect");
+        go(isExploring(parsed.data) ? "coach" : "connect");
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Please check your answers.");
@@ -202,7 +205,7 @@ export default function App({ children }) {
     if (!matched.ok) return false;
     setDraft({});
     setSupportDraft(null);
-    go("connect");
+    go(isExploring(input) ? "coach" : "connect");
     return true;
   }
 
@@ -260,10 +263,13 @@ export default function App({ children }) {
 
   let content;
 
-  if (page === "connect") {
+  if (page === "coach") {
+    content = <BeginnerCoach onMentor={() => go("connect")} />;
+  } else if (page === "connect") {
     const statusBadge = booking ? "Session booked" : summary.phase === "waiting" ? "Awaiting mentor" : summary.phase === "escalated" ? "With YDF" : "Asking now";
     content = <>
       <div className="page-header"><div><p className="kicker">YOUR MENTORSHIP STARTS HERE</p><h1>Connect with mentor</h1><p className="subtitle">The right guidance, matched to what you’re building.</p></div>{joinButton}</div>
+      {coachFirst && state?.entrepreneur?.assessment_completed_at && <Alert className="mb-6"><Compass className="size-4" /><AlertTitle>{state?.coach ? `Your first steps: ${state.coach.steps.filter(x => x.status === "done").length} of 4 done` : "No idea yet? Start with your first steps"}</AlertTitle><AlertDescription>{state?.coach ? "Finish the four steps with your AI coach, and the agent will introduce you to a mentor with what you found." : "Four small steps with an AI coach help you find an idea worth testing. Then the agent asks a mentor to meet you."}<div className="row wrap mt-2"><Button size="sm" onClick={() => go("coach")}>{state?.coach ? "Continue my steps" : "Start my first steps"}<ArrowRight className="size-4" /></Button><Button size="sm" variant="ghost" disabled={Boolean(busy)} onClick={async () => { await act("coach-skip", "/api/coach/skip"); }}>Ask a human mentor now</Button></div></AlertDescription></Alert>}
       {!mentorRecord ? <Card><CardContent className="empty-state"><Users className="size-8 text-primary" /><h2>{state?.entrepreneur?.assessment_completed_at ? "Ready to find your mentor" : "Let’s find your next step"}</h2><p className="muted">Share your needs. I will find the right verified mentor and ask them for you.</p><Button disabled={Boolean(busy)} onClick={() => state?.entrepreneur?.assessment_completed_at ? act("matches", "/api/matches") : go("assessment")}>{busy === "matches" ? "Finding your mentor…" : state?.entrepreneur?.assessment_completed_at ? "Find my mentor" : "Complete needs assessment"}<ArrowRight className="size-4" /></Button></CardContent></Card> :
       <Card className="connection-card"><CardHeader><div className="row between wrap"><Badge variant="secondary" className="status-primary"><Sparkles className="size-3" />{booking ? "Your mentor" : summary.current && summary.current.attempt > 1 ? "Your next best match" : "Your strongest match"}</Badge><Badge variant="secondary" className={booking ? "status-success" : "status-pending"}>{statusBadge}</Badge></div><CardTitle className="connection-title">Guidance for your next step.</CardTitle><CardDescription className="connection-description">{match?.explanation ?? mentor.description}</CardDescription></CardHeader>
         <CardContent className="stack"><div className="mentor-identity"><Avatar className="mentor-avatar"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar><div><h2>{mentor.name}</h2><p className="subtitle">{mentor.title}</p><div className="tag-list">{mentorRecord.verified && <Badge variant="outline"><ShieldCheck className="size-3" />Verified mentor</Badge>}<Badge variant="outline">{mentorRecord.sessions_delivered} sessions delivered</Badge></div></div></div><p className="muted leading-relaxed">{mentor.description}</p><div className="tag-list">{mentor.skills.map(skill => <Badge variant="secondary" key={skill}>{skill}</Badge>)}</div><Separator />
@@ -344,7 +350,7 @@ export default function App({ children }) {
     const ms = myRequest?.mentee_summary;
     content = <><div className="page-header"><div><p className="kicker">MENTOR REQUESTS</p><h1>Mentorship requests</h1><p className="subtitle">Understand the entrepreneur’s goals, then decide.</p></div></div>
       {myRequest ? <Card><CardHeader><div className="row between wrap"><div className="mentor-identity"><Avatar className="size-14"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar><div><CardTitle>{ms.full_name}</CardTitle><CardDescription>{[ms.business_name, ms.sector ? sectorLabel(ms.sector) : ""].filter(Boolean).join(" · ") || "Exploring business ideas"}</CardDescription><div className="tag-list">{ms.business_stage && <Badge variant="secondary">{stageLabel(ms.business_stage)}</Badge>}{ms.location && <Badge variant="outline">{ms.location}</Badge>}<Badge variant="outline">Prefers {LANGUAGE_LABEL[ms.preferred_language]}</Badge></div></div></div><Badge variant="secondary" className="status-pending">{ms.follow_up ? "Follow-up request" : "New request"}</Badge></div><CardDescription>Sent by the mentoring agent. Please reply by {formatBhutanDay(myRequest.expires_at)}; after that the agent asks another mentor.</CardDescription></CardHeader><CardContent className="stack">
-        <div className="cols-2"><div><h3>What your mentee needs</h3><div className="tag-list mt-2">{ms.needs.map(need => <Badge variant="secondary" key={need}>{need}</Badge>)}</div>{ms.challenge && <><h3 className="mt-6">In {firstName(ms.full_name)}’s words</h3><p className="muted leading-relaxed mt-2">{ms.challenge}</p></>}</div><div><h3>Why the agent asked you{myRequest.score !== null ? ` (${myRequest.score}/100)` : ""}</h3><ul className="mt-2 list-disc pl-5 space-y-1 muted">{ms.why.map(reason => <li key={reason}>{reason}</li>)}</ul>{[["Session fee", formatNu(myRequest.fee)], ["Paid with", myRequest.funding_type === "ydf_credit" ? "YDF credit, when you accept" : "Self-payment (simulated)"]].map(([label, value]) => <div className="info-pair" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div><Separator />
+        <div className="cols-2"><div><h3>What your mentee needs</h3><div className="tag-list mt-2">{ms.needs.map(need => <Badge variant="secondary" key={need}>{need}</Badge>)}</div>{ms.challenge && <><h3 className="mt-6">In {firstName(ms.full_name)}’s words</h3><p className="muted leading-relaxed mt-2">{ms.challenge}</p></>}{state?.coach?.status === "ready" && state.coach.summary && <><h3 className="mt-6">Found with the AI coach</h3><div className="stack-tight mt-2"><div className="info-pair"><span>Problem</span><strong>{state.coach.summary.problem}</strong></div><div className="info-pair"><span>Idea</span><strong>{state.coach.summary.idea}</strong></div></div><ul className="mt-2 list-disc pl-5 space-y-1 muted">{state.coach.summary.evidence.map(item => <li key={item}>{item}</li>)}</ul></>}</div><div><h3>Why the agent asked you{myRequest.score !== null ? ` (${myRequest.score}/100)` : ""}</h3><ul className="mt-2 list-disc pl-5 space-y-1 muted">{ms.why.map(reason => <li key={reason}>{reason}</li>)}</ul>{[["Session fee", formatNu(myRequest.fee)], ["Paid with", myRequest.funding_type === "ydf_credit" ? "YDF credit, when you accept" : "Self-payment (simulated)"]].map(([label, value]) => <div className="info-pair" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div><Separator />
         {!declineOpen ? <div className="stack">
           <div className="field"><Label htmlFor="accept-time">Pick a time from your usual hours (Bhutan time)</Label><Select value={chosenTime} onValueChange={setAcceptSlot} disabled={Boolean(busy) || !requestTimes.length}><SelectTrigger id="accept-time" className="w-full"><SelectValue placeholder="Choose a time" /></SelectTrigger><SelectContent>{requestTimes.map(time => <SelectItem key={time} value={time}>{formatSlot(time)}</SelectItem>)}</SelectContent></Select>{!requestTimes.length && <p className="muted">All the offered times have passed. Decline, and the agent will ask another mentor.</p>}</div>
           <div className="row wrap"><Button disabled={Boolean(busy) || !chosenTime} onClick={() => act("accept", "/api/requests/accept", { request_id: myRequest.id, scheduled_at: chosenTime })}><Check className="size-4" />{busy === "accept" ? "Accepting…" : chosenTime ? `Accept for ${formatSlot(chosenTime)}` : "Accept"}</Button><Button variant="outline" disabled={Boolean(busy)} onClick={() => setDeclineOpen(true)}>Decline</Button></div>
@@ -498,7 +504,7 @@ export default function App({ children }) {
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
-        {navigation.entrepreneur.map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
+        {(savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
       </nav>
     </div>
   ) : (

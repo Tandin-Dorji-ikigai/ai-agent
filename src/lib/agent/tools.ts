@@ -395,6 +395,82 @@ async function schedule_check_in(input: In<"schedule_check_in">, env: ToolEnv) {
  * "Request to human mentor": only the mentee's own mentor (someone they have
  * booked), verified and active. Lands on the next session's agenda.
  */
+// ---- Beginner coach ---------------------------------------------------------
+
+/** Sets (or replaces, while still open) the mission for one step, and starts the journey if needed. */
+async function set_coach_mission(input: In<"set_coach_mission">, env: ToolEnv) {
+  must(
+    await db()
+      .from("coach_journeys")
+      .upsert({ entrepreneur_id: input.entrepreneur_id, status: "active", started_at: iso(env.now) }, { onConflict: "entrepreneur_id", ignoreDuplicates: true })
+      .select("entrepreneur_id"),
+    "start coach journey",
+  );
+  const existing = must(
+    await db().from("coach_steps").select("id, status").eq("entrepreneur_id", input.entrepreneur_id).eq("step", input.step).maybeSingle(),
+    "load coach step",
+  ) as { id: string; status: string } | null;
+  if (existing?.status === "done") throw new ToolError("STEP_ALREADY_DONE", `Step ${input.step} is already done.`);
+  const row = {
+    entrepreneur_id: input.entrepreneur_id,
+    step: input.step,
+    mission: input.mission,
+    why: input.why || null,
+    done_when: input.done_when,
+    example: input.example || null,
+    status: "open",
+    source: input.source,
+    created_at: iso(env.now),
+  };
+  must(await db().from("coach_steps").upsert(row, { onConflict: "entrepreneur_id,step" }).select("id"), "save coach mission");
+  return { result: { step: input.step }, summary: `Set coach step ${input.step}.` };
+}
+
+/** Saves what the person reported and the coach's feedback; an accepted reply closes the step. */
+async function record_coach_reply(input: In<"record_coach_reply">, env: ToolEnv) {
+  const step = must(
+    await db().from("coach_steps").select("id, status, attempts, learnings").eq("entrepreneur_id", input.entrepreneur_id).eq("step", input.step).maybeSingle(),
+    "load coach step",
+  ) as { id: string; status: string; attempts: number; learnings: string[] } | null;
+  if (!step) throw new ToolError("NOT_FOUND", `Coach step ${input.step} not found.`);
+  if (step.status === "done") throw new ToolError("STEP_ALREADY_DONE", `Step ${input.step} is already done.`);
+  const learnings = [...new Set([...(step.learnings ?? []), ...input.learnings])].slice(0, 8);
+  must(
+    await db()
+      .from("coach_steps")
+      .update({
+        attempts: step.attempts + 1,
+        last_reply: input.reply,
+        feedback: input.feedback,
+        learnings,
+        status: input.accepted ? "done" : "open",
+        completed_at: input.accepted ? iso(env.now) : null,
+      })
+      .eq("id", step.id)
+      .select("id"),
+    "save coach reply",
+  );
+  return { result: { accepted: input.accepted, attempts: step.attempts + 1 }, summary: input.accepted ? `Step ${input.step} done.` : `Step ${input.step}: asked for more.` };
+}
+
+/** All four steps done: save the readiness summary for the mentor; the mentor request can now start. */
+async function finish_coach_journey(input: In<"finish_coach_journey">, env: ToolEnv) {
+  const done = must(
+    await db().from("coach_steps").select("step").eq("entrepreneur_id", input.entrepreneur_id).eq("status", "done"),
+    "check coach steps",
+  ) as Array<{ step: number }>;
+  if (done.length < 4) throw new ToolError("COACH_NOT_FINISHED", "All four coach steps must be done first.");
+  must(
+    await db()
+      .from("coach_journeys")
+      .update({ status: "ready", finished_at: iso(env.now), readiness_summary: input.summary, summary_source: input.source })
+      .eq("entrepreneur_id", input.entrepreneur_id)
+      .select("entrepreneur_id"),
+    "finish coach journey",
+  );
+  return { result: { status: "ready" }, summary: "Coach journey finished: ready for a mentor." };
+}
+
 async function request_mentor_help(input: In<"request_mentor_help">, env: ToolEnv) {
   const action = await loadOwnedAction(input.entrepreneur_id, input.action_id);
   const mentor = await loadMentor(input.mentor_id);
@@ -442,6 +518,9 @@ const IMPLEMENTATIONS = {
   record_progress,
   schedule_check_in,
   request_mentor_help,
+  set_coach_mission,
+  record_coach_reply,
+  finish_coach_journey,
 } satisfies Record<ToolName, (input: never, env: ToolEnv) => Promise<{ result: unknown; summary: string }>>;
 
 export type ToolResult<N extends ToolName> = Awaited<ReturnType<(typeof IMPLEMENTATIONS)[N]>>["result"];

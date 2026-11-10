@@ -18,6 +18,8 @@ import {
   type ResultSource,
 } from "../types";
 import { aiStep } from "./ai";
+import { coachComesFirst } from "./coach";
+import { coachReplied, coachStarted } from "./coach-handlers";
 import { live } from "./live";
 import { hasGenderedPronoun, rejectGenderedText } from "./prompts";
 import {
@@ -35,6 +37,7 @@ import {
   FollowUpSchema,
   MatchExplanationsSchema,
   ReplyClassificationSchema,
+  type CoachSummary,
   type Decision,
   type ToolName,
 } from "./schemas";
@@ -96,11 +99,23 @@ export const ALLOWED_TOOLS: Record<EventType, readonly ToolName[]> = {
   "checkin.replied": REPLY_TOOLS,
   "entrepreneur.blocked": REPLY_TOOLS,
   "escalation.requested": [],
+  // Beginner coach: set steps and read reports; hand over to YDF for sensitive topics.
+  "coach.started": ["get_entrepreneur_context", "set_coach_mission"],
+  "coach.replied": ["get_entrepreneur_context", "set_coach_mission", "record_coach_reply", "finish_coach_journey", "send_inbox_message", "create_escalation"],
 };
 
 const iso = (d: Date) => d.toISOString();
 const dayMs = 86_400_000;
 const shortDate = (d: Date) => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+
+/** What someone who started with no idea found with the AI coach (null if they did not finish it). */
+async function coachSummaryFor(entrepreneurId: string): Promise<CoachSummary | null> {
+  const row = must(
+    await db().from("coach_journeys").select("status, readiness_summary").eq("entrepreneur_id", entrepreneurId).maybeSingle(),
+    "load coach summary",
+  ) as { status: string; readiness_summary: CoachSummary | null } | null;
+  return row?.status === "ready" ? (row.readiness_summary ?? null) : null;
+}
 
 function requireEntrepreneur(event: AgentEventRow): string {
   if (!event.entrepreneur_id) throw new Error("Event has no entrepreneur.");
@@ -221,6 +236,17 @@ const matchRequested: Handler = async ({ event, tools, now }) => {
       input_summary: `Match request for ${ctx.profile.full_name}`,
       output: `${recommended} No request sent: a session is already booked.`,
       factors: rankFactors,
+      source,
+    };
+  }
+
+  // No idea yet: the beginner coach comes first; the request starts when it is done or skipped.
+  if (await coachComesFirst(ctx.profile)) {
+    return {
+      input_summary: `Match request for ${ctx.profile.full_name}`,
+      decision: "Coach first: ask no mentor yet",
+      output: `${recommended} No request sent yet: the beginner coach comes first.`,
+      factors: [...rankFactors, "No business idea yet: four coach steps before a mentor (or the mentee asks for a mentor now)."],
       source,
     };
   }
@@ -461,11 +487,12 @@ const bookingConfirmed: Handler = async ({ event, tools, now }) => {
   const src = await tools.call("create_session_brief", { booking_id: event.entity_id });
   const scheduled = new Date(src.booking.scheduled_at);
   const agenda = await agendaFor(src.entrepreneur.id, src.mentor.id, src.entrepreneur.full_name.split(" ")[0], src.booking.id);
+  const coach = await coachSummaryFor(src.entrepreneur.id);
   const step = await aiStep({
     task: "session_briefs",
     schema: BriefsSchema,
-    fallback: () => fallbackBriefs(src.entrepreneur, src.mentor, scheduled, agenda),
-    live: live.briefs(src.entrepreneur, src.mentor, scheduled, agenda),
+    fallback: () => fallbackBriefs(src.entrepreneur, src.mentor, scheduled, agenda, coach),
+    live: live.briefs(src.entrepreneur, src.mentor, scheduled, agenda, coach),
     validate: rejectGenderedText,
   });
   must(
@@ -851,4 +878,6 @@ export const HANDLERS: Record<EventType, Handler> = {
   "checkin.replied": checkInReplied,
   "entrepreneur.blocked": checkInReplied,
   "escalation.requested": noop,
+  "coach.started": coachStarted,
+  "coach.replied": coachReplied,
 };

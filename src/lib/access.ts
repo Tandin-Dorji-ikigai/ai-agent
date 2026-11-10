@@ -128,6 +128,9 @@ export const API_RULES: Record<string, Rule> = {
   "/api/requests/ask": ENTREPRENEUR,
   "/api/inbox/reply": ENTREPRENEUR,
   "/api/actions/status": ENTREPRENEUR,
+  "/api/coach/start": ENTREPRENEUR,
+  "/api/coach/reply": ENTREPRENEUR,
+  "/api/coach/skip": ENTREPRENEUR,
   // Mentor
   "/api/requests/accept": MENTOR,
   "/api/requests/decline": MENTOR,

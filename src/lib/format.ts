@@ -51,4 +51,6 @@ export const TRIGGER_LABEL: Record<string, string> = {
   "entrepreneur.blocked": "Entrepreneur reported a blocker",
   "checkin.replied": "Mentee replied to a check-in",
   "escalation.requested": "Escalation requested",
+  "coach.started": "Beginner coach started",
+  "coach.replied": "Mentee reported on a coach step",
 };

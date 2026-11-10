@@ -1,6 +1,7 @@
 // The JSON returned by GET /api/state. Shared by server and client code.
 
 import type { ViewerRole } from "./access";
+import type { CoachSummary } from "./agent/schemas";
 import type { ScoreBreakdown } from "./matching/score-mentor";
 import type { AgendaItem } from "./progress";
 import type {
@@ -172,6 +173,31 @@ export interface RequestRoundView {
 export const CALL_PROVIDERS = ["livekit", "daily", "none"] as const;
 export type CallProvider = (typeof CALL_PROVIDERS)[number];
 
+export interface CoachStepView {
+  step: number;
+  title: string;
+  goal: string;
+  mission: string;
+  why: string | null;
+  done_when: string;
+  example: string | null;
+  status: "open" | "done";
+  attempts: number;
+  last_reply: string | null;
+  feedback: string | null;
+  /** Facts from their own replies, carried into later steps and the mentor summary. */
+  learnings: string[];
+  source: "live_ai" | "fallback" | "system" | null;
+}
+
+export interface CoachView {
+  /** active: coaching; ready: finished and handed to a mentor; skipped: asked for a mentor straight away. */
+  status: "active" | "ready" | "skipped";
+  steps: CoachStepView[];
+  /** What the mentor sees once all four steps are done. */
+  summary: CoachSummary | null;
+}
+
 /** The call for the current booking (join links are personal and never part of the shared state). */
 export interface CallView {
   id: string;
@@ -228,6 +254,8 @@ export interface DemoState {
   request_round: RequestRoundView | null;
   /** The call for the current booking, if anyone has joined it. */
   call: CallView | null;
+  /** Beginner coach for someone with no business idea yet (null = never started). */
+  coach: CoachView | null;
   /** The open request, if a mentor is deciding right now. */
   pending_request: MentorRequestView | null;
   /** Mentor shown in the mentor view: the one deciding on a request, else the booked mentor, else the top match. */

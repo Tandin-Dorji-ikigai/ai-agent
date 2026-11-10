@@ -423,6 +423,74 @@ async function declineRun(fx) {
   if (process.env.KEEP_END_STATE !== "1") await call("POST", "/api/demo/reset");
 }
 
+/** No business idea yet: four beginner-coach steps, then the usual mentor request with what was found. */
+async function coachRun(fx) {
+  console.log("\nNo idea yet: the beginner coach, then a mentor");
+  await call("POST", "/api/demo/reset");
+  const explorer = {
+    ...fx.assessment,
+    business_name: "",
+    business_stage: "idea",
+    sector: "agriculture",
+    business_description: "I like growing food and talking with people in my village.",
+    primary_challenge: "I need help finding and validating a business idea.",
+    goals: [],
+    expertise_needs: ["idea_development"],
+    budget: 0,
+  };
+  const saved = await call("POST", "/api/assessment", explorer);
+  check("   saves the needs of someone with no idea yet", saved.json.ok === true, saved.json);
+  await call("POST", "/api/matches");
+  let s = await state();
+  check("   matches are saved, but no mentor is asked before the coach", s.matches.length > 0 && !s.pending_request, { matches: s.matches.length, pending: s.pending_request });
+  const auto = await call("POST", "/api/requests/start");
+  check("   auto-start waits for the coach too", auto.json.started === false && auto.json.reason === "coach_first", auto.json);
+
+  await call("POST", "/api/coach/start");
+  s = await state();
+  check("8a coach: step 1 is written for this person", s.coach?.status === "active" && s.coach.steps[0]?.status === "open" && s.coach.steps[0].mission.length > 20, s.coach);
+  await call("POST", "/api/coach/start");
+  s = await state();
+  check("   starting twice does not repeat step 1", s.coach.steps.length === 1, s.coach.steps);
+  await call("POST", "/api/coach/reply", { step: 1, reply: "Some problems." });
+  s = await state();
+  check("   a thin report gets feedback and the step stays open", s.coach.steps[0].status === "open" && s.coach.steps[0].attempts === 1 && !!s.coach.steps[0].feedback, s.coach.steps[0]);
+  const early = await call("POST", "/api/coach/reply", { step: 2, reply: "Jumping ahead." });
+  check("   a report for a step that is not open is refused", early.status === 409 && early.json.code === "STEP_NOT_OPEN", early.json);
+
+  const reports = [
+    "Farmers near Lobesa lose tomatoes before the Sunday market. Shop owners in Punakha run out of fresh milk. Students wait a long time for the bus.",
+    "I asked three farmers. Two said they lose about Nu. 300 of tomatoes a week because nothing stays cool. One said it is not a problem.",
+    "A shared cold box at the market. Farmers would pay about Nu. 100 a week to keep vegetables fresh.",
+    "I asked five farmers. Two paid a Nu. 100 deposit and one wants to try it next month.",
+  ];
+  for (let i = 0; i < reports.length; i++) {
+    s = await state();
+    const open = s.coach.steps.find((x) => x.status === "open");
+    // Live AI may ask for more on a step: answer again (it moves on by the third try).
+    for (let t = 0; t < 3 && open && s.coach.steps.find((x) => x.step === open.step)?.status === "open"; t++) {
+      await call("POST", "/api/coach/reply", { step: open.step, reply: reports[open.step - 1] });
+      s = await state();
+    }
+  }
+  check("8b coach: all four steps done, with what they found", s.coach?.status === "ready" && s.coach.steps.length === 4 && s.coach.steps.every((x) => x.status === "done") && s.coach.steps[1].learnings.length > 0, s.coach);
+  check("   a readiness summary for the mentor", !!s.coach.summary?.idea && s.coach.summary.evidence.length > 0 && s.coach.summary.questions_for_mentor.length > 0, s.coach.summary);
+  check("8c then the agent asks a mentor (the usual request)", !!s.pending_request && s.pending_request.attempt === 1, s.pending_request);
+  await call("POST", "/api/requests/accept", { request_id: s.pending_request?.id, scheduled_at: s.pending_request?.offered_slots[0] });
+  s = await state();
+  check("   the mentor's brief starts from what the coach found", /cold box/i.test(JSON.stringify(s.booking?.mentor_brief ?? {})), s.booking?.mentor_brief);
+  check("   the coach's work shows in the agent log", s.runs.some((r) => r.trigger === "coach.started") && s.runs.filter((r) => r.trigger === "coach.replied").length >= 5, s.runs.map((r) => r.trigger));
+  check("   no agent run failed", s.runs.every((x) => x.status === "completed"), s.runs.filter((x) => x.status !== "completed"));
+
+  await call("POST", "/api/demo/reset");
+  await call("POST", "/api/assessment", explorer);
+  await call("POST", "/api/matches");
+  const skip = await call("POST", "/api/coach/skip");
+  s = await state();
+  check("   'Ask a human mentor now' skips the coach and asks a mentor at once", skip.json.ok === true && s.coach?.status === "skipped" && !!s.pending_request, { coach: s.coach, pending: s.pending_request });
+  if (process.env.KEEP_END_STATE !== "1") await call("POST", "/api/demo/reset");
+}
+
 const fx = await (await fetch(`${BASE}/api/demo/fixtures`)).json();
 if (process.env.KEEP_END_STATE === "1") {
   await declineRun(fx);
@@ -430,6 +498,7 @@ if (process.env.KEEP_END_STATE === "1") {
 } else {
   for (let i = 1; i <= RUNS; i++) await runOnce(i, fx);
   await declineRun(fx);
+  await coachRun(fx);
 }
 console.log(failures === 0 ? `\nAll checks passed (${RUNS} runs).` : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

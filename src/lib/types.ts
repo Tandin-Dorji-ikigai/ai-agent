@@ -115,6 +115,8 @@ export const EVENT_TYPES = [
   "entrepreneur.blocked",
   "checkin.replied",
   "escalation.requested",
+  "coach.started",
+  "coach.replied",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

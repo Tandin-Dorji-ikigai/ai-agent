@@ -14,6 +14,7 @@ import { explainMatch } from "./fallbacks";
 import { BACKGROUND_MAX_WAIT_MS, MODELS, chooseTool, structured, type ToolSpec } from "./llm";
 import { SENSITIVE_TOPICS, type DecisionContext } from "./policy";
 import { AGENT_BOUNDARIES, MATCH_EXPLANATION_RULE, NO_GENDER_RULE } from "./prompts";
+import type { CoachSummary } from "./schemas";
 import {
   AssessmentDraftSchema,
   AssessmentSummarySchema,
@@ -150,7 +151,7 @@ export const live = {
       }),
 
   briefs:
-    (e: EntrepreneurRecord, m: MentorRecord, scheduledAt: Date, agenda: AgendaItem[]): Live =>
+    (e: EntrepreneurRecord, m: MentorRecord, scheduledAt: Date, agenda: AgendaItem[], coach: CoachSummary | null = null): Live =>
     (signal) =>
       structured({
         task: "session_briefs",
@@ -166,6 +167,7 @@ export const live = {
             "focus (2 to 4 points). " +
             "If progress_since_last_session is not empty this is a follow-up session: the mentor's about must summarise that progress, " +
             "and focus must start with the items that need the mentor (escalations, help requests, obstacles, overdue actions). " +
+            "If found_with_ai_coach is present, the mentor's about must give its problem, idea and evidence, and focus must start from its questions_for_mentor. " +
             "Use only the facts given. Every list item under 180 characters.",
         ),
         user: j({
@@ -173,6 +175,8 @@ export const live = {
           entrepreneur: profileFacts(e),
           mentor: mentorFacts(m),
           progress_since_last_session: agenda.map((a) => a.text),
+          // Someone who started with no idea: what they found with the AI coach.
+          ...(coach ? { found_with_ai_coach: coach } : {}),
         }),
       }),
 

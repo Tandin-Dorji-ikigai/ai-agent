@@ -58,6 +58,10 @@ const USER_MESSAGES: Record<string, [number, string]> = {
   CALL_NOT_OPEN_YET: [409, "The call is not open yet. It opens shortly before the session."],
   CALL_ENDED: [409, "This call has ended."],
   RECORDING_NOT_ALLOWED: [409, "Recording needs both people to agree first."],
+  COACH_NOT_ACTIVE: [409, "The coach is not active. Start it first."],
+  STEP_NOT_OPEN: [409, "This step is already done. Refresh to see the next one."],
+  STEP_ALREADY_DONE: [409, "This step is already done."],
+  COACH_NOT_FINISHED: [409, "All four coach steps must be done first."],
   RATE_LIMITED: [429, "The service is busy. Try again in a minute."],
   TRANSCRIPTION_FAILED: [502, "This part could not be transcribed. Upload it again."],
 };
