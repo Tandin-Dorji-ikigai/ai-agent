@@ -1,0 +1,45 @@
+{
+  "about": "Test set for drafting the needs assessment from a spoken introduction (English). A null expected value means the person did NOT say it: filling it in counts as invented. Fields not listed are not scored. expertise_needs passes if all listed needs are present.",
+  "cases": [
+    {
+      "id": "pema-full-intro",
+      "description": "Everything is said, including a budget in words",
+      "text_from_fixture": "voice_intro",
+      "expected": {
+        "business_name": "Yangchen Village Walks and Homestay",
+        "sector": "tourism",
+        "business_stage": "early",
+        "expertise_needs": ["customer_validation", "pricing"],
+        "languages": ["dz", "en"],
+        "preferred_language": "dz",
+        "budget": 1500
+      }
+    },
+    {
+      "id": "farmer-partial",
+      "description": "No business name and no budget: the agent must not invent them",
+      "text": "Hi, I'm Karma. I grow vegetables and keep a few cows near Punakha. I sell cheese and spinach at the weekend market. The problem is that shops pay me very little, and I don't know how to price the cheese. I only speak Dzongkha.",
+      "expected": {
+        "business_name": null,
+        "sector": "agriculture",
+        "expertise_needs": ["pricing"],
+        "languages": ["dz"],
+        "budget": null
+      }
+    },
+    {
+      "id": "student-idea",
+      "description": "Idea stage, technology, budget in digits, English only",
+      "text": "My name is Sonam, I'm a student in Kanglung. I have an idea for a mobile app that lets farmers sell directly to hotels. I haven't started yet. I need help building the app and with funding. I speak English. My budget is around 500 ngultrum a session.",
+      "expected": {
+        "business_name": null,
+        "sector": "technology",
+        "business_stage": "idea",
+        "expertise_needs": ["fundraising"],
+        "languages": ["en"],
+        "preferred_language": "en",
+        "budget": 500
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import "server-only";
 import type { z } from "zod";
 import type { ResultSource } from "../types";
-import { RateLimitError, apiKey } from "./llm";
+import { BudgetWaitTooLongError, RateLimitError, apiKey } from "./llm";
 
 // One AI-dependent step with a guaranteed fallback:
 //
@@ -121,6 +121,9 @@ export async function aiStep<S extends z.ZodType>(opts: {
     }
     return { value: parsed.data as z.infer<S>, source: "live_ai" };
   } catch (err) {
+    // Out of this minute's budget for this model only: answer now from the
+    // saved response, without pausing other models.
+    if (err instanceof BudgetWaitTooLongError) return fallbackResult("rate_limited");
     if (err instanceof RateLimitError) {
       cooldownUntil = Date.now() + Math.min(err.retryAfterMs, 60_000);
       return fallbackResult("rate_limited");

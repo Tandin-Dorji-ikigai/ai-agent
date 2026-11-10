@@ -24,6 +24,29 @@ export const AssessmentInputSchema = z.object({
 });
 export type AssessmentInput = z.infer<typeof AssessmentInputSchema>;
 
+/**
+ * A DRAFT of the needs assessment, understood from a spoken self-introduction.
+ * Every field is optional: anything the person did not say stays empty, and the
+ * entrepreneur reviews and edits the form before submitting it.
+ */
+export const AssessmentDraftSchema = z.object({
+  business_name: z.string().trim().min(1).max(120).optional(),
+  business_stage: z.enum(STAGES).optional(),
+  sector: z.enum(SECTORS).optional(),
+  business_description: z.string().trim().min(1).max(1000).optional(),
+  primary_challenge: z.string().trim().min(1).max(1000).optional(),
+  goals: z.array(shortText(200)).max(5).default([]),
+  expertise_needs: z.array(z.enum(EXPERTISE)).max(5).default([]),
+  languages: z.array(z.enum(LANGUAGES)).max(2).default([]),
+  preferred_language: z.enum(LANGUAGES).optional(),
+  budget: z.number().min(0).max(100000).optional(),
+});
+export type AssessmentDraft = z.infer<typeof AssessmentDraftSchema>;
+
+export const AssessmentDraftInputSchema = z.object({
+  transcript: shortText(6000),
+});
+
 export const BookingInputSchema = z.object({
   mentor_id: z.uuid(),
   funding_type: z.enum(["self_paid", "ydf_credit"]),

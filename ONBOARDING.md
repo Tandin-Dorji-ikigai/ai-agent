@@ -64,6 +64,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Long call transcripts | Calls of any length are read in parts in the background (a 30-minute call takes about a minute); only real agreements become actions | `agent/extract.ts`, `agent/transcripts.ts` |
 | Extraction test set | `npm run eval:extraction` scores the agent on 5 sample cases. Live AI: 100% found, no extras, due dates and owners right | `evals/extraction-cases.json`, `scripts/eval-extraction.mjs` |
 | Voice notes (**basic version**) | Record or upload audio in the mentor view; Whisper turns it into text for the mentor to check. See section 9 | `mentor-view.tsx` (`VoiceNote`), `/api/transcribe` |
+| Voice intro for the assessment (English) | Pema can speak instead of typing. Whisper and the agent draft the form, mark what was not said ("Not mentioned"), and Pema checks it. "Use a sample intro" works without a microphone | `entrepreneur/assessment-form.tsx`, `voice/voice-recorder.tsx`, `agent/assessment-draft.ts`, `/api/assessment/draft` |
 | Tests | 57 unit tests. `npm run demo:e2e` runs the whole demo in both modes | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
 
 ### What is not built yet
@@ -159,7 +160,7 @@ Then walk through the demo yourself (section 6).
 
 Use the **Entrepreneur / Mentor / YDF** tabs at the top. The header shows the demo clock and how many of the 14 steps are done.
 
-1. **Entrepreneur:** the form is pre-filled with Pema's answers. **Find my mentors.**
+1. **Entrepreneur:** the form is pre-filled with Pema's answers. Optionally press **Use a sample intro** to show the agent filling the form from speech. **Find my mentors.**
 2. Three ranked mentors appear. Open **See the score breakdown**. Read the note about the most-booked mentor.
 3. **Choose Deki**, keep **Use my YDF credit**, **Book session**. The prep checklist appears; credit drops to Nu. 1,500.
 4. **Mentor:** read the brief, **Complete session**, review the three drafts, **Confirm 3 actions**. With live AI you can also **Record voice note**; the text is filled in for you to check.
@@ -206,7 +207,8 @@ scripts/demo-e2e.mjs      automatic check of all 14 steps
 | Mentors, resources, Pema's starting data | `src/lib/demo/seed-data.ts`, then **Reset demo** |
 | Pema's pre-filled answers, session notes, blocker reply | `src/lib/demo/fixtures.ts` |
 | The Dzongkha follow-up message | `src/lib/demo/dzongkha.ts` (see section 9) |
-| Voice-note recording UI | `src/components/mentor/voice-note.tsx` |
+| Voice recording (shared by mentor notes and the voice intro) | `src/components/voice/voice-recorder.tsx` (mentor wrapper: `src/components/mentor/voice-note.tsx`) |
+| Drafting the assessment from speech | `src/lib/agent/assessment-draft.ts`, `src/lib/agent/assessment-rules.ts` |
 | Audio to text (Whisper) | `src/lib/audio/transcribe.ts`, `src/app/api/transcribe/route.ts` |
 | What the agent accepts after a session (handover contract) | `src/app/api/session/complete/route.ts`, `SessionCompleteInputSchema` in `src/lib/agent/schemas.ts` |
 | Saved AI responses (wording) | `src/lib/agent/fallbacks.ts` |
@@ -222,7 +224,7 @@ If you change seed data, fixtures or ranking, run `npm test`. Some tests check t
 
 | | Agent (Tandin) | Frontend | Calls | Audio to text |
 |---|---|---|---|---|
-| **Owns** | `src/lib/agent`, `src/lib/matching`, `src/lib/progress.ts`, `src/app/api` (except `transcribe`), `supabase/` | `src/components` (except the two folders on the right), `src/app/*/page.tsx`, `globals.css` | New `src/components/call/` (plus one line in each view to show it) | `src/components/mentor/voice-note.tsx`, `src/lib/audio/`, `src/app/api/transcribe/` |
+| **Owns** | `src/lib/agent` (including drafting from speech), `src/lib/matching`, `src/lib/progress.ts`, `src/app/api` (except `transcribe`), `supabase/` | `src/components` (except `voice/`, `mentor/voice-note.tsx` and `call/`), `src/app/*/page.tsx`, `globals.css` | New `src/components/call/` (plus one line in each view to show it) | `src/components/voice/`, `src/components/mentor/voice-note.tsx`, `src/lib/audio/`, `src/app/api/transcribe/` |
 | **Next task** | Add real transcripts to `evals/extraction-cases.json` and keep `npm run eval:extraction` at 100%; 5 reset-to-finish demo runs | Polish the three views; check the phone layout on a real phone | A "Join call" button on each booking for Pema and the mentor, opening a hosted meeting; offer audio-only | Test voice notes on real phones and microphones; turn a call recording into a transcript |
 | **Then** | Tune prompts with real transcripts; watch the `[ai] ... failed validation` lines in the terminal | Backup demo video (Day 2 evening) | Recording consent: both people agree before anything is recorded | Long recordings (over 25 MB): split, transcribe, join; delete audio after use |
 

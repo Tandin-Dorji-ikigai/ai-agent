@@ -1,6 +1,6 @@
 import { aiMode } from "@/lib/agent/ai";
 import { RateLimitError, apiKey } from "@/lib/agent/llm";
-import { transcribe } from "@/lib/audio/transcribe";
+import { TRANSCRIBE_LANGUAGES, transcribe, type TranscribeLanguage } from "@/lib/audio/transcribe";
 import { fail, ok } from "@/lib/http";
 
 // POST /api/transcribe (multipart, field "file"): a mentor's voice note -> text
@@ -22,11 +22,14 @@ export async function POST(req: Request) {
   const file = form.get("file");
   if (!(file instanceof File)) return fail(400, "INVALID_INPUT", "No audio file received.");
   if (file.size === 0 || file.size > MAX_BYTES) return fail(400, "INVALID_INPUT", "The audio must be under 25 MB.");
+  // Optional field "language": only English for now (Dzongkha and others later).
+  const lang = form.get("language");
+  const language = (TRANSCRIBE_LANGUAGES as readonly string[]).includes(String(lang)) ? (lang as TranscribeLanguage) : undefined;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
-    const text = await transcribe(file, file.name || "voice-note.webm", controller.signal);
+    const text = await transcribe(file, file.name || "voice-note.webm", controller.signal, language);
     if (!text) return fail(422, "EMPTY_TRANSCRIPT", "No speech was recognised. Try again, or type the notes.");
     return ok({ text });
   } catch (err) {

@@ -60,6 +60,16 @@ async function runOnce(n, fx) {
   check("starts with Nu. 3,000 credit and no booking", s.credit?.amount_remaining === 3000 && !s.booking, s.credit);
   check("starts with the demo clock at +0 days", s.clock.offset_days === 0, s.clock);
 
+  // Voice intro -> draft of the assessment (saves nothing)
+  const vd = await call("POST", "/api/assessment/draft", { transcript: fx.voice_intro });
+  check(
+    "   voice intro drafts the form (sector, budget, needs)",
+    vd.status === 200 && vd.json.draft?.sector === "tourism" && vd.json.draft?.budget === 1500 && vd.json.draft?.expertise_needs?.includes("pricing"),
+    vd.json,
+  );
+  s = await state();
+  check("   drafting saved nothing", !s.entrepreneur?.assessment_completed_at, s.entrepreneur);
+
   // 1. Assessment
   const a = await call("POST", "/api/assessment", fx.assessment);
   check("1  assessment saved and summarised", a.status === 200 && a.json.outcome?.status === "completed", a.json);

@@ -21,6 +21,16 @@ export const PEMA_ASSESSMENT_ANSWERS = {
   budget: 1500,
 };
 
+/** Pema's spoken self-introduction (English), for the voice assessment demo. */
+export const DEMO_VOICE_INTRO =
+  "Hello, my name is Pema. I run Yangchen Village Walks and Homestay, outside Thimphu. " +
+  "We have two homestay rooms in my family house and a half-day guided walk through the village. " +
+  "We started last year and a few guests came through friends. " +
+  "My biggest challenge is that I don't really know who my guests are, or how to describe the walk so the right people book it. " +
+  "I need help finding customers and setting the right price. " +
+  "I speak Dzongkha and English, and I prefer Dzongkha. " +
+  "I can spend about one thousand five hundred ngultrum per session.";
+
 /** Quick notes the mentor types after the session. */
 export const DEMO_SESSION_NOTES = [
   "Pema has 2 homestay rooms and a half-day village walk. Main gap: she is not sure who her guests are.",

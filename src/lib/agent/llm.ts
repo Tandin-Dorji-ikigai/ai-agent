@@ -28,6 +28,18 @@ export class RateLimitError extends Error {
 
 export class ProviderError extends Error {}
 
+/** The model's per-minute budget would need a longer wait than this step allows. */
+export class BudgetWaitTooLongError extends Error {
+  constructor(public waitMs: number) {
+    super("budget_wait_too_long");
+  }
+}
+
+/** Interactive steps should answer fast: wait at most this long for budget, then use the saved answer. */
+export const INTERACTIVE_MAX_WAIT_MS = 7_000;
+/** Background work (long transcripts) can afford to wait for budget. */
+export const BACKGROUND_MAX_WAIT_MS = 65_000;
+
 // ---------------------------------------------------------------------------
 // Free-tier pacing: tokens per minute, tracked per model (AI_TPM_LIMIT, default
 // 8,000). Before each call we wait, if needed, until the last minute's usage
@@ -73,11 +85,13 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function reserveTokens(model: string, estimate: number, signal: AbortSignal): Promise<UsageEntry> {
+async function reserveTokens(model: string, estimate: number, signal: AbortSignal, maxWaitMs: number): Promise<UsageEntry> {
+  const started = Date.now();
   for (;;) {
     const entries = (recentUsage.get(model) ?? []).filter((e) => Date.now() - e.at < WINDOW_MS);
     recentUsage.set(model, entries);
     const wait = budgetWaitMs(entries, Date.now(), estimate, tpmLimit());
+    if (wait > 0 && Date.now() - started + wait > maxWaitMs) throw new BudgetWaitTooLongError(wait);
     if (wait === 0) {
       const entry = { at: Date.now(), tokens: estimate };
       entries.push(entry);
@@ -135,6 +149,8 @@ export async function structured(opts: {
   schema: z.ZodType;
   maxTokens?: number;
   signal: AbortSignal;
+  /** How long to wait for the per-minute budget (default: interactive). */
+  maxWaitMs?: number;
 }): Promise<unknown> {
   const model = opts.model ?? MODELS.main;
   const messages: Message[] = [
@@ -144,8 +160,9 @@ export async function structured(opts: {
   const strictSchema = toStrictJsonSchema(opts.schema);
   const usage = await reserveTokens(
     model,
-    approxTokens(opts.system + opts.user + JSON.stringify(strictSchema)) + Math.round((opts.maxTokens ?? 1200) / 2),
+    approxTokens(opts.system + opts.user + JSON.stringify(strictSchema)) + Math.round((opts.maxTokens ?? 1200) / 3),
     opts.signal,
+    opts.maxWaitMs ?? INTERACTIVE_MAX_WAIT_MS,
   );
   const data = await providerPost(
     "/chat/completions",
@@ -187,8 +204,9 @@ export async function chooseTool(opts: {
   const model = opts.model ?? MODELS.main;
   const usage = await reserveTokens(
     model,
-    approxTokens(opts.system + opts.user + JSON.stringify(opts.tools)) + 450,
+    approxTokens(opts.system + opts.user + JSON.stringify(opts.tools)) + 300,
     opts.signal,
+    INTERACTIVE_MAX_WAIT_MS,
   );
   const data = await providerPost(
     "/chat/completions",

@@ -13,7 +13,8 @@
     "demo:e2e": "node scripts/demo-e2e.mjs",
     "db:local:start": "supabase start -x gotrue,realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
     "db:local:stop": "supabase stop",
-    "eval:extraction": "node scripts/eval-extraction.mjs"
+    "eval:extraction": "node scripts/eval-extraction.mjs",
+    "eval:assessment": "node scripts/eval-assessment.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

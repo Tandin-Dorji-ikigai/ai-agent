@@ -2,6 +2,7 @@ import "server-only";
 import { isEligible, type ScoredMentor } from "../matching/score-mentor";
 import type { AgendaItem } from "../progress";
 import {
+  EXPERTISE,
   LANGUAGE_LABEL,
   expertiseLabel,
   sectorLabel,
@@ -10,10 +11,11 @@ import {
   type MentorRecord,
 } from "../types";
 import { explainMatch } from "./fallbacks";
-import { MODELS, chooseTool, structured, type ToolSpec } from "./llm";
+import { BACKGROUND_MAX_WAIT_MS, MODELS, chooseTool, structured, type ToolSpec } from "./llm";
 import { SENSITIVE_TOPICS, type DecisionContext } from "./policy";
 import { AGENT_BOUNDARIES, MATCH_EXPLANATION_RULE, NO_GENDER_RULE } from "./prompts";
 import {
+  AssessmentDraftSchema,
   AssessmentSummarySchema,
   BriefsSchema,
   ChunkNotesSchema,
@@ -33,6 +35,7 @@ const j = (v: unknown) => JSON.stringify(v);
 const sys = (task: string) => `${AGENT_BOUNDARIES}\n\nTASK\n${task}\n\n${NO_GENDER_RULE}`;
 const day = (d: Date | null) => (d ? d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : null);
 const firstName = (fullName: string) => fullName.split(" ")[0];
+const EXPERTISE_KEYS = EXPERTISE.map((k) => `${k} (${expertiseLabel(k)})`).join(", ");
 
 function profileFacts(e: EntrepreneurRecord) {
   return {
@@ -76,6 +79,31 @@ export const live = {
             "2 to 3 plain sentences, under 450 characters, third person. Use only the facts given.",
         ),
         user: j(profileFacts(e)),
+      }),
+
+  assessmentDraft:
+    (transcript: string): Live =>
+    (signal) =>
+      structured({
+        task: "assessment_from_speech",
+        model: MODELS.main,
+        maxTokens: 900,
+        schema: AssessmentDraftSchema,
+        signal,
+        system: sys(
+          "An entrepreneur introduced their business by voice (transcribed, may contain errors). Fill a needs-assessment DRAFT " +
+            "that they will check and edit. Use ONLY what they said: if something was not said, leave it null or empty. Never guess. " +
+            `sector: one of ${["tourism", "agriculture", "handicrafts", "retail", "fintech", "technology"].join(", ")}, ` +
+            "for what the business itself is (an app or website is technology, even if its users are farmers). " +
+            "Speech-to-text may spell Dzongkha as Zonka and ngultrum as Gultrim. " +
+            "business_stage: idea (not started), early (started, first customers), growth (growing or hiring), established (many years). " +
+            `expertise_needs: up to 5 from this list that match the help they ask for or clearly need: ${EXPERTISE_KEYS}. ` +
+            "languages and preferred_language: dz (Dzongkha) or en (English), only if they said so. " +
+            "budget: the amount per mentoring session in Ngultrum as a number, only if they said one. " +
+            "business_name: only if they said it. business_description and primary_challenge: 1 to 2 sentences, close to their words. " +
+            "goals: only goals they stated.",
+        ),
+        user: transcript,
       }),
 
   matchExplanations:
@@ -148,6 +176,8 @@ export const live = {
       structured({
         task: "extract_action_items",
         model: MODELS.main,
+        // The final step of a long transcript runs in the background and can wait for budget.
+        maxWaitMs: condensed ? BACKGROUND_MAX_WAIT_MS : undefined,
         maxTokens: 1400,
         schema: ExtractionSchema,
         signal,
@@ -181,6 +211,7 @@ export const live = {
       structured({
         task: "condense_transcript_part",
         model,
+        maxWaitMs: BACKGROUND_MAX_WAIT_MS,
         maxTokens: 900,
         schema: ChunkNotesSchema,
         signal,

@@ -15,6 +15,7 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 | 1b. Team workflow: check-in loop (on track / obstacle / needs help / done), SMART actions, mentor progress, next session | **Done.** Migration 003; every branch is covered by `npm run demo:e2e` |
 | 2. Live AI | **Done.** Groq free tier: `gpt-oss-120b` and `gpt-oss-20b` (strict JSON output and real tool calling), plus Whisper for voice notes. Every step falls back to its saved response |
 | 2b. Long call transcripts and an extraction test set | **Done.** Calls of any length are read in parts, paced to the free tier, in the background. `npm run eval:extraction` scores the agent on 5 sample cases |
+| 2c. Voice intro for the needs assessment (English) | **Done.** Pema can speak instead of typing; the agent drafts the form, marks what was not said, and Pema checks it before submitting. `npm run eval:assessment` scores it |
 | 3. Reliability | Partly done: idempotent booking, confirmation and replies; no negative credit; one open escalation per action |
 | 4. Freeze | Not started |
 
@@ -52,11 +53,12 @@ npm run demo:e2e     # all 14 demo steps plus every check-in branch, twice. RESE
 PACE_MS=3000 RUNS=1 npm run demo:e2e   # with AI_MODE=live: stays under the free tier, prints live vs saved counts
 E2E_SOURCE=call_recording npm run demo:e2e   # the same demo from a call transcript, plus a 30-minute call read in the background
 npm run eval:extraction   # scores extraction on evals/extraction-cases.json (rule-based with AI_MODE=fixture, live AI with AI_MODE=live)
+npm run eval:assessment   # scores drafting the assessment from speech on evals/assessment-cases.json (3 cases)
 ```
 
 ## Demo script (about 3 minutes)
 
-1. **Entrepreneur view** (phone width). The assessment is pre-filled with Pema's answers. Press **Find my mentors**.
+1. **Entrepreneur view** (phone width). The assessment is pre-filled with Pema's answers. Optionally, show **Use a sample intro** (or **Record voice note**, in English): the agent fills the form from speech. Press **Find my mentors**.
 2. Three ranked mentors appear, each with a score breakdown and an explanation built from evidence. Point out that the most-booked mentor ranks 13th of 13.
 3. **Choose Deki**, keep **Use my YDF credit**, then **Book session**. Pema's preparation checklist appears.
 4. **Mentor view**. Show the brief, press **Complete session** (or, with live AI, **Record voice note**), review the three draft actions, then **Confirm 3 actions**.
@@ -123,6 +125,7 @@ scripts/demo-e2e.mjs  end-to-end check
 |---|---|---|
 | GET | `/api/state` | Everything every view needs |
 | POST | `/api/assessment` | 1 |
+| POST | `/api/assessment/draft` | Voice intro: `{ transcript }` → `{ draft, missing, source }`. Saves nothing; the entrepreneur checks the form and submits it |
 | POST | `/api/matches` | 2-4 |
 | POST | `/api/booking` | 5-8 (idempotent on `idempotency_key`) |
 | POST | `/api/session/complete` | 9-10. Handover contract: `{ booking_id, notes?, transcript?, source: typed \| voice_note \| call_recording }`. Long transcripts return `202 { processing: true }` and are read in the background; over 200,000 characters returns `400` |
@@ -211,6 +214,8 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
 - The server terminal shows token usage per call, plus why any saved response was used (`[ai] ...` lines). Prompts and keys are never logged.
 - To switch to OpenAI or another compatible provider, change `AI_BASE_URL`, the key and the model names. Nothing else changes.
 - **Pacing:** before each call, `llm.ts` waits if needed so each model stays under its tokens-per-minute limit (`AI_TPM_LIMIT`, default 8,000). This avoids rate-limit errors instead of reacting to them.
+  - Quick steps wait at most 7 seconds, then use the saved response; other models are not paused.
+  - Background work (long transcripts) waits as long as needed.
 
 **Long call transcripts (`src/lib/agent/extract.ts`, `transcripts.ts`):**
 - Text up to about 22,000 characters is read in one pass.
@@ -221,6 +226,13 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
 - Owners come from the speaker's words ("I'll" = mentor, "you" = entrepreneur), not the AI's guess.
 - It runs in the background with `after()`. The mentor view says "the agent is reading the session" until drafts appear. A 30-minute call takes about a minute on the free tier.
 - Every step has a rule-based fallback that only keeps sentences where people agreed something, so it never invents tasks.
+
+**Voice intro for the assessment** (`src/lib/agent/assessment-draft.ts`, `assessment-rules.ts`; English for now):
+- **Flow:** speech goes to Whisper (with `language=en` and a spelling hint for local words), then the agent drafts the form. Fields that were not said are marked "Not mentioned", and the entrepreneur edits and submits as usual.
+- **Grounding:** a business name, budget or language that was not actually said is removed from the AI's draft.
+- **Misspellings:** speech-to-text spellings such as "Zonka" (Dzongkha) and "Gultrim" (ngultrum) are understood.
+- **Fallback:** the rule-based reader. **Score** (`npm run eval:assessment`): live AI 100% of fields right with 0 invented (rules: also 100%, tuned on the same 3 cases).
+- **Real audio test:** a spoken intro, transcribed and drafted, got every field right. Names can be misheard (for example "Yangchun" for "Yangchen"), which is why the entrepreneur checks the form.
 
 **Extraction quality** (`npm run eval:extraction`, 5 cases: short call, voice note with a corrected deadline, 30-minute call, mentor-owned actions, a chat with nothing agreed):
 - **Live AI, final version:** 100% of expected actions found, no extra actions, due dates and owners 100%, no forbidden actions.

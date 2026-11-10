@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { _resetAiGuards, aiStep } from "./ai";
-import { RateLimitError } from "./llm";
+import { BudgetWaitTooLongError, RateLimitError } from "./llm";
 import { FollowUpSchema } from "./schemas";
 
 const fallback = () => ({ body: "Saved fallback message." });
@@ -124,5 +124,22 @@ describe("aiStep validate hook", () => {
       validate: (v) => (/\bshe\b/i.test(v.body) ? "gendered" : null),
     });
     expect(r).toMatchObject({ source: "fallback", fallbackReason: "invalid_output" });
+  });
+});
+
+describe("out of one model's budget", () => {
+  it("answers straight away from the saved response and does not pause other calls", async () => {
+    process.env.AI_MODE = "live";
+    const first = await aiStep({
+      task: "t",
+      schema: FollowUpSchema,
+      fallback,
+      live: async () => {
+        throw new BudgetWaitTooLongError(30_000);
+      },
+    });
+    expect(first.fallbackReason).toBe("rate_limited");
+    const second = await aiStep({ task: "t", schema: FollowUpSchema, fallback, live: async () => ({ body: "Live message." }) });
+    expect(second.source).toBe("live_ai");
   });
 });
