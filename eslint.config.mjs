@@ -5,6 +5,9 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Plain .jsx files are not type-checked, so a name that no longer exists
+  // only fails when a button is pressed. Catch it in lint instead.
+  { files: ["**/*.jsx"], rules: { "no-undef": "error" } },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

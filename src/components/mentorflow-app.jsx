@@ -152,7 +152,6 @@ export default function App({ children }) {
     setStep(0);
     setFormError("");
     setPreviewNotice("");
-    setPasswordVisible(false);
     setDeclineOpen(false);
     if (nextPage === "register-without-idea") setSignupPath("exploring");
     if (nextPage === "register-entrepreneur") setSignupPath("idea");
