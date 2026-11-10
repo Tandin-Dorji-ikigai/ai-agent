@@ -1,7 +1,7 @@
 import "server-only";
 import type { z } from "zod";
 import { ToolError } from "./agent/tools";
-import { ConfigError, DbError } from "./supabase/server";
+import { ConfigError, DbError, MigrationsRequiredError } from "./supabase/server";
 
 // Small helpers so every route returns the same JSON error shape:
 //   { ok: false, code: "MENTOR_FULLY_BOOKED", message: "..." }
@@ -57,6 +57,13 @@ const USER_MESSAGES: Record<string, [number, string]> = {
 /** Converts thrown errors into safe JSON responses (no stack traces or secrets). */
 export function handleError(err: unknown): Response {
   if (err instanceof ConfigError) return fail(503, err.code, err.message);
+  if (err instanceof MigrationsRequiredError) {
+    return fail(
+      503,
+      err.code,
+      "Database tables are missing. In Supabase → SQL Editor, paste and run the file supabase/APPLY_ALL.sql, then refresh.",
+    );
+  }
   if (err instanceof ToolError) {
     const known = USER_MESSAGES[err.code];
     return fail(known?.[0] ?? 400, err.code, known?.[1] ?? err.message);

@@ -5,6 +5,7 @@
 // entrepreneur's voice intro. OWNER: the audio-to-text teammate.
 
 import { useEffect, useRef, useState } from "react";
+import { blobToWav16k } from "@/lib/audio/wav";
 import { Badge, Button } from "../ui";
 
 export interface VoiceRecorderProps {
@@ -18,6 +19,23 @@ export interface VoiceRecorderProps {
   /** Stop automatically after this many seconds. */
   maxSeconds?: number;
   unavailableText?: string;
+}
+
+/** WAV is about 1.9 MB a minute at 16 kHz; stay under Groq's 25 MB upload limit. */
+const WAV_MAX_SECONDS = 12 * 60;
+
+/**
+ * Browser recordings (webm/mp4) often fail on Groq; 16 kHz WAV is reliable.
+ * Only microphone recordings are converted: uploaded files go as they are.
+ * Falls back to the original recording if the browser cannot convert it.
+ */
+async function asWav(blob: Blob, seconds: number): Promise<{ blob: Blob; name: string } | null> {
+  if (seconds > WAV_MAX_SECONDS) return null;
+  try {
+    return { blob: await blobToWav16k(blob), name: "voice-note.wav" };
+  } catch {
+    return null;
+  }
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -74,11 +92,15 @@ export function VoiceRecorder({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
       const rec = new MediaRecorder(stream, { mimeType: mime });
+      const startedAt = Date.now();
       chunks.current = [];
       rec.ondataavailable = (e) => chunks.current.push(e.data);
       rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
-        void upload(new Blob(chunks.current, { type: mime }), mime === "audio/webm" ? "voice-note.webm" : "voice-note.m4a");
+        const recorded = new Blob(chunks.current, { type: mime });
+        const name = mime === "audio/webm" ? "voice-note.webm" : "voice-note.m4a";
+        setPhase("transcribing");
+        void asWav(recorded, (Date.now() - startedAt) / 1000).then((wav) => upload(wav?.blob ?? recorded, wav?.name ?? name));
       };
       rec.start();
       recorder.current = rec;
