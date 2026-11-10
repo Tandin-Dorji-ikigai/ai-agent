@@ -6,7 +6,7 @@ import { wrongSide } from "@/lib/viewer";
 
 // POST /api/calls/track (multipart): call_id, role, part (0, 1, 2, ...),
 // started_at_ms (when this part started, in SERVER time), file.
-// Each browser uploads ONLY its own microphone, in parts of about 5 minutes,
+// Each browser uploads ONLY its own microphone, in parts of about 3 minutes,
 // after both people agreed. Each part is transcribed and the audio discarded.
 // Returns { part_id, segments, source }. Uploading the same part again is safe.
 export async function POST(req: Request) {

@@ -240,7 +240,7 @@ h3 { font-weight: 650; font-size: 13px; }
 .call-participant-avatar { width: 112px; height: 112px; font-size: 36px; font-weight: 600; box-shadow: 0 0 0 12px #9d94e00a, 0 20px 50px #0000001a; }
 .call-participant-avatar [data-slot="avatar-fallback"] { color: #ffffff; background: linear-gradient(140deg, #8176d5, #5851a0); }
 .call-participant h2 { margin-top: 24px; font-size: 24px; font-weight: 600; }
-.call-participant > p { margin-top: 7px; color: var(--call-muted); font-size: 12px; }
+.call-participant > p { margin-top: 7px; color: var(--call-muted); font-size: 12px; text-align: center; }
 .call-waiting-mark { display: flex; gap: 5px; margin-top: 18px; }
 .call-waiting-mark > span { width: 4px; height: 4px; border-radius: 50%; background: #a79de8; }
 .call-waiting-mark > span:nth-child(2) { opacity: .65; }
@@ -386,3 +386,7 @@ h3 { font-weight: 650; font-size: 13px; }
 .call-stage-status { display: flex; align-items: center; gap: 7px; }
 .call-room .call-record-toggle { height: 26px; padding-inline: 10px; font-size: 11px; color: var(--call-foreground); background: transparent; border-color: var(--call-border); }
 .call-room .call-record-toggle:hover { background: var(--call-surface); color: var(--call-foreground); }
+.call-room .call-before-join { margin: 14px auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 320px; text-align: center; color: var(--call-muted); font-size: 12px; line-height: 1.5; }
+/* Outline buttons on the dark call stage (Leave without finishing, Back to dashboard). */
+.call-room .call-participant [data-slot="button"][data-variant="outline"] { background: transparent; color: var(--call-foreground); border-color: var(--call-border); }
+.call-room .call-participant [data-slot="button"][data-variant="outline"]:hover { background: var(--call-surface); color: var(--call-foreground); }

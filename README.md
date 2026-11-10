@@ -53,13 +53,13 @@ Open the app and click **Load demo data**, or go to the YDF view and press **Res
 ### Checks
 
 ```bash
-npm test             # 131 unit tests: ranking, who is asked next, session times, fallbacks, reply reading, decision rules, agenda, AI guards
+npm test             # unit tests: ranking, who is asked next, session times, fallbacks, reply reading, decision rules, agenda, AI guards, deadlines, sign-in rules, call notifications
 npm run lint
 npm run typecheck
 npm run demo:e2e     # all 14 demo steps and every check-in branch, twice, then a mentor declining, not replying, and the YDF hand-over. RESETS THE DEMO DATA
 PACE_MS=3000 RUNS=1 npm run demo:e2e   # with AI_MODE=live: stays under the free tier, prints live vs saved counts
 E2E_SOURCE=call_recording npm run demo:e2e   # the same demo from a call transcript, plus a 30-minute call read in the background
-E2E_SOURCE=call npm run demo:e2e             # the same demo as a call: join, consent, one recording per person, merged transcript
+E2E_SOURCE=call npm run demo:e2e             # the same demo as a call: join (recording starts), stop and record again, one recording per person, merged transcript, first-one-in notification
 npm run eval:extraction   # scores extraction on evals/extraction-cases.json (rule-based with AI_MODE=fixture, live AI with AI_MODE=live)
 npm run eval:assessment   # scores drafting the assessment from speech on evals/assessment-cases.json (3 cases)
 ```
@@ -80,30 +80,33 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 ## Architecture
 
 ```text
- Entrepreneur view        Mentor view           YDF view
- (mobile-first,           (brief, quick         (credits, outcomes,
-  agent inbox)             session notes)        escalation queue, agent log)
-        \                      |                      /
-         +---- Next.js app (one runtime) ------------+
-                               |
-              Route handlers (src/app/api/*)
-                               |
-              +------ MENTORING AGENT ------+
-              |  runner: events run inline  |
-              |  13 controlled tools        |
-              |  saved fallback per AI step |
-              +------------------------------+
-                               |
-                 Supabase Postgres (service role, server only)
+ Entrepreneur view         Mentor view            YDF view
+ (mobile-first: needs,     (requests, brief,      (credits, outcomes,
+  inbox, bookings, calls)   calls, notes)          escalations, agent log)
+        \                       |                        /
+         +--- Sign-in by role: /login; the proxy checks ---+
+         |    every page and API call (src/proxy.ts)       |
+         +------------ Next.js app on Vercel --------------+
+                                 |
+                  Route handlers (src/app/api/*)
+           /                     |                      \
+ +---- MENTORING AGENT ----+   Calls                     Call notifications
+ | runner: events inline   |   LiveKit room per booking  web push to the other
+ | 13 controlled tools     |   each phone records its    side's phones when
+ | saved fallback per step |   own mic -> Whisper (Groq)  someone joins first
+ +-------------------------+   -> transcript -> agent
+   Groq (gpt-oss) for text
+                                 |
+               Supabase Postgres (service role, server only)
 ```
 
 - **One runtime:** UI, route handlers, agent, scoring, fast-forward and reset all run in Next.js. There are no Supabase Edge Functions.
-- **No login:** a demo role switcher (Entrepreneur / Mentor / YDF) replaces Supabase Auth.
+- **Sign-in by role, not user accounts:** one `/login` page; the password decides entrepreneur, mentor, YDF staff or team, and the server enforces it on every page and API call (see "Deploy a test version"). Everyone with the mentor password is the same mentor, and every entrepreneur device is Pema: it is demo protection, not production authentication. With no passwords set (local development) there is no sign-in.
 - **Database access:** server only, with the service-role key. Row-level security is on for every table with no policies, so the public anon key can read nothing (verified).
 - **Agent events:** an event runs immediately after it is created, so the demo never waits for a worker. `agent_events` still records every event; a failed event can be retried from the YDF log (`POST /api/agent/run`).
 - **Check-in loop (team workflow):** confirmed actions are SMART (with a "done when" measure) and get a check-in two days before they are due. Each reply is read as done, on track, or stuck (with or without needing help). Then the agent marks it done, confirms the next check-in, records the obstacle, recommends an approved resource, asks the mentee's own mentor (onto the next session's agenda), suggests another mentor, or escalates to YDF for sensitive topics. Every outcome goes into the mentor's progress feed, and a follow-up booking is briefed from it.
 - **Mentor requests (the mentor decides):** after matching, the agent sends a request to the best-ranked mentor who is verified, active and has open sessions (never one below 40/100). The mentor sees only what they need: the mentee's needs, stage, sector, challenge, language and why they were picked (no phone number or budget). They accept by picking one of their usual weekly times (Bhutan time), or decline with a reason. Only then is anything booked or any YDF credit used (`accept_mentor_request` in SQL, one transaction). On a decline, or no reply within 2 days, the agent asks the next best mentor and tells the mentee why; after three mentors it creates a YDF escalation. A mentee can also ask for a specific mentor (a follow-up, or one the agent suggested), and the same rules apply.
-- **Calls:** one LiveKit room per confirmed booking (two people at most, a personal pass each), only for its two participants; it closes when the session completes. With both people's consent, each browser records only its own microphone and uploads it in 5-minute parts; each part is transcribed (speech-to-text key) and the audio is discarded. When the call ends, the parts are merged by time into `[Mentor]` / `[Entrepreneur]` turns (Whisper's silence inventions and speaker echoes dropped), and the session completes like typed notes do. With labelled lines, a speaker's own "I will..." is their action and "you..." the other person's. Without the LiveKit settings there is no video, but everything else works. The call screen is `src/components/call/call-room.tsx`.
+- **Calls:** one LiveKit room per confirmed booking (two people at most, a personal pass each), only for its two participants; it closes when the session completes. The call screen first says the session is recorded and transcribed; tapping **Join** agrees. Recording starts once both people are in, and either can stop it (which deletes their recorded parts). Each browser records only its own microphone and uploads it in 3-minute parts; each part is transcribed (speech-to-text key) and the audio is discarded. When the call ends, the parts are merged by time into `[Mentor]` / `[Entrepreneur]` turns (Whisper's silence inventions and speaker echoes dropped), and the session completes like typed notes do. With labelled lines, a speaker's own "I will..." is their action and "you..." the other person's. If ending the call fails, the screen stays with **Try again**, because the notes depend on it. Without the LiveKit settings there is no video, but everything else works. The call screen is `src/components/call/call-room.tsx`; call notifications are described under "Deploy a test version".
 - **Demo clock:** fast-forward moves an offset stored in `demo_state`, and the whole app reads time through it (`demo_now()` in SQL, `getDemoClock()` in TypeScript). The real clock is never changed.
 
 ### Repository layout
@@ -117,6 +120,7 @@ supabase/migrations/
   20261110000005_mentor_requests.sql mentor_requests, weekly times, accept_mentor_request, new events
   20261110000006_calls.sql           calls (one room per booking) and call_track_parts (text only, per person)
   20261111000007_livekit_calls.sql   calls may use LiveKit
+  20261111000008_push_subscriptions.sql  phones that want call notifications (per role)
 src/lib/
   audio/       transcribe.ts (Whisper)
   agent/       runner, handlers (one per event), tools, schemas, fallbacks, policy, prompts
@@ -129,6 +133,11 @@ src/lib/
   demo/        ids, seed-data (single source of truth), fixtures, dzongkha
   supabase/    server-only client
   state.ts     GET /api/state builder (all dashboard numbers come from here)
+  access.ts    sign-in by role: passwords, cookie, who may open which page and API
+  viewer.ts    who this request is signed in as (server)
+  push.ts      call notifications (web push)
+src/proxy.ts   checks sign-in on every page and API call
+public/sw.js   service worker that shows call notifications
 src/app/
   api/         route handlers (see below)
   entrepreneur/ mentor/ ydf/   the three views
@@ -223,7 +232,7 @@ These rules are enforced in code (`tools.ts`, `policy.ts`), not only in prompts.
 
 The source of truth is `supabase/migrations/20261110000001_schema.sql`. The tables from the original plan are all there, with these changes:
 
-- `profiles` no longer references `auth.users`, because the prototype has no login.
+- `profiles` no longer references `auth.users`, because the prototype has no user accounts (sign-in is by role password).
 - `entrepreneur_profiles` adds `expertise_needs`, `languages` and `assessment_completed_at`.
 - `mentor_profiles` adds `slots_remaining`, `sessions_delivered`, `headline` and `weekly_slots` (usual times, migration 005).
 - `action_items` adds `owner`, `due_in_days` and a `draft` status. Drafts become `pending` only after human confirmation.

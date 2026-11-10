@@ -172,7 +172,7 @@ export interface CallView {
   joined: { mentor: boolean; entrepreneur: boolean };
   /** Recording needs both. */
   consent: { mentor: boolean; entrepreneur: boolean };
-  /** Parts uploaded per person (each about 5 minutes of their own microphone). */
+  /** Parts uploaded per person (each about 3 minutes of their own microphone). */
   parts: { mentor: number; entrepreneur: number };
   /** Each person said they have finished. */
   done: { mentor: boolean; entrepreneur: boolean };

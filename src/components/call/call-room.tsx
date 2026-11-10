@@ -3,13 +3,15 @@
 // The real call screen (replaces PR #2's preview). Same layout and controls,
 // now with:
 //   - live video/audio through LiveKit (a personal pass from /api/calls/join);
-//   - recording starts on its own once BOTH people are in the call: joining
-//     is agreeing (the screen says so before and during the call), and either
+//   - a "before you join" step that says the call is recorded; nothing is sent
+//     to the server until the person taps Join (joining is agreeing);
+//   - recording starts on its own once BOTH people are in the call, and either
 //     person can stop it, which deletes what their microphone recorded;
 //   - each browser records ONLY its own microphone, in parts, and uploads
 //     them (/api/calls/track), so the transcript's speakers are certain;
 //   - Leave uploads the last part and ends the call (/api/calls/end); when both
-//     have ended, the agent reads the transcript and drafts actions.
+//     have ended, the agent reads the transcript and drafts actions. If ending
+//     fails, the screen stays with Try again (the notes depend on it).
 // Without LiveKit settings there is no video, but recording still works
 // (people can talk on a phone call or in person).
 
@@ -81,7 +83,10 @@ export function CallRoom({
   onRefresh: () => void;
 }) {
   const otherFirst = otherName.split(" ")[0];
-  const [phase, setPhase] = useState<"joining" | "ready" | "error" | "leaving" | "waiting_other">("joining");
+  const [phase, setPhase] = useState<"before_join" | "joining" | "ready" | "error" | "leaving" | "waiting_other" | "end_failed">("before_join");
+  // Joining agrees to recording, so it waits for the person to tap Join after reading that.
+  const [joinTapped, setJoinTapped] = useState(false);
+  const endForce = useRef(false);
   const [info, setInfo] = useState<JoinInfo | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -117,7 +122,7 @@ export function CallRoom({
 
   // ---- Join: personal pass, then connect to the room ----------------------
   useEffect(() => {
-    if (!open || !bookingId) return;
+    if (!open || !bookingId || !joinTapped) return;
     let cancelled = false;
     (async () => {
       const joined = await post<JoinInfo>("/api/calls/join", { booking_id: bookingId, role });
@@ -187,7 +192,7 @@ export function CallRoom({
       setConnected(false);
       ownStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, [open, bookingId, role, onRefresh]);
+  }, [open, bookingId, role, onRefresh, joinTapped]);
 
   // ---- Recording: own microphone only, in parts ---------------------------
   const upload = useCallback(
@@ -338,16 +343,28 @@ export function CallRoom({
     setPhase("leaving");
     await stopRecording();
     await uploadsRef.current;
-    let finalized = true;
-    if (info) {
-      const res = await post<{ finalized: boolean }>("/api/calls/end", { call_id: info.call_id, role, force });
-      finalized = res.ok ? res.finalized : true;
-      if (!res.ok) setProblem(res.message);
-    }
     void roomRef.current?.disconnect();
     roomRef.current = null;
     setConnected(false);
     ownStreamRef.current?.getTracks().forEach((t) => t.stop());
+    await finishCall(force);
+  }
+
+  /** Tells the server this person has finished. If that fails, stay here with Try again: the notes depend on it. */
+  async function finishCall(force: boolean) {
+    endForce.current = force;
+    let finalized = true;
+    if (info) {
+      setPhase("leaving");
+      const res = await post<{ finalized: boolean }>("/api/calls/end", { call_id: info.call_id, role, force });
+      if (!res.ok) {
+        setProblem(res.message);
+        setPhase("end_failed");
+        return;
+      }
+      setProblem(null);
+      finalized = res.finalized;
+    }
     onRefresh();
     // The mentor may finish for both if the other person has gone; otherwise go back.
     if (!finalized && role === "mentor") setPhase("waiting_other");
@@ -357,6 +374,10 @@ export function CallRoom({
   // ---- Screen ---------------------------------------------------------------
   const status = !open
     ? "Calls open once a session is booked."
+    : phase === "before_join"
+      ? "Ready when you are."
+    : phase === "end_failed"
+      ? "The call has ended, but it was not saved for the agent's notes yet."
     : phase === "joining"
       ? "Joining the session…"
       : phase === "error"
@@ -386,7 +407,7 @@ export function CallRoom({
           </div>
         </div>
         <Badge variant="outline" className="call-preview-badge">
-          {video ? "Live" : "Audio for notes"}
+          {phase === "before_join" ? "Not joined yet" : ["leaving", "end_failed", "waiting_other"].includes(phase) ? "Ended" : video ? "Live" : "Audio for notes"}
         </Badge>
       </header>
 
@@ -406,6 +427,33 @@ export function CallRoom({
               <Button size="sm" className="mt-4" onClick={() => void roomRef.current?.startAudio()}>
                 Tap to hear {otherFirst}
               </Button>
+            )}
+            {phase === "before_join" && open && (
+              <div className="call-before-join">
+                <p>
+                  This session is recorded and turned into text so the agent can draft your notes and action items. The audio is deleted once it is
+                  transcribed. Either of you can stop recording at any time.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setJoinTapped(true);
+                    setPhase("joining");
+                  }}
+                >
+                  Join the call
+                </Button>
+              </div>
+            )}
+            {phase === "end_failed" && (
+              <div className="row wrap mt-4">
+                <Button size="sm" onClick={() => void finishCall(endForce.current)}>
+                  Try again
+                </Button>
+                <Button size="sm" variant="outline" onClick={onLeft}>
+                  Leave without finishing
+                </Button>
+              </div>
             )}
             {phase === "waiting_other" && (
               <div className="row wrap mt-4">
@@ -437,7 +485,7 @@ export function CallRoom({
         <div className="call-stage-caption">
           <span className="call-stage-status" role="status">
             {recording ? <span className="call-recording-dot" aria-hidden /> : <ShieldCheck className="size-3.5" />}
-            <span>{recording ? "Recording for the agent's notes" : bothAgreed ? "Starting the recording…" : "Not recording"}</span>
+            <span>{recording ? "Recording for the agent's notes" : phase === "ready" && bothAgreed ? "Starting the recording…" : "Not recording"}</span>
           </span>
           {phase === "ready" && info && (
             <Button type="button" size="sm" variant="outline" className="call-record-toggle" onClick={() => void setRecordingOn(!myConsent)}>
@@ -551,7 +599,7 @@ export function CallRoom({
           </div>
         </div>
         <p className="call-preview-note">
-          {video ? "Audio-only works too: keep your camera off on a weak connection." : "No video in this session."} This call is recorded for the agent&apos;s notes; the audio is deleted once it is turned into text. Either of you can stop it.
+          {video ? "Audio-only works too: keep your camera off on a weak connection. " : phase === "ready" ? "No video in this session. " : ""}This call is recorded for the agent&apos;s notes; the audio is deleted once it is turned into text. Either of you can stop it.
         </p>
       </footer>
     </main>

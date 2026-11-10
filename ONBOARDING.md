@@ -66,7 +66,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Extraction test set | `npm run eval:extraction` scores the agent on 5 sample cases. Live AI: 100% found, no extras, due dates and owners right | `evals/extraction-cases.json`, `scripts/eval-extraction.mjs` |
 | Voice notes | Record or upload audio in the session workspace; Whisper turns it into text for the mentor to check | `voice/voice-recorder.tsx`, `/api/transcribe` |
 | Voice intro for the assessment (English) | Pema, or someone with no business yet, can speak instead of typing. The agent shows "Here is what I understood" (heard or suggested) and asks only the missing answers as tap-to-answer questions. Once it has enough, it saves and finds the mentor after a 5-second countdown that can be stopped. "Use a sample intro" and "Try a sample without a business" work without a microphone | `voice/voice-intro.tsx`, `voice/voice-recorder.tsx`, `lib/voice-draft.ts`, `agent/assessment-draft.ts`, `agent/assessment-rules.ts`, `/api/assessment/draft` |
-| Tests | 131 unit tests. `npm run demo:e2e` runs the whole demo in both modes, plus a mentor declining, not replying, and the hand-over to YDF | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
+| Tests | Unit tests (`npm test`). `npm run demo:e2e` runs the whole demo in both modes, plus a mentor declining, not replying, and the hand-over to YDF | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
 
 ### What is not built yet
 
@@ -139,7 +139,7 @@ Open http://localhost:3000. If you see the three view cards and a "Demo controls
 **Check everything works:**
 
 ```bash
-npm test          # 131 unit tests, about 1 second
+npm test          # unit tests, about 1 second
 npm run lint
 npm run typecheck
 ```
