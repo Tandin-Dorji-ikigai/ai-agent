@@ -1,5 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { CallProviderError, callProvider, createRoom, joinToken } from "./provider";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { CALL_PROVIDERS, type CallView } from "../state-types";
+import { CallProviderError, callProvider, createRoom, joinToken, type CallProviderName } from "./provider";
+
+describe("call provider types", () => {
+  it("every provider the server creates fits the shared call state (and the database check)", () => {
+    // Fails `npm run typecheck` if the two drift apart again.
+    expectTypeOf<CallProviderName>().toExtend<CallView["provider"]>();
+    expect(CALL_PROVIDERS).toEqual(["livekit", "daily", "none"]);
+  });
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();

@@ -7,9 +7,11 @@ import { DEMO_IDS } from "./demo/ids";
 import { MAX_REQUESTS_PER_ROUND, pickNextMentor } from "./matching/requests";
 import { rankMentors, scoreMentor, type ScoreBreakdown } from "./matching/score-mentor";
 import { buildAgenda } from "./progress";
+import { CALL_PROVIDERS } from "./state-types";
 import type {
   AgentRunView,
   BookingView,
+  CallProvider,
   CallView,
   DemoState,
   DemoStep,
@@ -275,7 +277,8 @@ async function loadCallView(bookingId: string): Promise<CallView | null> {
   const count = (role: string) => parts.filter((p) => p.role === role).length;
   return {
     id: String(row.id),
-    provider: row.provider as CallView["provider"],
+    // Checked, not asserted: anything unexpected reads as "no video".
+    provider: (CALL_PROVIDERS as readonly string[]).includes(String(row.provider)) ? (row.provider as CallProvider) : "none",
     status: row.status as CallView["status"],
     joined: { mentor: !!row.mentor_joined_at, entrepreneur: !!row.entrepreneur_joined_at },
     consent: { mentor: !!row.mentor_consent_at, entrepreneur: !!row.entrepreneur_consent_at },

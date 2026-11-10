@@ -164,10 +164,18 @@ export interface RequestRoundView {
   escalation_code: string | null;
 }
 
+/**
+ * Video provider of a call, as the database allows it (calls_provider_check,
+ * migration 007). New calls are "livekit" (or "none" without video settings);
+ * "daily" only appears on calls made before the switch to LiveKit.
+ */
+export const CALL_PROVIDERS = ["livekit", "daily", "none"] as const;
+export type CallProvider = (typeof CALL_PROVIDERS)[number];
+
 /** The call for the current booking (join links are personal and never part of the shared state). */
 export interface CallView {
   id: string;
-  provider: "daily" | "none";
+  provider: CallProvider;
   status: "open" | "ended";
   joined: { mentor: boolean; entrepreneur: boolean };
   /** Recording needs both. */
