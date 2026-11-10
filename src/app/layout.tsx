@@ -12,6 +12,9 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "MentorFlow · Your next step",
   description: "Meaningful guidance and mentorship for entrepreneurs in Bhutan.",
+  // Home Screen app on iPhone (needed there for call notifications); see app/manifest.ts.
+  icons: { apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "MentorFlow", statusBarStyle: "default" },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

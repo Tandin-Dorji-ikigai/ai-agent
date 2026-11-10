@@ -140,6 +140,10 @@ export const API_RULES: Record<string, Rule> = {
   "/api/calls/track": BOTH,
   "/api/calls/end": BOTH,
   "/api/transcribe": BOTH,
+  // Call notifications on this device (subscribe checks the side matches the sign-in)
+  "/api/push/subscribe": BOTH,
+  "/api/push/unsubscribe": BOTH,
+  "/api/push/test": BOTH,
   // YDF staff: the demo controls and agent retries
   "/api/demo/reset": YDF,
   "/api/demo/fast-forward": YDF,

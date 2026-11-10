@@ -33,6 +33,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next.js build files, the favicon and the public images.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|[^/]+\\.svg$).*)"],
+  // Everything except Next.js build files, the favicon, the public images and
+  // the files a browser fetches without the sign-in cookie: the app manifest
+  // and the notification service worker.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|[^/]+\\.(?:svg|png)$).*)"],
 };

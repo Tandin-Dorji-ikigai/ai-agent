@@ -161,6 +161,9 @@ scripts/demo-e2e.mjs  end-to-end check
 | POST | `/api/calls/track` | Multipart: one part of ONE person's microphone (`call_id, role, part, started_at_ms, file`). Transcribed, audio discarded |
 | POST | `/api/calls/end` | `{ call_id, role, force? }`. When both end: merged transcript with certain speakers → session completed → agent drafts actions |
 | POST | `/api/transcribe` | Audio to text (Whisper); live AI only. `mode=voice_note` (default, optional `language=en`) or `mode=call_recording` (speaker-labelled when the guess finishes safely: `labeled: true`) |
+| POST | `/api/push/subscribe` | `{ role, subscription }`: this phone wants call notifications (role must match the sign-in) |
+| POST | `/api/push/unsubscribe` | `{ endpoint }`: stop them on this phone |
+| POST | `/api/push/test` | `{ endpoint }`: a test notification to this phone only |
 | POST | `/api/demo/reset` | Restore the starting state (one transaction) |
 | GET | `/api/demo/fixtures` | Scripted demo inputs |
 
@@ -184,6 +187,8 @@ Sign-in is by role, not by person, on **one page for everyone: `/login`**. The p
 | `DEMO_PASSWORD` | the team | `/` | everything (building, presenting) |
 
 Signed out, any page sends you to `/login` and back to that page afterwards if your role may open it (otherwise to your workspace). Opening another role's page while signed in also goes to `/login`, with a note saying who you are signed in as; another role's API answers `403 WRONG_ROLE`. The old addresses `/entrepreneur/login`, `/mentor/login` and `/access` forward to `/login`. **Sign out** is in the entrepreneur top bar and the mentor sidebar. The cookie (a keyed hash bound to the role, never the password) lasts 30 days; changing a role's password signs that role out everywhere.
+
+**Call notifications.** When one person joins the call first, the other person's phone gets a push notification ("Pema is in the session room. Tap to join."), and an in-app **Join now** banner if they have the app open. Each person turns it on once per phone with **Notify me** (entrepreneur: My bookings; mentor: Dashboard), then can **Send a test**. Android Chrome works directly. **iPhone only allows it for Home Screen apps:** Share → Add to Home Screen, open MentorFlow from there, then Notify me. Needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (see `.env.example`) and migration 008. Subscriptions are kept per role (like sign-in) and survive a demo reset; a phone that uninstalled the app is forgotten after the next failed send. Code: `src/lib/push.ts`, `public/sw.js`, `src/components/push/call-alerts.tsx`.
 
 What to know:
 - **Roles, not accounts.** Everyone with the mentor password is "the mentor" (who answers for whichever mentor the agent is asking), and everyone with the entrepreneur password is Pema. It keeps strangers out and the two sides apart; it does not tell people apart. Do not enter real personal details.

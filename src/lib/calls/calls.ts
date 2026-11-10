@@ -108,6 +108,9 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
   }
   const joinedField = role === "mentor" ? "mentor_joined_at" : "entrepreneur_joined_at";
   const consentField = role === "mentor" ? "mentor_consent_at" : "entrepreneur_consent_at";
+  // Tell the other person only when this is the first one in (rejoining, or
+  // joining after them, sends nothing).
+  const firstIn = !call[joinedField] && !call[role === "mentor" ? "entrepreneur_joined_at" : "mentor_joined_at"];
   if (!call[joinedField]) {
     // Joining is agreeing to recording: the call screen says the call is
     // recorded, before and during it, and either person can stop it
@@ -143,6 +146,8 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
     // time: offset = server_time_ms - Date.now() at the moment this arrives.
     server_time_ms: Date.now(),
     part_seconds: PART_SECONDS,
+    /** The other person has not joined yet: the route sends them a push notification. */
+    notify_other: firstIn,
   };
 }
 

@@ -2,7 +2,7 @@
 -- Every migration in supabase/migrations/, in order, for pasting into the
 -- Supabase SQL Editor on a NEW, empty project. On an existing project, use
 -- `npx supabase db push` instead (it applies only the missing migrations).
--- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql
+-- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql, 20261111000008_push_subscriptions.sql
 
 -- ===== 20261110000001_schema.sql =====
 -- AI Mentoring Platform: hackathon prototype schema.
@@ -1079,3 +1079,27 @@ alter table call_track_parts enable row level security;
 
 alter table calls drop constraint calls_provider_check;
 alter table calls add constraint calls_provider_check check (provider in ('livekit', 'daily', 'none'));
+
+-- ===== 20261111000008_push_subscriptions.sql =====
+-- Web push: phones that asked to be told when the other person joins a call.
+-- Kept by ROLE, because the hosted test version signs in by role (not personal
+-- accounts): every phone signed in as the mentor is told when Pema joins, and
+-- the other way round. Not demo data, so reset_demo leaves it alone and phones
+-- stay subscribed. Additive: older app code keeps working.
+
+create table push_subscriptions (
+  id            uuid primary key default gen_random_uuid(),
+  role          text not null check (role in ('entrepreneur', 'mentor')),
+  -- The push service address for one browser on one device (unique per device).
+  endpoint      text not null unique,
+  p256dh        text not null,
+  auth          text not null,
+  user_agent    text,
+  created_at    timestamptz not null default now(),
+  last_sent_at  timestamptz
+);
+
+create index push_subscriptions_role_idx on push_subscriptions (role);
+
+-- Server only (service role), like every other table.
+alter table push_subscriptions enable row level security;

@@ -1,7 +1,9 @@
 import { CallJoinInputSchema } from "@/lib/agent/schemas";
 import { joinCall } from "@/lib/calls/calls";
 import { demoNow } from "@/lib/clock";
+import { after } from "next/server";
 import { handleError, ok, parseBody } from "@/lib/http";
+import { callJoinedMessage, notifyRole } from "@/lib/push";
 import { wrongSide } from "@/lib/viewer";
 
 // POST /api/calls/join { booking_id, role: "mentor" | "entrepreneur" }
@@ -15,7 +17,13 @@ export async function POST(req: Request) {
   const denied = await wrongSide(body.data.role);
   if (denied) return denied;
   try {
-    return ok(await joinCall(body.data.booking_id, body.data.role, await demoNow()));
+    const joined = await joinCall(body.data.booking_id, body.data.role, await demoNow());
+    if (joined.notify_other) {
+      // After the response, so joining is never slowed down by the push services.
+      const { to, message } = callJoinedMessage(body.data.role, joined.display_name, body.data.booking_id);
+      after(() => notifyRole(to, message));
+    }
+    return ok(joined);
   } catch (err) {
     return handleError(err);
   }

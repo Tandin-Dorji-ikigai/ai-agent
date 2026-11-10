@@ -174,6 +174,8 @@ Tip: narrow your browser window, or use the browser's mobile view, to see Pema's
 
 ## 6b. Testing on phones (the hosted test version)
 
+**Call notifications:** on each phone, turn on **Notify me** once (entrepreneur: My bookings; mentor: Dashboard) and press **Send a test**. On iPhone, first add the app to the Home Screen (Share → Add to Home Screen) and open it from there; iOS only allows notifications for Home Screen apps.
+
 The team's test version runs on Vercel at an `https://….vercel.app` address (ask Tandin for it and for the passwords). Sign-in is by role, on one page for everyone: open `/login` on both phones. On one, enter the **entrepreneur password** (you are Pema, and land in the entrepreneur app); on the other, the **mentor password** (you are the mentor the agent asks, and land in the mentor workspace). Each phone can then only open its own side, and calls check that each phone joins as its own side. The **team password** opens everything (use it on your laptop to switch views); the **YDF password** opens `/ydf` and the demo controls. **Sign out** is in the entrepreneur top bar and the mentor sidebar. Local development has no sign-in unless you set these passwords in `.env.local`. It uses the same demo data as everyone's laptop, so the rules below apply there too. Setup steps are in the README ("Deploy a test version").
 
 ## 7. Shared database: team rules

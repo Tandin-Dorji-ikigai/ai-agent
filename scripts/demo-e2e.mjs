@@ -52,15 +52,18 @@ async function callSession(bookingId) {
   const jE = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
   const early = await upload({ call_id: jE.json.call_id, role: "entrepreneur", part: 0, started_at_ms: jE.json.server_time_ms });
   check("   call: nothing is recorded while only one person is in", early.status === 409 && early.json.code === "RECORDING_NOT_ALLOWED", early.json);
+  check("   call: the first one in triggers a notification to the other", jE.json.notify_other === true, jE.json);
   const jM = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "mentor" });
   check("9  call: both join the same room for the confirmed booking", jE.status === 200 && jM.json.call_id === jE.json.call_id, { jE: jE.json, jM: jM.json });
   check("   call: a personal pass only when a video provider is set up", jE.json.provider === "livekit" ? !!jE.json.livekit?.token : jE.json.livekit === null, jE.json);
   const callId = jE.json.call_id;
   check("   call: recording starts on its own once both have joined (joining = agreeing)", jM.json.recording?.allowed === true, jM.json);
+  check("   call: joining second notifies nobody", jM.json.notify_other === false, jM.json);
   const stop = await call("POST", "/api/calls/consent", { call_id: callId, role: "mentor", consent: false });
   check("   call: either person can stop the recording", stop.json.recording?.allowed === false, stop.json);
   const rejoin = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "mentor" });
   check("   call: rejoining does not switch a stopped recording back on", rejoin.json.recording?.allowed === false, rejoin.json);
+  check("   call: rejoining notifies nobody", rejoin.json.notify_other === false, rejoin.json);
   const cM = await call("POST", "/api/calls/consent", { call_id: callId, role: "mentor", consent: true });
   check("   call: Record again turns it back on", cM.json.recording?.allowed === true, cM.json);
   const mov = await upload({ call_id: callId, role: "mentor", part: 0, started_at_ms: jM.json.server_time_ms }, new Blob(["x"], { type: "video/quicktime" }), "clip.mov");
