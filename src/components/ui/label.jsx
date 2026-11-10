@@ -5,7 +5,7 @@ import { cn } from "cn"
 import { Label as LabelPrimitive } from "radix-ui"
 
 function Label({
-  className,
+  className = "",
   ...props
 }) {
   return (

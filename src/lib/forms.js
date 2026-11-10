@@ -1,4 +1,4 @@
-export const industries = ["Tourism & Hospitality", "Agriculture & Food", "Technology & AI", "Finance & Fintech", "Retail", "Handicrafts"];
+export const industries = ["Tourism & Hospitality", "Agriculture & Food", "Technology & AI", "Finance & Fintech", "Retail", "Handicrafts", "Not decided yet"];
 export const stages = ["Idea", "Validation", "Prototype", "MVP / Pilot", "Launched", "Growth", "Established"];
 export const districts = ["Bumthang", "Chhukha", "Dagana", "Gasa", "Haa", "Lhuentse", "Mongar", "Paro", "Pema Gatshel", "Punakha", "Samdrup Jongkhar", "Samtse", "Sarpang", "Thimphu", "Trashigang", "Trashiyangtse", "Trongsa", "Tsirang", "Wangdue Phodrang", "Zhemgang"];
 

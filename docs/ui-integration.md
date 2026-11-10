@@ -26,13 +26,11 @@ Shared state comes from `GET /api/state` through `src/components/demo-state.tsx`
 (polled every 4 seconds). Request wording comes from `src/lib/mentorflow-view.ts`
 (unit-tested).
 
-## Still to port from the earlier screens
+## Also on these screens
 
-- The voice intro for the needs assessment (speak instead of typing; the agent drafts the answers).
-- The mentor's voice note in the session workspace.
-- The score breakdown per mentor, and the note that the most-booked mentor ranks low for Pema.
-- The mentor's progress feed and next-session agenda (from check-in replies).
-- "Ask Deki for a follow-up" after a completed session (`POST /api/requests/ask`).
-
-Their building blocks still exist (`src/components/voice/voice-recorder.tsx`,
-`/api/assessment/draft`, `/api/transcribe`).
+- **Voice intro** on Needs assessment (`src/components/voice/voice-intro.tsx`): speak, upload, or try a sample; "Here is what I understood" (heard, suggested, assumed, missing); quick questions; a 5-second countdown, then save, match and ask. `POST /api/transcribe`, `POST /api/assessment/draft`.
+- **Top matches** on Connect (`src/components/match-list.tsx`): scores, the agent's request status per mentor, the score breakdown, and the note that the most-booked mentor ranks low.
+- **Voice note** in the session workspace (shared `VoiceRecorder`); the notes are sent with `source: "voice_note"`.
+- **Mentor progress and next-session agenda** in the session workspace (`src/components/mentor-progress.tsx`), from `progress` and `agenda` in `/api/state`.
+- **Follow-up**: "Ask Deki for a follow-up" on My bookings after a confirmed session, and "Yes, ask for a session" when the agent suggests another mentor (`POST /api/requests/ask`).
+- **Demo replies** in Notifications start pre-filled for the scripted actions (`demoReplyFor`).

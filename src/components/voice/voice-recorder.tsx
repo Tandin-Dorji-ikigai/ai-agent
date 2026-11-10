@@ -1,12 +1,13 @@
 "use client";
 
 // Shared voice recorder: record with the microphone (or upload a file), then
-// Whisper turns it into text. Used by the mentor's voice notes and the
-// entrepreneur's voice intro. OWNER: the audio-to-text teammate.
+// Whisper turns it into text. Used by the entrepreneur's voice intro and the
+// mentor's voice note (MentorFlow design, shadcn/ui).
 
 import { useEffect, useRef, useState } from "react";
 import { blobToWav16k } from "@/lib/audio/wav";
-import { Badge, Button } from "../ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export interface VoiceRecorderProps {
   /** Live AI must be on (transcription needs it). */
@@ -19,6 +20,8 @@ export interface VoiceRecorderProps {
   /** Stop automatically after this many seconds. */
   maxSeconds?: number;
   unavailableText?: string;
+  /** Text on the record button. */
+  recordLabel?: string;
 }
 
 /** WAV is about 1.9 MB a minute at 16 kHz; stay under Groq's 25 MB upload limit. */
@@ -48,6 +51,7 @@ export function VoiceRecorder({
   language,
   maxSeconds = 300,
   unavailableText = "Voice input is available when live AI is switched on.",
+  recordLabel = "Record",
 }: VoiceRecorderProps) {
   const [phase, setPhase] = useState<"idle" | "recording" | "transcribing">("idle");
   const [seconds, setSeconds] = useState(0);
@@ -110,44 +114,46 @@ export function VoiceRecorder({
     }
   }
 
-  if (!available) return <p className="text-xs text-muted">{unavailableText}</p>;
+  if (!available) return <p className="muted text-sm">{unavailableText}</p>;
 
   return (
-    <div className="rounded-lg border border-line p-3">
-      <p className="text-sm font-medium">{title}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+    <div className="stack-tight rounded-lg border p-4">
+      <p className="text-sm font-semibold">{title}</p>
+      <div className="row wrap">
         {phase === "recording" ? (
-          <Button type="button" variant="danger" onClick={() => recorder.current?.stop()}>
+          <Button type="button" variant="destructive" onClick={() => recorder.current?.stop()}>
             Stop and transcribe
           </Button>
         ) : (
-          <Button type="button" variant="secondary" busy={phase === "transcribing"} onClick={start}>
-            {phase === "transcribing" ? "Transcribing..." : "Record voice note"}
+          <Button type="button" variant="outline" disabled={phase === "transcribing"} aria-busy={phase === "transcribing" || undefined} onClick={start}>
+            {phase === "transcribing" ? "Transcribing…" : recordLabel}
           </Button>
         )}
-        <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm font-semibold text-accent hover:bg-accent-soft">
-          Upload audio
-          <input
-            type="file"
-            accept="audio/*"
-            className="sr-only"
-            disabled={phase !== "idle"}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f, f.name);
-              e.target.value = "";
-            }}
-          />
-        </label>
+        <Button type="button" variant="ghost" asChild disabled={phase !== "idle"}>
+          <label className="cursor-pointer">
+            Upload audio
+            <input
+              type="file"
+              accept="audio/*"
+              className="sr-only"
+              disabled={phase !== "idle"}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void upload(f, f.name);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </Button>
         {phase === "recording" && (
-          <Badge tone="danger">
+          <Badge variant="destructive">
             Recording {mmss(seconds)} / {mmss(maxSeconds)}
           </Badge>
         )}
       </div>
-      <p className="mt-2 text-xs text-muted">{hint}</p>
+      <p className="muted text-xs">{hint}</p>
       {error && (
-        <p role="alert" className="mt-1 text-sm text-danger">
+        <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}

@@ -234,11 +234,37 @@ export function groundDraft(draft: AssessmentDraft, transcript: string): Assessm
     if (ASPIRING.test(transcript)) out.sector = "undecided";
     if (!out.suggested_fields.includes("sector")) out.suggested_fields.push("sector");
   }
+  // Said outright, so "Heard" even if the AI marked it as a suggestion. What was
+  // only inferred (the stage, the kinds of help) keeps the AI's "Suggested".
+  const heard = new Set<DraftField>();
+  if (out.business_name) heard.add("business_name"); // kept above only if said
+  if (out.budget !== undefined) heard.add("budget"); // kept above only if said
+  if (named.dz || named.en) heard.add("languages");
+  if (out.preferred_language && (PREFERS.test(transcript) || namedList.length === 1)) heard.add("preferred_language");
+  if (out.sector && out.sector !== "undecided" && sectorEvidence(out.sector, transcript)) heard.add("sector");
+  if (out.business_description && saidShare(out.business_description, transcript) >= 0.6) heard.add("business_description");
+  if (out.primary_challenge && saidShare(out.primary_challenge, transcript) >= 0.6) heard.add("primary_challenge");
   out.suggested_fields = out.suggested_fields.filter((f) => {
     const v = out[f];
-    return !(v === undefined || v === "" || (Array.isArray(v) && v.length === 0));
+    return !heard.has(f) && !(v === undefined || v === "" || (Array.isArray(v) && v.length === 0));
   });
   return out;
+}
+
+const PREFERS = /\b(prefer|most comfortable|rather|would like)\b.{0,40}\b(dzongkha|dzonkha|dzongka|zongkha|zonkha|zonka|english)\b/i;
+
+/** Share of a summary's meaningful words that the person actually said (0 to 1). */
+export function saidShare(text: string, transcript: string): number {
+  const words = (t: string) =>
+    t
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 4);
+  const spoken = new Set(words(transcript));
+  const own = [...new Set(words(text))];
+  if (own.length === 0) return 0;
+  return own.filter((w) => spoken.has(w)).length / own.length;
 }
 
 /**

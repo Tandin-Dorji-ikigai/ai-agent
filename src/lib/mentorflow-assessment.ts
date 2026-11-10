@@ -5,7 +5,7 @@ import { SECTOR_LABEL } from "./types";
 export const INDUSTRY_SECTORS: Record<string, AssessmentInput["sector"]> = {
   "Tourism & Hospitality": "tourism", "Agriculture & Food": "agriculture",
   Handicrafts: "handicrafts", Retail: "retail", "Finance & Fintech": "fintech",
-  "Technology & AI": "technology",
+  "Technology & AI": "technology", "Not decided yet": "undecided",
 };
 export const FORM_STAGES: Record<string, AssessmentInput["business_stage"]> = {
   Idea: "idea", Validation: "early", Prototype: "early", "MVP / Pilot": "early",

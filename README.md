@@ -67,14 +67,14 @@ npm run eval:assessment   # scores drafting the assessment from speech on evals/
 ## Demo script (about 4 minutes)
 
 1. Open three windows: **YDF** at `/ydf` (press **Reset demo**), **Pema** at `/entrepreneur/connect` (phone width), and **Deki** at `/mentor/dashboard`.
-2. **Pema → Needs assessment.** It is pre-filled with her answers. Press **Save needs & find mentor**. On **Connect**, the agent has already asked Deki (the best match): who was asked, the reply deadline, how it is paid, and who is next. Nothing is booked or paid yet.
+2. **Pema → Needs assessment.** Press **Use a sample intro** (or record one, with live AI): "Here is what I understood" shows each answer as heard, suggested or assumed, and after a 5-second countdown the agent saves it, finds the matches and asks the best one, with no further clicks. (Or press **Save needs & find mentor** on the pre-filled form.) On **Connect**: the agent has already asked Deki, with the reply deadline, how it is paid and who is next; below, the top three with their scores, **See the score breakdown**, and the note that the most-booked mentor ranks 13th of 13. Nothing is booked or paid yet.
 3. **Deki → Mentor requests.** Only need-to-know details (no budget), and why the agent picked Deki (88/100). Pick one of Deki's times and press **Accept**. (To show a no: press **Decline** with a reason; the agent asks Sonam next, and Pema's **My bookings** shows who said no and why.)
 4. **Pema → My bookings.** The session time and the preparation brief appear; YDF shows Nu. 1,500 of credit used.
 5. **The session.** On two devices, both press **Join session**, both agree to recording, talk, then both press **Leave**: each phone records only its own microphone, so the agent knows exactly who said what. (Or, on **Deki → Session workspace**, write quick notes and press **Complete session & save notes**.)
 6. **Deki → Session workspace.** Review the agent's draft actions and press **Confirm selected actions**.
 7. **YDF → Fast-forward 5 days.** The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
-8. **Pema → Notifications.** Reply to the interviews check-in ("Going well, I have spoken to 3 guests"): the agent confirms the next check-in. Reply to the permits follow-up ("I'm stuck: I don't know which permit the guided walk needs"): the agent escalates to YDF, **ESC-101**.
-9. **YDF:** the escalation, the metrics, and **Agent activity** with each decision's factors and the tools used.
+8. **Pema → Notifications.** The replies start pre-filled. Send the interviews check-in reply first ("going well"): the agent confirms the next check-in. Then send the permits follow-up reply (stuck on which permit the walk needs): the agent escalates to YDF, **ESC-101**.
+9. **Deki → Session workspace:** the agenda for the next session (the escalation first) and the progress feed. **YDF:** the escalation, the metrics, and **Agent activity** with each decision's factors and the tools used.
 10. **Reset demo** (YDF) before the next rehearsal.
 
 ## Architecture

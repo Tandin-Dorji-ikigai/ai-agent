@@ -19,8 +19,8 @@ const alertVariants = cva(
 )
 
 function Alert({
-  className,
-  variant,
+  className = "",
+  variant = "default",
   ...props
 }) {
   return (
@@ -34,7 +34,7 @@ function Alert({
 }
 
 function AlertTitle({
-  className,
+  className = "",
   ...props
 }) {
   return (
@@ -50,7 +50,7 @@ function AlertTitle({
 }
 
 function AlertDescription({
-  className,
+  className = "",
   ...props
 }) {
   return (

@@ -51,21 +51,21 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 
 | Area | What works today | Where |
 |---|---|---|
-| Needs assessment | Pre-filled form, AI summary | `entrepreneur/assessment-form.tsx`, `/api/assessment` |
+| Needs assessment | Pre-filled form (or the voice intro), AI summary | `mentorflow-app.jsx` (Needs assessment), `/api/assessment` |
 | Matching | Fixed-rule ranking of 15 mentors; top 3 with AI explanations written from verified facts | `matching/score-mentor.ts`, `/api/matches` |
 | Mentor requests (the mentor decides) | After matching, the agent asks the best mentor by itself (no button; if a step was missed or failed, it picks it up again when Pema's screen opens). The mentor accepts (picking one of their usual times) or declines with a reason. On a no, or no reply in 2 days, the agent asks the next best and tells the mentee why; after three, YDF is asked to help. Nothing is booked and no credit is used until a mentor accepts | `matching/requests.ts`, `matching/slots.ts`, `lib/requests.ts`, `/api/requests/*`, SQL `accept_mentor_request` |
 | Booking | Created only when a mentor accepts: YDF credit or simulated self-payment; cannot double-book or double-charge | SQL `accept_mentor_request` → `create_booking` |
 | Session prep | AI briefs for both sides; follow-up briefs built from progress | `agent/handlers.ts` |
-| After the session | Mentor's quick notes become SMART draft actions; the mentor confirms them | `mentor-view.tsx`, `/api/session/complete`, `/api/actions/confirm` |
+| After the session | Mentor's quick notes (or a recorded call) become SMART draft actions; the mentor confirms them | `mentorflow-app.jsx` (Session workspace), `/api/session/complete`, `/api/actions/confirm` |
 | Check-in loop (our workflow diagram) | Check-ins before due dates and follow-ups once overdue. Replies are read as done, on track, or stuck, and every branch is handled | `agent/handlers.ts`, `agent/policy.ts` |
 | Getting help | The AI picks one tool (approved resource, own mentor, another mentor, or YDF escalation), and our rules double-check its choice | `agent/live.ts`, `agent/policy.ts` |
-| Mentor progress | Progress feed and next-session agenda | `progress.ts`, `mentor-view.tsx` |
+| Mentor progress | Progress feed and next-session agenda in the session workspace | `progress.ts`, `mentor-progress.tsx` |
 | YDF dashboard | Metrics from the database, escalation queue, agent activity log, demo controls | `ydf-view.tsx` |
 | Live AI | Groq `gpt-oss-120b` and `gpt-oss-20b`, with timeouts, pacing under the free limits, a daily cap, and a check that blocks gender guessing | `agent/ai.ts`, `agent/llm.ts`, `agent/live.ts` |
 | Long call transcripts | Calls of any length are read in parts in the background (a 30-minute call takes about a minute); only real agreements become actions | `agent/extract.ts`, `agent/transcripts.ts` |
 | Extraction test set | `npm run eval:extraction` scores the agent on 5 sample cases. Live AI: 100% found, no extras, due dates and owners right | `evals/extraction-cases.json`, `scripts/eval-extraction.mjs` |
-| Voice notes (**basic version**) | Record or upload audio in the mentor view; Whisper turns it into text for the mentor to check. See section 9 | `mentor-view.tsx` (`VoiceNote`), `/api/transcribe` |
-| Voice intro for the assessment (English) | Pema, or someone with no business yet, can speak instead of typing. The agent shows "Here is what I understood" (heard or suggested) and asks only the missing answers as tap-to-answer questions. "Use a sample intro" and "Try a sample without a business" work without a microphone | `entrepreneur/assessment-form.tsx`, `voice/voice-recorder.tsx`, `agent/assessment-draft.ts`, `agent/assessment-rules.ts`, `/api/assessment/draft` |
+| Voice notes | Record or upload audio in the session workspace; Whisper turns it into text for the mentor to check | `voice/voice-recorder.tsx`, `/api/transcribe` |
+| Voice intro for the assessment (English) | Pema, or someone with no business yet, can speak instead of typing. The agent shows "Here is what I understood" (heard or suggested) and asks only the missing answers as tap-to-answer questions. Once it has enough, it saves and finds the mentor after a 5-second countdown that can be stopped. "Use a sample intro" and "Try a sample without a business" work without a microphone | `voice/voice-intro.tsx`, `voice/voice-recorder.tsx`, `lib/voice-draft.ts`, `agent/assessment-draft.ts`, `agent/assessment-rules.ts`, `/api/assessment/draft` |
 | Tests | 131 unit tests. `npm run demo:e2e` runs the whole demo in both modes, plus a mentor declining, not replying, and the hand-over to YDF | `src/**/*.test.ts`, `scripts/demo-e2e.mjs` |
 
 ### What is not built yet
@@ -160,14 +160,14 @@ Then walk through the demo yourself (section 6).
 ## 6. The demo, click by click (about 4 minutes)
 
 1. Open three windows: **YDF** at `/ydf` (press **Reset demo**), **Pema** at `/entrepreneur/connect` (phone width), and **Deki** at `/mentor/dashboard`.
-2. **Pema → Needs assessment.** It is pre-filled with her answers. Press **Save needs & find mentor**. On **Connect**, the agent has already asked Deki (the best match): who was asked, the reply deadline, how it is paid, and who is next. Nothing is booked or paid yet.
+2. **Pema → Needs assessment.** Press **Use a sample intro** (or record one, with live AI): "Here is what I understood" shows each answer as heard, suggested or assumed, and after a 5-second countdown the agent saves it, finds the matches and asks the best one, with no further clicks. (Or press **Save needs & find mentor** on the pre-filled form.) On **Connect**: the agent has already asked Deki, with the reply deadline, how it is paid and who is next; below, the top three with their scores, **See the score breakdown**, and the note that the most-booked mentor ranks 13th of 13. Nothing is booked or paid yet.
 3. **Deki → Mentor requests.** Only need-to-know details (no budget), and why the agent picked Deki (88/100). Pick one of Deki's times and press **Accept**. (To show a no: press **Decline** with a reason; the agent asks Sonam next, and Pema's **My bookings** shows who said no and why.)
 4. **Pema → My bookings.** The session time and the preparation brief appear; YDF shows Nu. 1,500 of credit used.
 5. **The session.** On two devices, both press **Join session**, both agree to recording, talk, then both press **Leave**: each phone records only its own microphone, so the agent knows exactly who said what. (Or, on **Deki → Session workspace**, write quick notes and press **Complete session & save notes**.)
 6. **Deki → Session workspace.** Review the agent's draft actions and press **Confirm selected actions**.
 7. **YDF → Fast-forward 5 days.** The agent checks in on the interviews (due soon) and follows up on the permits action (overdue).
-8. **Pema → Notifications.** Reply to the interviews check-in ("Going well, I have spoken to 3 guests"): the agent confirms the next check-in. Reply to the permits follow-up ("I'm stuck: I don't know which permit the guided walk needs"): the agent escalates to YDF, **ESC-101**.
-9. **YDF:** the escalation, the metrics, and **Agent activity** with each decision's factors and the tools used.
+8. **Pema → Notifications.** The replies start pre-filled. Send the interviews check-in reply first ("going well"): the agent confirms the next check-in. Then send the permits follow-up reply (stuck on which permit the walk needs): the agent escalates to YDF, **ESC-101**.
+9. **Deki → Session workspace:** the agenda for the next session (the escalation first) and the progress feed. **YDF:** the escalation, the metrics, and **Agent activity** with each decision's factors and the tools used.
 10. **Reset demo** (YDF) before the next rehearsal.
 
 Tip: narrow your browser window, or use the browser's mobile view, to see Pema's screen as it looks on a phone.
@@ -201,14 +201,13 @@ scripts/demo-e2e.mjs      automatic check of all 14 steps
 
 | ...this | Edit this file |
 |---|---|
-| Colours, fonts, spacing | `src/app/globals.css` (tokens) and `src/components/ui.tsx` |
-| Pema's phone screen | `src/components/entrepreneur-view.tsx` and `src/components/entrepreneur/` |
-| Mentor screen | `src/components/mentor-view.tsx` |
+| Colours, fonts, spacing | `src/app/globals.css` (tokens) and `src/components/ui/` (shadcn) |
+| Pema's and the mentor's screens | `src/components/mentorflow-app.jsx` (plus `match-list.tsx`, `mentor-progress.tsx`, `voice/voice-intro.tsx`, `call/call-room.tsx`) |
 | YDF dashboard | `src/components/ydf-view.tsx` |
 | Mentors, resources, Pema's starting data | `src/lib/demo/seed-data.ts`, then **Reset demo** |
 | Pema's pre-filled answers, session notes, blocker reply | `src/lib/demo/fixtures.ts` |
 | The Dzongkha follow-up message | `src/lib/demo/dzongkha.ts` (see section 9) |
-| Voice recording (shared by mentor notes and the voice intro) | `src/components/voice/voice-recorder.tsx` (mentor wrapper: `src/components/mentor/voice-note.tsx`) |
+| Voice recording (shared by mentor notes and the voice intro) | `src/components/voice/voice-recorder.tsx` |
 | Drafting the assessment from speech | `src/lib/agent/assessment-draft.ts`, `src/lib/agent/assessment-rules.ts` |
 | Audio to text (Whisper) | `src/lib/audio/transcribe.ts`, `src/app/api/transcribe/route.ts` |
 | What the agent accepts after a session (handover contract) | `src/app/api/session/complete/route.ts`, `SessionCompleteInputSchema` in `src/lib/agent/schemas.ts` |
@@ -254,11 +253,11 @@ POST /api/session/complete
 
 ### Notes per role
 
-**Frontend, about the assessment form:** `entrepreneur/assessment-form.tsx` now has two modes: the typed form, and the voice flow ("Here is what I understood", the follow-up questions, and "Review or change all answers"). After a voice intro the agent goes ahead by itself: "Assumed" defaults, a 5-second countdown, then the matches; "Change my answers" sits on the recommendations. Keep the labels "Find my mentors", "Use a sample intro", "Try a sample without a business", "Find them now", "Wait, let me check first", "Change my answers" and "Keep my answers", because tests click them.
+**Frontend, about the needs assessment:** the voice intro (`voice/voice-intro.tsx`) sits above the full form and fills it as it goes ("Here is what I understood", the quick questions, then a 5-second countdown). Keep the labels "Use a sample intro", "Try a sample without a business", "Find them now", "Wait, let me check first", "Save needs & find mentor", "Join session" and "I agree", because tests click them.
 
 **Audio to text:** a basic version already works. Start from it, not from scratch.
 - **Code:**
-  - `VoiceNote` in `src/components/mentor/voice-note.tsx` (record with the browser microphone, or upload)
+  - `VoiceRecorder` in `src/components/voice/voice-recorder.tsx` (record with the browser microphone, or upload), used by the voice intro and the mentor's voice note
   - `/api/transcribe` — `mode=voice_note` (plain text) or `mode=call_recording` (audio/video → `[Mentor]` / `[Entrepreneur]` transcript via `src/lib/audio/speakers.ts`). The labels are a **guess from the words** (Groq Whisper cannot tell voices apart), and the response says `labeled: true` or `false`. If the guess cannot finish safely, you get the plain transcript, never an error. For certain speakers, record each person's microphone as a separate track in the call feature.
   - Accepted formats: mp3, m4a, wav, ogg, flac, webm, mp4 (under 25 MB). Others, such as iPhone `.mov`, get `400 UNSUPPORTED_FORMAT` before uploading to Groq.
   - `transcribe()` / `transcribeCallRecording()` in `src/lib/audio/transcribe.ts`, Groq `whisper-large-v3-turbo`, max 25 MB per file

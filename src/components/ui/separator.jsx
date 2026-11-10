@@ -3,7 +3,7 @@ import { cn } from "cn"
 import { Separator as SeparatorPrimitive } from "radix-ui"
 
 function Separator({
-  className,
+  className = "",
   orientation = "horizontal",
   decorative = true,
   ...props

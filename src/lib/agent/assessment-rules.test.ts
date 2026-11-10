@@ -181,3 +181,30 @@ describe("descriptions without small talk", () => {
     expect(d.business_description).not.toMatch(/hello|Sangay/i);
   });
 });
+
+describe("what was said outright is 'Heard', not 'Suggested'", () => {
+  it("keeps the label for real inferences, clears it for words the person said", async () => {
+    const { groundDraft } = await import("./assessment-rules");
+    const transcript =
+      "Hello, my name is Pema. I run Yangchen Village Walks and Homestay outside Thimphu. We have two homestay rooms and a half-day guided walk. " +
+      "My biggest challenge is that I don't really know who my guests are. I speak Dzongkha and English, but I prefer Dzongkha. My budget is about 1,500 ngultrum per session.";
+    const out = groundDraft(
+      {
+        business_name: "Yangchen Village Walks and Homestay",
+        business_stage: "early",
+        sector: "tourism",
+        business_description: "Two homestay rooms and a half-day guided walk outside Thimphu.",
+        primary_challenge: "I don't really know who my guests are.",
+        goals: [],
+        expertise_needs: ["customer_validation"],
+        languages: ["dz", "en"],
+        preferred_language: "dz",
+        budget: 1500,
+        // The model marked everything as a suggestion.
+        suggested_fields: ["business_name", "sector", "business_stage", "business_description", "primary_challenge", "expertise_needs", "languages", "preferred_language", "budget"],
+      },
+      transcript,
+    );
+    expect(out.suggested_fields.sort()).toEqual(["business_stage", "expertise_needs"]);
+  });
+});

@@ -6,7 +6,7 @@ import { CheckIcon } from "lucide-react"
 import { Checkbox as CheckboxPrimitive } from "radix-ui"
 
 function Checkbox({
-  className,
+  className = "",
   ...props
 }) {
   return (
