@@ -1,7 +1,13 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+"use client";
 
-// Small, token-based UI primitives. No component library, so teammates can
-// restyle quickly. Colours come only from the tokens in globals.css.
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Button as ShadcnButton } from "./ui/button";
+import { Card as ShadcnCard } from "./ui/card";
+import { Badge as ShadcnBadge } from "./ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Label as ShadcnLabel } from "./ui/label";
+
+// Keep the existing demo API while reusing the prototype's shadcn/ui controls.
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -10,10 +16,7 @@ function cx(...parts: Array<string | false | null | undefined>): string {
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 const BUTTON: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-on-accent hover:bg-accent-strong disabled:opacity-50",
-  secondary: "bg-card text-ink border border-line hover:bg-sunken disabled:opacity-50",
-  danger: "bg-danger-soft text-danger border border-danger hover:bg-card disabled:opacity-50",
-  ghost: "text-accent hover:bg-accent-soft disabled:opacity-50",
+  primary: "default", secondary: "outline", danger: "destructive", ghost: "ghost",
 };
 
 export function Button({
@@ -25,24 +28,24 @@ export function Button({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; busy?: boolean }) {
   return (
-    <button
+    <ShadcnButton
       {...rest}
+      variant={BUTTON[variant]}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       className={cx(
         "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed",
-        BUTTON[variant],
         className,
       )}
     >
       {busy && <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />}
       {children}
-    </button>
+    </ShadcnButton>
   );
 }
 
-export function Card({ children, className, as: As = "section" }: { children: ReactNode; className?: string; as?: "section" | "div" | "article" }) {
-  return <As className={cx("rounded-xl border border-line bg-card p-4 sm:p-5", className)}>{children}</As>;
+export function Card({ children, className }: { children: ReactNode; className?: string; as?: "section" | "div" | "article" }) {
+  return <ShadcnCard className={cx("block p-4 sm:p-5", className)}>{children}</ShadcnCard>;
 }
 
 export function SectionTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
@@ -67,9 +70,9 @@ const TONE: Record<Tone, string> = {
 
 export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
   return (
-    <span className={cx("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", TONE[tone], className)}>
+    <ShadcnBadge variant="secondary" className={cx(TONE[tone], className)}>
       {children}
-    </span>
+    </ShadcnBadge>
   );
 }
 
@@ -99,18 +102,18 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Notice({ tone = "info", title, children }: { tone?: Tone; title?: string; children: ReactNode }) {
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={cx("rounded-lg px-4 py-3 text-sm", TONE[tone])}>
-      {title && <p className="font-semibold">{title}</p>}
-      <div className={title ? "mt-1" : undefined}>{children}</div>
-    </div>
+    <Alert variant={tone === "danger" ? "destructive" : "default"} role={tone === "danger" ? "alert" : "status"} className={TONE[tone]}>
+      {title && <AlertTitle className="font-semibold">{title}</AlertTitle>}
+      <AlertDescription className="text-inherit">{children}</AlertDescription>
+    </Alert>
   );
 }
 
 export function Label({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1 block text-sm font-medium text-ink">
+    <ShadcnLabel htmlFor={htmlFor} className="mb-1 block text-sm font-medium text-ink">
       {children}
-    </label>
+    </ShadcnLabel>
   );
 }
 

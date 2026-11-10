@@ -18,9 +18,35 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 
 ## Quick start
 
-```bash
+The MentorFlow UI runs independently with local sample data. It reuses the
+supplied shadcn/ui design and TanStack Query. Backend implementation is a separate
+teammate's responsibility; the frontend preview does not call or change the database.
+
+```powershell
 npm install
-cp .env.example .env.local      # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+npm run dev                      # http://localhost:3000
+```
+
+No environment file is required for frontend preview mode.
+
+- Entrepreneur: `/entrepreneur/connect`
+- Mentor: `/mentor/dashboard`
+- Requests, acceptance, published availability, bookings, notes/actions and
+  preview call chat share browser storage across tabs of the same origin.
+- Video screens include working control states; live audio/video requires the
+  backend/video integration. Sign-in, applications and funding remain previews.
+
+See [frontend workflow and backend handoff](docs/ui-integration.md) for the
+walkthrough, types, endpoint payloads and the explicit server-mode switch.
+
+### Existing backend setup (for the backend teammate)
+
+The remaining setup and demo script describe the original backend. They are
+not needed to run the frontend preview. Implement the handoff contracts first,
+then set `NEXT_PUBLIC_MENTORFLOW_API_MODE=server` and rebuild.
+
+```powershell
+Copy-Item .env.example .env.local  # fill server-side Supabase credentials
 ```
 
 **Apply the database migrations** to your Supabase project. Choose one way:
@@ -34,14 +60,14 @@ Then:
 npm run dev                      # http://localhost:3000
 ```
 
-Open the app and click **Load demo data**, or go to the YDF view and press **Reset demo**.
+In server mode only, use the YDF view to reset the original backend demo.
 
 **Offline / local database (optional, needs Docker):** run `npm run db:local:start`. It applies the migrations automatically. Then point `.env.local` at `http://127.0.0.1:54321`.
 
 ### Checks
 
 ```bash
-npm test             # 34 unit tests: ranking, fallbacks, decision rules, AI timeout handling
+npm test             # domain, frontend workflow and transport tests
 npm run lint
 npm run typecheck
 npm run demo:e2e     # runs all 14 demo steps against the running app, twice. RESETS THE DEMO DATA
@@ -79,7 +105,7 @@ npm run demo:e2e     # runs all 14 demo steps against the running app, twice. RE
 ```
 
 - **One runtime:** UI, route handlers, agent, scoring, fast-forward and reset all run in Next.js. There are no Supabase Edge Functions.
-- **No login:** a demo role switcher (Entrepreneur / Mentor / YDF) replaces Supabase Auth.
+- **Demo identity:** separate entrepreneur and mentor URLs replace Supabase Auth; sign-in screens are previews. YDF remains available at `/ydf`.
 - **Database access:** server only, with the service-role key. Row-level security is on for every table with no policies, so the public anon key can read nothing (verified).
 - **Agent events:** an event runs immediately after it is created, so the demo never waits for a worker. `agent_events` still records every event; a failed event can be retried from the YDF log (`POST /api/agent/run`).
 - **Demo clock:** fast-forward moves an offset stored in `demo_state`, and the whole app reads time through it (`demo_now()` in SQL, `getDemoClock()` in TypeScript). The real clock is never changed.
@@ -202,7 +228,7 @@ Every AI step goes through `aiStep()` (`src/lib/agent/ai.ts`). It tries live AI 
 13. The agent asks about the blocker and chooses a controlled next action.
 14. The YDF dashboard updates with credits, session outcome, actions and escalation.
 
-The header shows progress (x/14), and the YDF view has the checklist.
+The YDF view shows progress (x/14) and the demo checklist.
 
 ## Out of scope for the hackathon
 
