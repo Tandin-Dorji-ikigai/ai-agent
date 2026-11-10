@@ -28,6 +28,29 @@ export function DemoGate({ children }: { children: (state: DemoState) => ReactNo
     );
   }
 
+  if (error?.code === "MIGRATIONS_REQUIRED") {
+    return (
+      <Card className="mx-auto max-w-xl">
+        <h1 className="text-lg font-semibold">Create the database tables</h1>
+        <p className="mt-2 text-sm text-muted">
+          Supabase is connected, but the app tables (including <code className="font-mono text-ink">demo_state</code>) are not there yet.
+        </p>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted">
+          <li>
+            Open your Supabase project → <span className="font-medium text-ink">SQL Editor</span> → New query.
+          </li>
+          <li>
+            Open <code className="font-mono text-ink">ai-agent/supabase/APPLY_ALL.sql</code> in VS Code, copy everything, paste into the SQL Editor.
+          </li>
+          <li>
+            Click <span className="font-medium text-ink">Run</span>. Wait until it finishes without errors.
+          </li>
+          <li>Refresh this page, then click <span className="font-medium text-ink">Load demo data</span>.</li>
+        </ol>
+      </Card>
+    );
+  }
+
   if (error && !state) {
     return (
       <div className="mx-auto max-w-xl">

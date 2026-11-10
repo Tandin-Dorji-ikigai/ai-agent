@@ -5,6 +5,7 @@
 // src/app/api/transcribe/route.ts and src/lib/audio/transcribe.ts.
 
 import { useRef, useState } from "react";
+import { blobToWav16k } from "@/lib/audio/wav";
 import { Badge, Button } from "../ui";
 
 /** Record or upload a voice note; Whisper turns it into text the mentor can edit. */
@@ -17,8 +18,19 @@ export function VoiceNote({ available, onText }: { available: boolean; onText: (
   async function upload(blob: Blob, name: string) {
     setPhase("transcribing");
     setError(null);
+    let file = blob;
+    let filename = name;
+    try {
+      // Browser recordings (webm/mp4) often fail on Groq; WAV 16 kHz is reliable.
+      if (!/\.(ogg|wav|mp3|flac|m4a)$/i.test(name)) {
+        file = await blobToWav16k(blob);
+        filename = name.replace(/\.[^.]+$/, "") + ".wav";
+      }
+    } catch {
+      /* keep original blob */
+    }
     const form = new FormData();
-    form.append("file", blob, name);
+    form.append("file", file, filename);
     try {
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
       const json = (await res.json()) as { ok: boolean; text?: string; message?: string };

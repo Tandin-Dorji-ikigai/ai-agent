@@ -254,8 +254,9 @@ POST /api/session/complete
 **Audio to text:** a basic version already works. Start from it, not from scratch.
 - **Code:**
   - `VoiceNote` in `src/components/mentor/voice-note.tsx` (record with the browser microphone, or upload)
-  - `/api/transcribe`
-  - `transcribe()` in `src/lib/audio/transcribe.ts`, which uses Groq `whisper-large-v3-turbo`, max 25 MB per file
+  - `/api/transcribe` — `mode=voice_note` (plain text) or `mode=call_recording` (audio/video → `[Mentor]` / `[Entrepreneur]` transcript via `src/lib/audio/speakers.ts`)
+  - `transcribe()` / `transcribeCallRecording()` in `src/lib/audio/transcribe.ts`, Groq `whisper-large-v3-turbo`, max 25 MB per file
+  - Optional local pyannote diarization: `scripts/whisper_diarize.py`
 - **Tested:** only by uploading one computer-generated English recording.
 - **Not tested yet:** the **Record** button with a real microphone; phones (iPhone Safari records `audio/mp4`, Chrome records `audio/webm`); background noise.
 - **Still to decide:** what to tell Dzongkha speakers, since Whisper does not list Dzongkha.

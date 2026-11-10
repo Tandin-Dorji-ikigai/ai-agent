@@ -166,8 +166,9 @@ export const live = {
               ? " The input is the list of actions agreed in a long call. Turn exactly these into SMART actions, one each, " +
                 "keeping each one's owner. Merge duplicates. Add nothing else."
               : source === "call_recording"
-              ? " The input includes a transcript of the mentoring call: speakers are not labelled and it may contain " +
-                "transcription errors. Only extract actions both people clearly agreed on."
+              ? " The input includes a transcript of the mentoring call. Speakers may be labelled as [Mentor] and " +
+                "[Entrepreneur]; if labels are missing, infer from the words. It may contain transcription errors. " +
+                "Only extract actions both people clearly agreed on."
               : source === "voice_note"
                 ? " The notes were dictated and transcribed, so expect spoken language."
                 : ""),
@@ -185,7 +186,7 @@ export const live = {
         schema: ChunkNotesSchema,
         signal,
         system: sys(
-          `This is part ${part} of ${parts} of a mentoring call transcript (speakers are not labelled; it may contain transcription errors). ` +
+          `This is part ${part} of ${parts} of a mentoring call transcript (speakers may be labelled [Mentor]/[Entrepreneur]; it may contain transcription errors). ` +
             "agreements: only explicit commitments that someone will do something. what: the commitment in the speaker's own words, " +
             "keeping \"you\" or \"I'll\" (e.g. \"you call the three guides for referrals\", \"I'll send you the kit\"); who; and the timeframe in their words. " +
             "Not possibilities (\"might be worth\", \"maybe later\") and not decisions to NOT do something. " +
