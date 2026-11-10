@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/*
+  Design tokens. Components use these through Tailwind classes such as
+  bg-card, text-ink, border-line, bg-accent, text-on-accent.
+  Warm palette taken from the hackathon brief (cream, saffron, deep brown).
+*/
+:root {
+  --canvas: #f7f3ec;
+  --card: #ffffff;
+  --sunken: #efe8dc;
+  --line: #e0d6c6;
+  --ink: #2a1d16;
+  --muted: #6b5c50;
+  --accent: #a34a07;
+  --accent-strong: #7c3806;
+  --accent-soft: #fbead3;
+  --on-accent: #ffffff;
+  --success: #166534;
+  --success-soft: #e3f3e8;
+  --warning: #8a5300;
+  --warning-soft: #fcf1d6;
+  --danger: #b42318;
+  --danger-soft: #fdeceb;
+  --info: #1e4fb8;
+  --info-soft: #e7eefc;
+  --focus: #1e4fb8;
+  --focus-width: 2px; /* ds-allow-hardcode: token definition */
+  --focus-offset: 2px; /* ds-allow-hardcode: token definition */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #15100c;
+    --card: #1f1813;
+    --sunken: #2a211b;
+    --line: #3b3028;
+    --ink: #f4ede5;
+    --muted: #b8a998;
+    --accent: #f5a524;
+    --accent-strong: #fbbf4d;
+    --accent-soft: #3a2a14;
+    --on-accent: #1a120c;
+    --success: #6fd394;
+    --success-soft: #142a1c;
+    --warning: #f2c94c;
+    --warning-soft: #2e2711;
+    --danger: #f8908a;
+    --danger-soft: #351818;
+    --info: #9ab9f7;
+    --info-soft: #162238;
+    --focus: #9ab9f7;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-card: var(--card);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-focus: var(--focus);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
