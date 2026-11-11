@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE, OLD_SIGN_IN_PATHS, ROLE_LABEL, SIGN_IN_PATH, gateOn, mayOpen, roleFromCookie, rolePasswords } from "@/lib/access";
+import { ACCESS_COOKIE, OLD_SIGN_IN_PATHS, ROLE_LABEL, SIGN_IN_PATH, gateOn, homeFor, mayOpen, roleFromCookie, rolePasswords } from "@/lib/access";
 
 // Role sign-in (see src/lib/access.ts). Only active when a role password is
 // set, as on a hosted test deployment. Pages send people to the one sign-in
@@ -17,6 +17,13 @@ export async function proxy(request: NextRequest) {
 
   const { pathname, search } = request.nextUrl;
   const role = await roleFromCookie(request.cookies.get(ACCESS_COOKIE)?.value, passwords);
+  // "/" is the workspace picker, for the team password only; everyone else goes straight to their workspace.
+  if (pathname === "/" && role && role !== "team") {
+    const url = request.nextUrl.clone();
+    url.pathname = homeFor(role);
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
   if (mayOpen(role, pathname)) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {

@@ -77,7 +77,7 @@ describe("who may open what", () => {
   });
 
   it("the entrepreneur gets the entrepreneur screens and actions only", () => {
-    for (const path of ["/", "/get-started", "/entrepreneur/connect", "/entrepreneur/call", "/entrepreneur/sign-up/idea", "/api/state", "/api/requests/start", "/api/assessment", "/api/calls/join", "/api/transcribe"]) {
+    for (const path of ["/", "/entrepreneur/connect", "/entrepreneur/call", "/api/state", "/api/requests/start", "/api/assessment", "/api/calls/join", "/api/transcribe"]) {
       expect(mayOpen("entrepreneur", path), path).toBe(true);
     }
     for (const path of ["/mentor/dashboard", "/mentor/call", "/ydf", "/api/requests/accept", "/api/requests/decline", "/api/actions/confirm", "/api/demo/reset", "/api/dev/extract"]) {

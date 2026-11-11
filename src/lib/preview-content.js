@@ -39,12 +39,3 @@ export const mentor = {
   skills: ["Tourism", "Market Access", "Business Planning"],
   description: "Helps community-tourism founders shape visitor experiences, market offerings and build local partnerships.",
 };
-
-export const mentorApplication = {
-  mentorName: "", mentorEmail: "", mentorPhone: "", mentorDistrict: "Thimphu",
-  mentorLanguage: "Dzongkha, English", professionalTitle: "", organization: "", yearsExperience: "5",
-  sector: "Tourism & Hospitality", expertise: "Business planning, Market access, Tourism",
-  stages: "Idea, Validation, Early-stage", bio: "", meetingMode: "Online or in-person",
-  days: "Monday, Wednesday, Friday", hours: "09:00–17:00", capacity: "3", fee: "500",
-  qualifications: "", linkedin: "",
-};
