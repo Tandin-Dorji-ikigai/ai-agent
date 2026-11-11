@@ -84,6 +84,10 @@ interface EntrepreneurRow {
   expertise_needs: string[];
   languages: Language[];
   budget: number | string;
+  progress_so_far: string | null;
+  vision: string | null;
+  timeframe: EntrepreneurRecord["timeframe"];
+  mentoring_format: EntrepreneurRecord["mentoring_format"];
   assessment_summary: string | null;
   assessment_completed_at: string | null;
   profiles: ProfileRow;
@@ -111,6 +115,10 @@ export async function loadEntrepreneur(id: string): Promise<EntrepreneurRecord |
     goals: row.goals ?? [],
     expertise_needs: row.expertise_needs ?? [],
     budget: Number(row.budget),
+    progress_so_far: row.progress_so_far ?? null,
+    vision: row.vision ?? null,
+    timeframe: row.timeframe ?? null,
+    mentoring_format: row.mentoring_format ?? null,
     assessment_summary: row.assessment_summary,
     assessment_completed_at: row.assessment_completed_at,
   };

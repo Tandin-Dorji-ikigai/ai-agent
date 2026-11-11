@@ -152,6 +152,17 @@ export interface MentorRecord {
 }
 
 /** An entrepreneur (profiles + entrepreneur_profiles). */
+/** Needs assessment extras (optional): when they hope to get there, and how they want to meet. */
+export const TIMEFRAMES = ["1 month", "3 months", "6 months", "12 months", "Flexible"] as const;
+export type Timeframe = (typeof TIMEFRAMES)[number];
+export const MENTORING_FORMATS = ["either", "online", "in_person"] as const;
+export type MentoringFormat = (typeof MENTORING_FORMATS)[number];
+export const MENTORING_FORMAT_LABEL: Record<MentoringFormat, string> = {
+  either: "Online or in-person",
+  online: "Online only",
+  in_person: "In-person only",
+};
+
 export interface EntrepreneurRecord {
   id: string;
   full_name: string;
@@ -166,6 +177,12 @@ export interface EntrepreneurRecord {
   goals: string[];
   expertise_needs: string[];
   budget: number;
+  /** What they have done or have ready so far, in their words. */
+  progress_so_far: string | null;
+  /** How they want the finished product or service to work. */
+  vision: string | null;
+  timeframe: Timeframe | null;
+  mentoring_format: MentoringFormat | null;
   assessment_summary: string | null;
   assessment_completed_at: string | null;
 }
@@ -249,6 +266,10 @@ export interface MenteeSummary {
   needs: string[];
   challenge: string | null;
   preferred_language: Language;
+  /** Optional extras from the needs assessment (absent on requests sent before they existed). */
+  progress_so_far?: string | null;
+  timeframe?: Timeframe | null;
+  mentoring_format?: MentoringFormat | null;
   /** Plain facts from the score: why the agent picked this mentor. */
   why: string[];
   /** true when the mentee has had a session with this mentor before. */

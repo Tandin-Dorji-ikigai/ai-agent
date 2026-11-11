@@ -59,3 +59,36 @@ describe("prototype form to assessment API", () => {
     expect(again.business_description).toBe("Growing vegetables");
   });
 });
+
+describe("assessment extras (done so far, how it should work, when, how to meet)", () => {
+  const form = {
+    productName: "Village walks", industry: "Tourism & Hospitality", stage: "Validation", description: "Guided walks.", challenge: "Finding guests.",
+    goal: "Fill the low season", language: "English", languagePreference: "English", budget: "1500",
+    currentState: "  A sample itinerary is ready. ", vision: "Families host visitors.", timeframe: "6 months", mode: "Online only",
+  };
+
+  it("are saved from the form, with the meeting format as its key", () => {
+    const input = assessmentFromForm(form, ["pricing"]);
+    expect(input).toMatchObject({ progress_so_far: "A sample itinerary is ready.", vision: "Families host visitors.", timeframe: "6 months", mentoring_format: "online" });
+  });
+
+  it("are empty when not filled in, and an unknown choice is not saved", () => {
+    const input = assessmentFromForm({ ...form, currentState: "", vision: "", timeframe: "", mode: "Sometimes" }, ["pricing"]);
+    expect(input).toMatchObject({ progress_so_far: "", vision: "", timeframe: null, mentoring_format: null });
+  });
+
+  it("the no-idea form asks only when and how to meet", () => {
+    const input = assessmentFromForm({ interests: "Agriculture & Food", strengths: "Growing food", goal: "Find an idea", timeframe: "Flexible", mode: "In-person only", currentState: "x", vision: "y", language: "English", languagePreference: "English", budget: "0" }, ["idea_development"], true);
+    expect(input).toMatchObject({ progress_so_far: "", vision: "", timeframe: "Flexible", mentoring_format: "in_person" });
+  });
+
+  it("read back into the form after saving", () => {
+    const back = profileFromEntrepreneur({
+      id: "e", full_name: "Pema Yangchen", location: null, preferred_language: "en", languages: ["en"], business_name: "Village walks", business_stage: "early",
+      sector: "tourism", business_description: "Guided walks.", primary_challenge: "Finding guests.", goals: [], expertise_needs: ["pricing"], budget: 1500,
+      progress_so_far: "A sample itinerary is ready.", vision: "Families host visitors.", timeframe: "6 months", mentoring_format: "either",
+      assessment_summary: null, assessment_completed_at: null,
+    });
+    expect(back).toMatchObject({ currentState: "A sample itinerary is ready.", vision: "Families host visitors.", timeframe: "6 months", mode: "Online or in-person" });
+  });
+});

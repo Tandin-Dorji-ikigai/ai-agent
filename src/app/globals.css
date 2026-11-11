@@ -304,13 +304,13 @@ h3 { font-weight: 650; font-size: 13px; }
 .coach-progress-dot { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); font-size: 12px; font-weight: 600; background: var(--background); }
 .coach-progress-item.current .coach-progress-dot { border-color: var(--primary); color: var(--primary); }
 .coach-progress-item.done .coach-progress-dot { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
-/* Coach facts: label above, text below, both left-aligned (long answers read easily on a phone) */
-.coach-facts { display: flex; flex-direction: column; margin: 0; }
-.coach-facts > div { padding-block: 12px; border-bottom: 1px solid var(--border); }
-.coach-facts > div:first-child { padding-top: 0; }
-.coach-facts > div:last-child { border-bottom: 0; padding-bottom: 0; }
-.coach-facts dt { font-size: 12px; color: var(--muted-foreground); }
-.coach-facts dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--foreground); overflow-wrap: anywhere; }
+/* Fact lists (coach, mentor request): label above, text below, both left-aligned (long answers read easily on a phone) */
+.fact-list { display: flex; flex-direction: column; margin: 0; }
+.fact-list > div { padding-block: 12px; border-bottom: 1px solid var(--border); }
+.fact-list > div:first-child { padding-top: 0; }
+.fact-list > div:last-child { border-bottom: 0; padding-bottom: 0; }
+.fact-list dt { font-size: 12px; color: var(--muted-foreground); }
+.fact-list dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--foreground); overflow-wrap: anywhere; }
 .coach-mission { font-size: 16px; line-height: 1.55; color: var(--foreground); }
 .coach-done h3 { font-size: 14px; }
 /* Session history: recap, agreed next steps and the whole conversation */

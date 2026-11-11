@@ -2,7 +2,7 @@
 // "saved". Pure (no React, no API), so it is unit-tested.
 
 import type { AssessmentDraft, AssessmentInput, DraftField } from "./agent/schemas";
-import type { Expertise, Language, Stage } from "./types";
+import type { Expertise, Language, MentoringFormat, Stage, Timeframe } from "./types";
 
 /** The assessment as answers that may still be incomplete. */
 export interface DraftAnswers {
@@ -16,6 +16,11 @@ export interface DraftAnswers {
   languages: Language[];
   preferred_language: Language | "";
   budget: number | "";
+  /** Optional extras, only when said. */
+  progress_so_far: string;
+  vision: string;
+  timeframe: Timeframe | "";
+  mentoring_format: MentoringFormat | "";
 }
 
 /** How the agent got each answer: said outright, inferred from meaning, a safe default, or not said. */
@@ -35,6 +40,10 @@ export function draftToAnswers(d: AssessmentDraft): DraftAnswers {
     languages: d.languages ?? [],
     preferred_language: d.preferred_language ?? "",
     budget: d.budget ?? "",
+    progress_so_far: d.progress_so_far ?? "",
+    vision: d.vision ?? "",
+    timeframe: d.timeframe ?? "",
+    mentoring_format: d.mentoring_format ?? "",
   };
 }
 
@@ -121,5 +130,9 @@ export function toAssessmentInput(a: DraftAnswers): AssessmentInput {
     languages: a.languages,
     preferred_language: a.preferred_language as Language,
     budget: Number(a.budget),
+    progress_so_far: a.progress_so_far.trim(),
+    vision: a.vision.trim(),
+    timeframe: a.timeframe || null,
+    mentoring_format: a.mentoring_format || null,
   };
 }

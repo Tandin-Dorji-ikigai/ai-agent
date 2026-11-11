@@ -1,6 +1,9 @@
 import type { AssessmentInput } from "./agent/schemas";
 import type { EntrepreneurRecord } from "./types";
-import { SECTOR_LABEL } from "./types";
+import { MENTORING_FORMAT_LABEL, SECTOR_LABEL, TIMEFRAMES, type MentoringFormat, type Timeframe } from "./types";
+
+/** The form shows the labels; the API stores the keys. */
+const FORMAT_FROM_LABEL = Object.fromEntries(Object.entries(MENTORING_FORMAT_LABEL).map(([key, label]) => [label, key])) as Record<string, MentoringFormat>;
 
 export const INDUSTRY_SECTORS: Record<string, AssessmentInput["sector"]> = {
   "Tourism & Hospitality": "tourism", "Agriculture & Food": "agriculture",
@@ -35,6 +38,10 @@ export function profileFromEntrepreneur(entrepreneur: EntrepreneurRecord) {
     challenge: entrepreneur.primary_challenge ?? "",
     goal: entrepreneur.goals.join("\n"),
     budget: String(entrepreneur.budget),
+    currentState: entrepreneur.progress_so_far ?? "",
+    vision: entrepreneur.vision ?? "",
+    timeframe: entrepreneur.timeframe ?? "",
+    mode: entrepreneur.mentoring_format ? MENTORING_FORMAT_LABEL[entrepreneur.mentoring_format] : "",
   };
 }
 
@@ -65,5 +72,10 @@ export function assessmentFromForm(
     languages,
     preferred_language: preferred,
     budget: Number(values.budget),
+    // Optional extras (the no-idea form asks only when and how to meet).
+    progress_so_far: exploring ? "" : values.currentState?.trim() ?? "",
+    vision: exploring ? "" : values.vision?.trim() ?? "",
+    timeframe: (TIMEFRAMES as readonly string[]).includes(values.timeframe) ? (values.timeframe as Timeframe) : null,
+    mentoring_format: FORMAT_FROM_LABEL[values.mode] ?? null,
   };
 }

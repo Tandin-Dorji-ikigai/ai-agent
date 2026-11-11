@@ -173,6 +173,13 @@ async function runOnce(n, fx) {
     asked?.mentee_summary,
   );
   check(
+    "   the needs extras are saved and shown to the mentor (done so far, when, how to meet)",
+    s.entrepreneur?.progress_so_far === fx.assessment.progress_so_far && s.entrepreneur?.timeframe === fx.assessment.timeframe &&
+      asked?.mentee_summary.progress_so_far === fx.assessment.progress_so_far && asked?.mentee_summary.timeframe === fx.assessment.timeframe &&
+      asked?.mentee_summary.mentoring_format === fx.assessment.mentoring_format,
+    { entrepreneur: s.entrepreneur, summary: asked?.mentee_summary },
+  );
+  check(
     "   Pema is told who was asked, and Sonam is next",
     s.messages.some((x) => /asked Deki Wangmo/.test(x.body)) && s.request_round?.next_mentor?.mentor.full_name === "Sonam Choden",
     { messages: s.messages.map((x) => x.body), next: s.request_round?.next_mentor },

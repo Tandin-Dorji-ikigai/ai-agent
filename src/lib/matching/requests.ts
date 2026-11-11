@@ -66,6 +66,9 @@ export function menteeSummary(e: EntrepreneurRecord, scored: ScoredMentor | null
     needs: [...new Set(e.expertise_needs)].map(expertiseLabel),
     challenge: e.primary_challenge,
     preferred_language: e.preferred_language,
+    progress_so_far: e.progress_so_far,
+    timeframe: e.timeframe,
+    mentoring_format: e.mentoring_format,
     why: scored ? whyMatched(e, scored) : [],
     follow_up: followUp,
   };

@@ -2,7 +2,7 @@
 // Live AI output and saved fallbacks must both pass these schemas.
 
 import { z } from "zod";
-import { DECLINE_REASONS, EXPERTISE, LANGUAGES, PROGRESS_KINDS, SECTORS, STAGES, WEEKDAYS } from "../types";
+import { DECLINE_REASONS, EXPERTISE, LANGUAGES, MENTORING_FORMATS, PROGRESS_KINDS, SECTORS, STAGES, TIMEFRAMES, WEEKDAYS } from "../types";
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
 
@@ -26,6 +26,11 @@ export const AssessmentInputSchema = z.object({
   preferred_language: z.enum(LANGUAGES),
   /** Per session in Nu. 0 means "not sure yet" (matching treats it as neutral; YDF credit can cover fees). */
   budget: z.number().min(0).max(100000),
+  /** Optional extras: what is done so far, how the finished thing should work, when, and how to meet. */
+  progress_so_far: z.string().trim().max(1000).default(""),
+  vision: z.string().trim().max(1000).default(""),
+  timeframe: z.enum(TIMEFRAMES).nullable().default(null),
+  mentoring_format: z.enum(MENTORING_FORMATS).nullable().default(null),
 });
 export type AssessmentInput = z.infer<typeof AssessmentInputSchema>;
 
@@ -59,6 +64,11 @@ export const AssessmentDraftSchema = z.object({
   languages: z.array(z.enum(LANGUAGES)).max(2).default([]),
   preferred_language: z.enum(LANGUAGES).optional(),
   budget: z.number().min(0).max(100000).optional(),
+  /** Optional extras, only when said (never asked about, never guessed). */
+  progress_so_far: z.string().trim().min(1).max(1000).optional(),
+  vision: z.string().trim().min(1).max(1000).optional(),
+  timeframe: z.enum(TIMEFRAMES).optional(),
+  mentoring_format: z.enum(MENTORING_FORMATS).optional(),
   /** Fields that were inferred from the meaning rather than said outright (shown as "Suggested"). */
   suggested_fields: z.array(z.enum(DRAFT_FIELDS)).default([]),
 });

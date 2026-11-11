@@ -19,6 +19,10 @@ export const PEMA_ASSESSMENT_ANSWERS = {
   languages: ["dz", "en"] as Language[],
   preferred_language: "dz" as Language,
   budget: 1500,
+  progress_so_far: "The concept and a sample tour itinerary are ready; local partner and permit processes are unclear.",
+  vision: "A reliable community-tourism service that brings travelers to local families and supports sustainable income.",
+  timeframe: "6 months" as const,
+  mentoring_format: "either" as const,
 };
 
 /** Pema's spoken self-introduction (English), for the voice assessment demo. */

@@ -47,3 +47,18 @@ describe("voice intro answers", () => {
     expect(merged.status.budget).toBe("heard");
   });
 });
+
+describe("voice intro extras (only when said)", () => {
+  it("are empty when not said, and saved as nothing", () => {
+    const a = draftToAnswers({ goals: [], expertise_needs: [], languages: [], suggested_fields: [] });
+    expect([a.progress_so_far, a.vision, a.timeframe, a.mentoring_format]).toEqual(["", "", "", ""]);
+    const input = toAssessmentInput({ ...pemaDraft, progress_so_far: "", vision: "", timeframe: "", mentoring_format: "" });
+    expect(input).toMatchObject({ progress_so_far: "", vision: "", timeframe: null, mentoring_format: null });
+  });
+
+  it("are saved when said", () => {
+    const input = toAssessmentInput({ ...pemaDraft, progress_so_far: " Itinerary ready ", vision: "Families host visitors", timeframe: "3 months", mentoring_format: "online" });
+    expect(input).toMatchObject({ progress_so_far: "Itinerary ready", vision: "Families host visitors", timeframe: "3 months", mentoring_format: "online" });
+    expect(AssessmentInputSchema.safeParse(input).success).toBe(true);
+  });
+});

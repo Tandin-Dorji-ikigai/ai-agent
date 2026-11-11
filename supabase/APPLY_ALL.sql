@@ -2,7 +2,7 @@
 -- Every migration in supabase/migrations/, in order, for pasting into the
 -- Supabase SQL Editor on a NEW, empty project. On an existing project, use
 -- `npx supabase db push` instead (it applies only the missing migrations).
--- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql, 20261111000008_push_subscriptions.sql, 20261111000009_beginner_coach.sql, 20261111000010_session_recap.sql
+-- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql, 20261111000008_push_subscriptions.sql, 20261111000009_beginner_coach.sql, 20261111000010_session_recap.sql, 20261111000011_assessment_extras.sql
 
 -- ===== 20261110000001_schema.sql =====
 -- AI Mentoring Platform: hackathon prototype schema.
@@ -1173,3 +1173,12 @@ alter table agent_events add constraint agent_events_event_type_check check (eve
 -- the full transcript. Additive: older app code keeps working.
 alter table sessions add column recap jsonb;
 alter table sessions add column recap_source text check (recap_source in ('live_ai', 'fallback'));
+
+-- ===== 20261111000011_assessment_extras.sql =====
+-- Needs assessment extras: the form always asked these, but they were not
+-- saved. Optional; the mentor sees them on the request and the agent uses
+-- them in the summary and the session briefs. Additive: older code keeps working.
+alter table entrepreneur_profiles add column progress_so_far text;
+alter table entrepreneur_profiles add column vision text;
+alter table entrepreneur_profiles add column timeframe text check (timeframe in ('1 month', '3 months', '6 months', '12 months', 'Flexible'));
+alter table entrepreneur_profiles add column mentoring_format text check (mentoring_format in ('either', 'online', 'in_person'));

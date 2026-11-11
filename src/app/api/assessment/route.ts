@@ -34,6 +34,10 @@ export async function POST(req: Request) {
           expertise_needs: input.expertise_needs,
           languages: input.languages,
           budget: input.budget,
+          progress_so_far: input.progress_so_far || null,
+          vision: input.vision || null,
+          timeframe: input.timeframe,
+          mentoring_format: input.mentoring_format,
           assessment_completed_at: now.toISOString(),
           updated_at: now.toISOString(),
         })

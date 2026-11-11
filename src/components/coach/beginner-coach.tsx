@@ -142,7 +142,7 @@ export function BeginnerCoach({ onMentor, onUpdateNeeds }: { onMentor: () => voi
             <CardDescription>The agent is asking a mentor to meet you and will share this, so you do not have to repeat it.</CardDescription>
           </CardHeader>
           <CardContent className="stack">
-            <dl className="coach-facts">
+            <dl className="fact-list">
               <div><dt>The problem</dt><dd>{coach.summary.problem}</dd></div>
               <div><dt>Who has it</dt><dd>{coach.summary.who_has_it}</dd></div>
               <div><dt>Your idea</dt><dd>{coach.summary.idea}</dd></div>
@@ -221,7 +221,7 @@ function OpenStep({
         <CardDescription className="coach-mission">{step.mission}</CardDescription>
       </CardHeader>
       <CardContent className="stack">
-        <dl className="coach-facts">
+        <dl className="fact-list">
           {step.why && <div><dt>Why it matters</dt><dd>{step.why}</dd></div>}
           <div><dt>Report back when</dt><dd>{step.done_when}</dd></div>
         </dl>

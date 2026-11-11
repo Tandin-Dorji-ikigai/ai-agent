@@ -4,6 +4,7 @@ import type { AgendaItem } from "../progress";
 import {
   EXPERTISE,
   LANGUAGE_LABEL,
+  MENTORING_FORMAT_LABEL,
   expertiseLabel,
   sectorLabel,
   stageLabel,
@@ -53,6 +54,10 @@ function profileFacts(e: EntrepreneurRecord) {
     preferred_language: LANGUAGE_LABEL[e.preferred_language],
     budget_per_session_nu: e.budget > 0 ? e.budget : "not decided yet (YDF credit can cover fees)",
     location: e.location,
+    done_so_far: e.progress_so_far ?? undefined,
+    how_it_should_work: e.vision ?? undefined,
+    hopes_to_get_there_in: e.timeframe ?? undefined,
+    wants_to_meet: e.mentoring_format ? MENTORING_FORMAT_LABEL[e.mentoring_format] : undefined,
   };
 }
 
@@ -106,6 +111,9 @@ export const live = {
             `expertise_needs: up to 5 from this list that match the help they ask for or clearly need: ${EXPERTISE_KEYS}. ` +
             "languages: dz (Dzongkha) and/or en (English) that they say they speak; if they name none, en (they are speaking English), marked suggested. " +
             "budget: the amount per mentoring session in Ngultrum as a number, only if they said one. " +
+            "Optional, only if they said it (never guess, never ask): progress_so_far (what they have already done or have ready, in their words); " +
+            "vision (how they want the finished product or service to work); timeframe (when they hope to get there: 1 month, 3 months, 6 months, 12 months or Flexible, the nearest); " +
+            "mentoring_format (either, online or in_person, if they said how they want to meet). " +
             "business_description and primary_challenge: 1 to 2 sentences in the first person, close to their words, without greetings or their name. " +
             "Mentions of using this platform or app are about our mentoring service, not their business. " +
             "goals: only goals they stated.",

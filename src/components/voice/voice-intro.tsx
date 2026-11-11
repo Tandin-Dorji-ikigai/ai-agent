@@ -17,7 +17,7 @@ import { useDemo } from "@/components/demo-state";
 import type { AssessmentDraft, DraftField } from "@/lib/agent/schemas";
 import { DEMO_ASPIRING_INTRO, DEMO_VOICE_INTRO } from "@/lib/demo/fixtures";
 import { formatNu } from "@/lib/format";
-import { LANGUAGE_LABEL, SECTORS, STAGES, expertiseLabel, sectorLabel, stageLabel, type Expertise, type Language, type Stage } from "@/lib/types";
+import { LANGUAGE_LABEL, MENTORING_FORMAT_LABEL, SECTORS, STAGES, expertiseLabel, sectorLabel, stageLabel, type Expertise, type Language, type Stage } from "@/lib/types";
 import {
   draftToAnswers,
   isComplete,
@@ -199,6 +199,15 @@ export function VoiceIntro({
     ["preferred_language", "Preferred language", answers.preferred_language ? LANGUAGE_LABEL[answers.preferred_language] : ""],
     ["budget", "Budget per session", answers.budget === "" ? "" : Number(answers.budget) === 0 ? "Not sure yet" : formatNu(Number(answers.budget))],
   ];
+  // Optional extras: shown only when the person said them (never asked about).
+  const extras: Array<[string, string]> = (
+    [
+      ["Done so far", answers.progress_so_far],
+      ["How it should work", answers.vision],
+      ["Hoping to get there in", answers.timeframe],
+      ["Wants to meet", answers.mentoring_format ? MENTORING_FORMAT_LABEL[answers.mentoring_format] : ""],
+    ] as Array<[string, string]>
+  ).filter(([, value]) => value);
   const stillMissing = asked.filter((f) => isEmpty(answers[f as keyof DraftAnswers]));
   const complete = isComplete(answers);
 
@@ -227,6 +236,17 @@ export function VoiceIntro({
               </div>
             );
           })}
+          {extras.map(([label, value]) => (
+            <div role="listitem" className="info-pair" key={label}>
+              <span>{label}</span>
+              <span className="row wrap">
+                <strong>{value}</strong>
+                <Badge variant="secondary" className={STATUS_CLASS.heard}>
+                  {STATUS_LABEL.heard}
+                </Badge>
+              </span>
+            </div>
+          ))}
         </div>
 
         {stillMissing.length > 0 && (
