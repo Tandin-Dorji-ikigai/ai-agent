@@ -145,6 +145,8 @@ export default function App({ children }) {
   }, [page, role, isPublic, isLogin, isCall]);
 
   // No button: when there are matches but nobody is being asked, the agent asks the best match.
+  // Mentee type decides the menu: First steps (no idea yet) or Needs assessment (has an idea).
+  // Until their data loads, the menu shows only what every mentee has, so it never flashes the wrong one.
   const savedExploring = isExploring(state?.entrepreneur);
   const coachFirst = savedExploring && !["ready", "skipped"].includes(state?.coach?.status ?? "");
   const autoKey = role === "entrepreneur" && !isPublic && !coachFirst && state?.entrepreneur?.assessment_completed_at && (state?.matches.length ?? 0) > 0 && !booking && (summary.phase === "none" || summary.phase === "stopped")
@@ -455,7 +457,7 @@ export default function App({ children }) {
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
-        {(savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur.filter(([id]) => id !== "assessment")] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
+        {(!state?.entrepreneur ? navigation.entrepreneur.filter(([id]) => id !== "assessment") : savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur.filter(([id]) => id !== "assessment")] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
       </nav>
     </div>
   ) : (
