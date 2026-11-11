@@ -286,8 +286,16 @@ h3 { font-weight: 650; font-size: 13px; }
 /* Outline buttons on the dark call stage (Leave without finishing, Back to dashboard). */
 .call-room .call-participant [data-slot="button"][data-variant="outline"] { background: transparent; color: var(--call-foreground); border-color: var(--call-border); }
 .call-room .call-participant [data-slot="button"][data-variant="outline"]:hover { background: var(--call-surface); color: var(--call-foreground); }
-.join-cta { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 260px; }
-.join-note { font-size: 12px; line-height: 1.4; color: var(--muted-foreground); }
+/* Join session: a full-width button with the recording note aligned under it */
+.join-cta { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.join-cta-button { width: 100%; min-height: 44px; font-size: 14px; }
+.join-note { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.45; color: var(--muted-foreground); }
+.join-note svg { flex-shrink: 0; margin-top: 1px; color: var(--primary); }
+.join-card { margin-bottom: 20px; border-color: var(--accent-border); background: linear-gradient(160deg, var(--surface-tint) 0, var(--card) 60%); }
+.join-card-head { display: flex; align-items: center; gap: 12px; }
+.join-card-icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; background: var(--accent); color: var(--primary); }
+.join-card-title { font-size: 15px; font-weight: 650; line-height: 1.3; }
+.join-card-time { margin-top: 2px; font-size: 12px; color: var(--muted-foreground); }
 /* Beginner coach */
 .coach-progress { list-style: none; margin: 0 0 24px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .coach-progress-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.35; color: var(--muted-foreground); min-width: 0; }
