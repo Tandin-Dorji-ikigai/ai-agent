@@ -36,6 +36,7 @@ import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { MatchList } from "@/components/match-list";
 import { MentorProgress } from "@/components/mentor-progress";
 import { SessionHistory } from "@/components/session-history";
+import { AgentTimeline } from "@/components/agent-timeline";
 import { SignInForm, SignOutButton } from "@/components/sign-in-form";
 import { CallAlerts } from "@/components/push/call-alerts";
 import { BeginnerCoach } from "@/components/coach/beginner-coach";
@@ -292,6 +293,7 @@ export default function App({ children }) {
           <div className="row wrap"><Button onClick={() => go("bookings")}><CalendarDays className="size-4" />{booking ? "My bookings" : "Request status"}<ArrowRight className="size-4" /></Button>{summary.phase === "escalated" && <Button variant="outline" disabled={Boolean(busy)} onClick={() => act("matches", "/api/matches")}>{busy === "matches" ? "Asking again…" : "Ask my matches again"}</Button>}</div>
         </CardContent></Card>}
       {mentorRecord && <div className="mt-5"><MatchList matches={state?.matches ?? []} round={state?.request_round ?? null} /></div>}
+      {state?.timeline?.length > 0 && <div className="mt-5"><AgentTimeline items={state.timeline} /></div>}
     </>;
   } else if (page === "assessment") {
     const fields = exploring ? explorerSteps.slice(1).flatMap(item => item.fields) : assessmentFields;

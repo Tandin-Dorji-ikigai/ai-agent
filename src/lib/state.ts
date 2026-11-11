@@ -1,5 +1,6 @@
 import "server-only";
 import { aiMode } from "./agent/ai";
+import { agentTimeline } from "./agent-timeline";
 import { apiKey } from "./agent/llm";
 import { getDemoClock } from "./clock";
 import { loadEntrepreneur, loadMentors } from "./data";
@@ -64,6 +65,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       agenda: [],
       metrics: { credits_used: 0, credits_granted: 0, sessions_completed: 0, actions_completed: 0, actions_total: 0, open_escalations: 0 },
       steps: stepsFor(null),
+      timeline: agentTimeline({ entrepreneur: null, matches: [], matched_at: null, compared_count: 0, requests: [], booking: null, reminders: [], action_titles: {} }),
       request_round: null,
       pending_request: null,
       call: null,
@@ -92,6 +94,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     explanation: string | null;
     explanation_source: "live_ai" | "fallback" | null;
     mentor_id: string;
+    created_at: string;
   }>)
     .filter((r) => mentorById.has(r.mentor_id))
     .map((r) => ({
@@ -265,12 +268,20 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       created_at: r.created_at,
     }));
   const pending_request = requests.find((r) => r.status === "pending") ?? null;
-  const request_round = roundFor(
+  const ranked = entrepreneur.assessment_completed_at ? rankMentors(entrepreneur, mentors) : [];
+  const request_round = roundFor(requests, escalations, ranked, entrepreneur.assessment_completed_at);
+
+  const matchedAt = (must(matchRows, "load matches") as Array<{ created_at: string }>).map((r) => r.created_at).sort()[0] ?? null;
+  const timeline = agentTimeline({
+    entrepreneur,
+    matches,
+    matched_at: matchedAt,
+    compared_count: ranked.length,
     requests,
-    escalations,
-    entrepreneur.assessment_completed_at ? rankMentors(entrepreneur, mentors) : [],
-    entrepreneur.assessment_completed_at,
-  );
+    booking: booking && bookingRow ? { ...booking, created_at: bookingRow.created_at ? String(bookingRow.created_at) : null } : null,
+    reminders: messages.filter((m) => m.sender === "agent" && (m.kind === "check_in" || m.kind === "follow_up")),
+    action_titles: Object.fromEntries(actions.map((a) => [a.id, a.title])),
+  });
 
   const mentor_for_view: MentorRecord | null = pending_request?.mentor ?? booking?.mentor ?? matches[0]?.mentor ?? null;
 
@@ -294,6 +305,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     agenda,
     metrics,
     steps: stepsFor({ entrepreneur, matches, booking, session, actions, runs, requests }),
+    timeline,
     request_round,
     pending_request,
     call,

@@ -237,6 +237,19 @@ export interface CallView {
   transcript_built: boolean;
 }
 
+export type TimelineKind = "assessed" | "support" | "compared" | "selected" | "requested" | "scheduled" | "reminded";
+
+/** One line of the agent activity timeline: done (with when), or what the agent does next. */
+export interface TimelineItem {
+  key: string;
+  kind: TimelineKind;
+  title: string;
+  detail: string;
+  /** When it happened (ISO); null for steps still to come. */
+  at: string | null;
+  status: "done" | "next" | "later";
+}
+
 export interface DemoStep {
   n: number;
   label: string;
@@ -275,6 +288,8 @@ export interface DemoState {
     open_escalations: number;
   };
   steps: DemoStep[];
+  /** What the agent has done for the mentee, oldest first, then what it does next. */
+  timeline: TimelineItem[];
   /** The agent's current round of mentor requests (null before matching). */
   request_round: RequestRoundView | null;
   /** The call for the current booking, if anyone has joined it. */

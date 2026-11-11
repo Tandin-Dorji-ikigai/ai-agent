@@ -313,6 +313,22 @@ h3 { font-weight: 650; font-size: 13px; }
 .fact-list dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--foreground); overflow-wrap: anywhere; }
 .coach-mission { font-size: 16px; line-height: 1.55; color: var(--foreground); }
 .coach-done h3 { font-size: 14px; }
+/* Agent activity timeline: what the agent has done, then what it does next */
+.agent-timeline { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.agent-timeline-item { position: relative; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding-bottom: 18px; }
+.agent-timeline-item:last-child { padding-bottom: 0; }
+.agent-timeline-item::before { content: ""; position: absolute; left: 15.5px; top: 36px; bottom: 4px; width: 1px; background: var(--border); }
+.agent-timeline-item:last-child::before { display: none; }
+.agent-timeline-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: var(--accent); color: var(--primary); }
+.agent-timeline-item.next .agent-timeline-icon { background: var(--card); border: 1.5px dashed var(--accent-border); }
+.agent-timeline-item.later .agent-timeline-icon { background: var(--muted); color: var(--muted-foreground); }
+.agent-timeline-body { min-width: 0; padding-top: 5px; }
+.agent-timeline-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.agent-timeline-title { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--foreground); }
+.agent-timeline-item.next .agent-timeline-title { font-weight: 500; }
+.agent-timeline-item.later .agent-timeline-title { font-weight: 500; color: var(--muted-foreground); }
+.agent-timeline-detail { margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--muted-foreground); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.agent-timeline-time { display: block; margin-top: 3px; font-size: 12px; color: var(--muted-foreground); }
 /* Session history: recap, agreed next steps and the whole conversation */
 .session-recap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
 .session-points { margin: 8px 0 0; padding-left: 18px; list-style: disc; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.5; color: var(--muted-foreground); }
