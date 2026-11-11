@@ -402,3 +402,39 @@ h3 { font-weight: 650; font-size: 13px; }
 .coach-mission { font-size: 16px; line-height: 1.55; color: var(--foreground); }
 .coach-done h3 { font-size: 14px; }
 @media (max-width: 480px) { .coach-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Sign out sits in the top bar of both workspaces, on every screen size. */
+.sign-out-button { gap: 6px; padding-inline: 8px; color: var(--secondary-foreground); }
+.app-nav-heading { display: none; }
+
+/* On a computer (900px and wider) the phone layouts use the whole window. */
+@media (min-width: 900px) {
+  /* Entrepreneur: navigation moves from the bottom bar to a left sidebar, like the mentor workspace. */
+  .entrepreneur-app { max-width: none; padding: 0 0 0 238px; border-inline: 0; box-shadow: none; }
+  .entrepreneur-topbar { padding-inline: 40px; }
+  .entrepreneur-content { max-width: 1120px; margin-inline: auto; padding: 36px 40px 64px; }
+  .entrepreneur-content .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .entrepreneur-content h1 { font-size: clamp(26px, 2.6vw, 34px); }
+  .entrepreneur-navbar { inset: 0 auto 0 0; transform: none; width: 238px; max-width: none; flex-direction: column; gap: 5px; padding: 28px 18px 20px; border-right: 1px solid var(--border); border-radius: 0; }
+  .entrepreneur-navbar::before { display: none; }
+  .app-nav-heading { display: block; }
+  .app-nav-item { flex: 0 0 auto; min-height: 42px; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 0 14px; border-radius: 9px; font-weight: 600; }
+  .app-nav-item span { font-size: 13px; text-align: left; }
+  .app-nav-item:hover { background: var(--muted); }
+  .app-nav-item.active { background: var(--accent); }
+
+  /* Welcome, sign-in and sign-up: full-width header, content centred. */
+  .public { max-width: none; border-inline: 0; }
+  .public-top { padding-inline: 40px; }
+  .public-main { max-width: 640px; margin-inline: auto; padding: 48px 20px 64px; }
+
+  /* Call: a wider stage; show the whole picture (the other person may be on a phone held upright). */
+  .call-room { max-width: 1080px; }
+  .call-remote-video { object-fit: contain; }
+  .call-room .call-self-view { width: 176px; height: 232px; }
+  .call-controls { max-width: 440px; margin-inline: auto; }
+  .call-room .call-chat { left: auto; width: 420px; }
+}
+@media (min-width: 1200px) {
+  .entrepreneur-content .split-main { grid-template-columns: minmax(0, 1.5fr) minmax(280px, .9fr); }
+}

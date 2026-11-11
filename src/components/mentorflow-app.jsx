@@ -500,10 +500,11 @@ export default function App({ children }) {
     <div className="entrepreneur-app">
       <header className="entrepreneur-topbar">
         <span className="app-area-label">Entrepreneur</span>
-        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar>{viewer.signed_in && <SignOutButton iconOnly />}</div>
+        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar><SignOutButton /></div>
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
+        <p className="side-group app-nav-heading">YOUR MENTORING</p>
         {(savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
       </nav>
     </div>
@@ -516,7 +517,6 @@ export default function App({ children }) {
         </nav>
         <div className="side-bottom">
           <Button variant="ghost" className="nav-item" onClick={() => go("welcome")}><ArrowLeft className="size-[18px]" /><span>Back to welcome</span></Button>
-          {viewer.signed_in && <SignOutButton className="nav-item" iconClassName="size-[18px]" />}
           <Separator className="my-3" />
           <div className="user-chip"><Avatar className="size-8"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar><div><strong>{mentor.name}</strong><p>Mentor</p></div></div>
         </div>
@@ -528,6 +528,7 @@ export default function App({ children }) {
             <Badge variant="outline" className="demo-badge">MentorFlow</Badge>
             {notificationButton}
             <Avatar className="size-8 top-avatar"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar>
+            <SignOutButton />
           </div>
         </header>
         <div className="content">{children}{notices}{content}</div>
