@@ -261,7 +261,9 @@ export default function App({ children }) {
   let content;
 
   if (page === "coach") {
-    content = <BeginnerCoach onMentor={() => go("connect")} />;
+    content = savedExploring || !state?.entrepreneur
+      ? <BeginnerCoach onMentor={() => go("connect")} onUpdateNeeds={() => go("assessment")} />
+      : <Card><CardContent className="empty-state"><Compass className="size-8 text-primary" /><h2>First steps are for mentees without an idea yet</h2><p className="muted">You told us about your business idea, so the agent goes straight to finding your mentor.</p><Button onClick={() => go("connect")}>Connect with mentor<ArrowRight className="size-4" /></Button></CardContent></Card>;
   } else if (page === "connect") {
     const statusBadge = summary.phase === "declined" ? "Request declined" : summary.phase === "waiting" ? "Awaiting mentor" : booking?.status === "confirmed" ? "Session booked" : booking?.status === "completed" ? "Session completed" : summary.phase === "escalated" ? "With YDF" : "Asking now";
     const badgeTone = summary.phase === "declined" || summary.phase === "waiting" || !booking ? "status-pending" : "status-success";
@@ -453,7 +455,7 @@ export default function App({ children }) {
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
-        {(savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
+        {(savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur.filter(([id]) => id !== "assessment")] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
       </nav>
     </div>
   ) : (

@@ -18,7 +18,7 @@ import type { CoachStepView } from "@/lib/state-types";
 // one small step at a time and reads what they report back; after step 4 a
 // human mentor takes over (see src/lib/agent/coach.ts).
 
-export function BeginnerCoach({ onMentor }: { onMentor: () => void }) {
+export function BeginnerCoach({ onMentor, onUpdateNeeds }: { onMentor: () => void; onUpdateNeeds: () => void }) {
   const { state, act, busy } = useDemo();
   const coach = state?.coach ?? null;
   const [draft, setDraft] = useState("");
@@ -59,7 +59,6 @@ export function BeginnerCoach({ onMentor }: { onMentor: () => void }) {
     <>
       <div className="page-header">
         <div>
-          <p className="kicker">YOUR FIRST STEPS</p>
           <h1>Find an idea worth testing</h1>
           <p className="subtitle">Four small steps with your AI coach. Then a human mentor takes over.</p>
         </div>
@@ -182,13 +181,16 @@ export function BeginnerCoach({ onMentor }: { onMentor: () => void }) {
         </Card>
       )}
 
-      {coach?.status === "active" && (
-        <div className="row wrap mt-6">
+      <div className="row wrap mt-6">
+        {coach?.status === "active" && (
           <Button variant="ghost" disabled={Boolean(busy)} onClick={() => void askMentor()}>
             Ask a human mentor now
           </Button>
-        </div>
-      )}
+        )}
+        <Button variant="link" className="px-0" onClick={onUpdateNeeds}>
+          Have an idea now? Update your needs
+        </Button>
+      </div>
     </>
   );
 }
