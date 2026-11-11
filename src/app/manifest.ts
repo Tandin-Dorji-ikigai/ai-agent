@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
 
-// Lets people add MentorFlow to their Home Screen. On iPhone that is required
+// Lets people add Ascent to their Home Screen. On iPhone that is required
 // for call notifications (Apple only allows web push for Home Screen apps).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "MentorFlow",
-    short_name: "MentorFlow",
+    name: "Ascent",
+    short_name: "Ascent",
     description: "Meaningful guidance and mentorship for entrepreneurs in Bhutan.",
     start_url: "/",
     display: "standalone",

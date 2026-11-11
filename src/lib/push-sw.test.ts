@@ -49,10 +49,10 @@ describe("service worker (public/sw.js)", () => {
   it("copes with an empty or non-JSON push", async () => {
     const { self, fire } = loadWorker();
     await fire("push", { data: { json: () => { throw new Error("not json"); }, text: () => "hello" } });
-    expect(self.registration.showNotification).toHaveBeenCalledWith("MentorFlow", expect.objectContaining({ body: "hello" }));
+    expect(self.registration.showNotification).toHaveBeenCalledWith("Ascent", expect.objectContaining({ body: "hello" }));
   });
 
-  it("tapping focuses an open MentorFlow window and opens the call there", async () => {
+  it("tapping focuses an open Ascent window and opens the call there", async () => {
     const win = { url: "https://app.example/mentor/dashboard", focus: vi.fn(async () => undefined), navigate: vi.fn(async () => undefined) };
     const { self, fire } = loadWorker([win]);
     await fire("notificationclick", { notification: { close: vi.fn(), data: { url: "/mentor/call" } } });

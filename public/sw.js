@@ -1,4 +1,4 @@
-// MentorFlow service worker: shows push notifications ("Pema is in the
+// Ascent service worker: shows push notifications ("Pema is in the
 // session room") and opens the call screen when one is tapped. Nothing else:
 // no caching, no offline mode.
 
@@ -18,7 +18,7 @@ self.addEventListener("push", (event) => {
     data = { body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "MentorFlow", {
+    self.registration.showNotification(data.title || "Ascent", {
       body: data.body || "",
       icon: "/icon-192.png",
       badge: "/icon-192.png",

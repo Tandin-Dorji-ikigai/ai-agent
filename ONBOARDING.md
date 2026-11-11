@@ -75,7 +75,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 |---|---|---|
 | Dzongkha message | The slot exists but is empty, so the app shows English with "pending review" | Any fluent speaker on the team |
 | Voice notes: real-device testing and polish | Tested only by uploading one computer-generated recording. The **Record** button has not been tried with a real microphone, on phones, on Safari, with background noise, or in Dzongkha | Audio-to-text teammate |
-| Calls | **Built and tested.** LiveKit video and audio in the MentorFlow call screen, consent, each person's microphone recorded separately, and a transcript where every speaker is certain | `call/call-room.tsx`, `lib/calls/`, `/api/calls/*` |
+| Calls | **Built and tested.** LiveKit video and audio in the Ascent call screen, consent, each person's microphone recorded separately, and a transcript where every speaker is certain | `call/call-room.tsx`, `lib/calls/`, `/api/calls/*` |
 | Real transcripts in the test set | The 5 test cases are written by us. Real (anonymised, consented) transcripts would give honest accuracy numbers | Agent (Tandin), with audio-to-text |
 | YDF acting on escalations | The queue is read-only. **Deferred** by team decision | Nobody for now |
 | UI polish and a real-phone check | Works and passes accessibility checks, but not yet designed for the pitch | Frontend teammate |

@@ -141,7 +141,7 @@ export default function App({ children }) {
   useEffect(() => {
     if (!page) return;
     window.scrollTo({ top: 0, behavior: "instant" });
-    document.title = page === "welcome" ? "MentorFlow · Your next step" : `${isCall ? "Video session" : isLogin ? "Sign in" : isPublic ? "Get started" : role === "mentor" ? "Mentor workspace" : "Entrepreneur app"} · MentorFlow`;
+    document.title = page === "welcome" ? "Ascent · Your next step" : `${isCall ? "Video session" : isLogin ? "Sign in" : isPublic ? "Get started" : role === "mentor" ? "Mentor workspace" : "Entrepreneur app"} · Ascent`;
   }, [page, role, isPublic, isLogin, isCall]);
 
   // No button: when there are matches but nobody is being asked, the agent asks the best match.
@@ -238,7 +238,7 @@ export default function App({ children }) {
   const brand = (
     <span className="brand">
       <span className="brand-icon"><Leaf className="size-5" /></span>
-      <span>mentorflow<span className="text-primary">.</span></span>
+      <span>ascent<span className="text-primary">.</span></span>
     </span>
   );
   // Calls are only for a confirmed booking; only its two participants can join.
@@ -437,7 +437,7 @@ export default function App({ children }) {
   }
 
   if (!page) {
-    return pathname === "/ydf" ? <main className="legacy-demo mx-auto w-full max-w-6xl px-4 py-6"><div className="row wrap mb-6"><Button variant="outline" asChild><Link href="/">MentorFlow home</Link></Button><Button variant="outline" asChild><Link href="/entrepreneur/connect">Entrepreneur</Link></Button><Button variant="outline" asChild><Link href="/mentor/dashboard">Mentor workspace</Link></Button></div>{children}</main> : children;
+    return pathname === "/ydf" ? <main className="legacy-demo mx-auto w-full max-w-6xl px-4 py-6"><div className="row wrap mb-6"><Button variant="outline" asChild><Link href="/">Ascent home</Link></Button><Button variant="outline" asChild><Link href="/entrepreneur/connect">Entrepreneur</Link></Button><Button variant="outline" asChild><Link href="/mentor/dashboard">Mentor workspace</Link></Button></div>{children}</main> : children;
   }
 
   if (isCall) return <>{children}{content}</>;

@@ -1,4 +1,4 @@
-// What the MentorFlow screens show about the agent's mentor request, worked
+// What the Ascent screens show about the agent's mentor request, worked
 // out from the shared state (/api/state). Pure, so it is unit-tested.
 
 import { formatNu } from "./format";

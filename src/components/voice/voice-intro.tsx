@@ -1,6 +1,6 @@
 "use client";
 
-// The voice intro for the needs assessment (MentorFlow design).
+// The voice intro for the needs assessment (Ascent design).
 // Speak (or upload, or try a sample): the agent drafts the answers, shows
 // "Here is what I understood" (heard / suggested / assumed / missing), asks
 // only what it still needs, then finds the mentor by itself after a short

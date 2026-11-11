@@ -2,7 +2,7 @@
 
 // Shared voice recorder: record with the microphone (or upload a file), then
 // Whisper turns it into text. Used by the entrepreneur's voice intro and the
-// mentor's voice note (MentorFlow design, shadcn/ui).
+// mentor's voice note (Ascent design, shadcn/ui).
 
 import { useEffect, useRef, useState } from "react";
 import { blobToWav16k } from "@/lib/audio/wav";

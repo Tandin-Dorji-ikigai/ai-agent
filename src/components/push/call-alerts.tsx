@@ -126,7 +126,7 @@ export function CallAlerts({ role }: { role: "entrepreneur" | "mentor" }) {
       <AlertTitle>{status === "on" ? "Call notifications are on" : "Get a notification when the call starts"}</AlertTitle>
       <AlertDescription>
         {status === "needs-home-screen" && (
-          <p>On iPhone, notifications only work from the Home Screen: tap Share, then Add to Home Screen, open MentorFlow from there, and turn this on.</p>
+          <p>On iPhone, notifications only work from the Home Screen: tap Share, then Add to Home Screen, open Ascent from there, and turn this on.</p>
         )}
         {status === "blocked" && <p>Notifications are blocked for this site. Allow them in your browser or phone settings, then reload.</p>}
         {status === "off" && <p>This phone will buzz when {other} joins the session room, even if the app is closed.</p>}
