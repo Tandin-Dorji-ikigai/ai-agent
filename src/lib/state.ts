@@ -374,7 +374,9 @@ function roundFor(
       ? "waiting"
       : escalation
         ? "escalated"
-        : "stopped";
+        : inRound[0].kind === "direct" && (inRound.at(-1)!.status === "declined" || inRound.at(-1)!.status === "expired")
+          ? "declined"
+          : "stopped";
   const canAskMore = status === "waiting" && inRound.length < MAX_REQUESTS_PER_ROUND;
   const next = canAskMore ? pickNextMentor(ranked, inRound.map((r) => r.mentor.id)) : null;
   return {

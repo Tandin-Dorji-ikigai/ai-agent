@@ -173,8 +173,12 @@ export interface MentorRequestView {
 export interface RequestRoundView {
   round_id: string;
   kind: "match" | "direct";
-  /** waiting: a mentor is deciding. accepted: booked. escalated: handed to YDF. stopped: closed without a booking. */
-  status: "waiting" | "accepted" | "escalated" | "stopped";
+  /**
+   * waiting: a mentor is deciding. accepted: booked. escalated: handed to YDF.
+   * declined: the mentor the mentee chose said no or did not reply (they decide what next).
+   * stopped: closed without a booking.
+   */
+  status: "waiting" | "accepted" | "escalated" | "declined" | "stopped";
   /** Oldest first. */
   requests: MentorRequestView[];
   /** Who the agent will ask if the current mentor says no (null after the last allowed request). */

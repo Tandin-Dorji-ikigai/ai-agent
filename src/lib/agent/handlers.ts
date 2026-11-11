@@ -456,6 +456,33 @@ const requestClosed: Handler = async ({ event, tools, now }) => {
     return { ...base, output: "A newer request is already open; nothing to do.", source: null };
   }
 
+  // The mentee chose this mentor (a follow-up with their own mentor, or one
+  // they picked): the agent does not swap in someone else. It tells them
+  // plainly, and they decide: ask again later, or ask another mentor.
+  if (req.kind === "direct") {
+    const m = first(mentorName);
+    const what = req.mentee_summary.follow_up ? "follow-up session" : "session";
+    const why =
+      req.status === "expired"
+        ? `${m} did not reply to your request for a ${what} in time.`
+        : `${m} cannot take your ${what} right now (${req.decline_reason ? DECLINE_REASON_LABEL[req.decline_reason].toLowerCase() : "no reason given"}).`;
+    const note = req.decline_note ? ` ${m} wrote: "${req.decline_note.slice(0, 300)}"` : "";
+    await tools.call("send_inbox_message", {
+      entrepreneur_id,
+      kind: "info",
+      body: `${why}${note} You can ask ${m} again later, or ask another mentor from My bookings.`,
+      metadata: { mentor_request_id: req.id, mentor_id: req.mentor_id },
+      source: "system",
+    });
+    return {
+      ...base,
+      decision: "Tell the mentee; they choose what next",
+      factors: [`${base.input_summary}.`, `The mentee asked for ${mentorName} by name, so no other mentor is asked without their say.`],
+      output: `Told the mentee that ${mentorName} ${req.status === "expired" ? "did not reply" : "declined"}; offered to ask again or ask another mentor.`,
+      source: null,
+    };
+  }
+
   const ctx = await tools.call("get_entrepreneur_context", { entrepreneur_id });
   const round = must(
     await db().from("mentor_requests").select("*").eq("round_id", req.round_id).order("attempt"),

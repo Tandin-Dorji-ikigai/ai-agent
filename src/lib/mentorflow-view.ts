@@ -4,9 +4,10 @@
 import { formatNu } from "./format";
 import { formatBhutanDay, formatSlot } from "./matching/slots";
 import type { DemoState, MentorRequestView } from "./state-types";
+import type { MentorRecord } from "./types";
 import { DECLINE_REASON_LABEL } from "./types";
 
-export type RequestPhase = "none" | "waiting" | "booked" | "escalated" | "stopped";
+export type RequestPhase = "none" | "waiting" | "booked" | "escalated" | "declined" | "stopped";
 
 export interface RequestSummary {
   phase: RequestPhase;
@@ -16,6 +17,8 @@ export interface RequestSummary {
   nextName: string | null;
   /** One line per mentor asked, oldest first. */
   timeline: Array<{ id: string; name: string; outcome: string; tone: "info" | "success" | "neutral" }>;
+  /** declined: the best-matched mentor not yet asked who has open sessions (the mentee may ask them instead). */
+  alternative: MentorRecord | null;
   /** Plain sentence for the entrepreneur. */
   headline: string;
   detail: string;
@@ -42,10 +45,13 @@ export function requestSummary(state: Pick<DemoState, "request_round" | "booking
   const round = state?.request_round ?? null;
   const timeline = (round?.requests ?? []).map((r) => ({ id: r.id, name: r.mentor.full_name, ...(({ text, tone }) => ({ outcome: text, tone }))(outcome(r)) }));
   const nextName = round?.next_mentor?.mentor.full_name ?? null;
-  const base = { nextName, timeline };
+  const base = { nextName, timeline, alternative: null };
 
   if (state?.booking && state.booking.status !== "cancelled" && (!round || round.status === "accepted")) {
     const current = round?.requests.find((r) => r.status === "accepted") ?? null;
+    if (state.booking.status === "completed") {
+      return { ...base, phase: "booked", current, headline: "Your session is complete", detail: "Its recap and next steps are in My bookings, where you can also ask for a follow-up session." };
+    }
     return { ...base, phase: "booked", current, headline: "Your session is booked", detail: `${formatSlot(state.booking.scheduled_at)}, Bhutan time.` };
   }
   if (round?.status === "waiting") {
@@ -60,6 +66,26 @@ export function requestSummary(state: Pick<DemoState, "request_round" | "booking
       current,
       headline: `Asking ${name}`,
       detail: `I have asked ${name}${which} and am waiting for a reply by ${current ? formatBhutanDay(current.expires_at) : "soon"}. ${paid}${then}`.trim(),
+    };
+  }
+  if (round?.status === "declined") {
+    const last = round.requests.at(-1)!;
+    const name = first(last.mentor.full_name);
+    const what = last.mentee_summary.follow_up ? "follow-up session" : "session";
+    const asked = new Set(round.requests.map((r) => r.mentor.id));
+    const alternative = (state?.matches ?? []).map((x) => x.mentor).find((m) => !asked.has(m.id) && m.active && m.verified && m.slots_remaining > 0) ?? null;
+    const why =
+      last.status === "expired"
+        ? `${name} did not reply in time.`
+        : `Reason: ${last.decline_reason ? DECLINE_REASON_LABEL[last.decline_reason].toLowerCase() : "none given"}.`;
+    const note = last.decline_note ? ` ${name} wrote: “${last.decline_note}”` : "";
+    return {
+      ...base,
+      phase: "declined",
+      current: last,
+      alternative,
+      headline: last.status === "expired" ? `${name} did not reply to your ${what} request` : `${name} can’t take your ${what} right now`,
+      detail: `${why}${note} You can ask ${name} again later${alternative ? `, or ask ${alternative.full_name} instead` : ""}.`,
     };
   }
   if (round?.status === "escalated") {

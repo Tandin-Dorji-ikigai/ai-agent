@@ -479,6 +479,25 @@ async function noActionsRun(fx) {
     fr.status === 200 && s.pending_request?.mentor.id === asked?.mentor.id && s.pending_request.mentee_summary.follow_up === true,
     { fr: fr.json, pending: s.pending_request },
   );
+
+  // The mentor says no to the follow-up: the mentee is told, and nobody else is asked without their say.
+  const msgs = s.messages.length;
+  const no = await call("POST", "/api/requests/decline", { request_id: s.pending_request.id, reason: "no_time", note: "Busy this week." });
+  s = await state();
+  check(
+    "   follow-up declined: no other mentor is asked behind the mentee's back",
+    no.status === 200 && !s.pending_request && s.request_round?.status === "declined" && s.request_round.requests.length === 1,
+    { no: no.json, round: s.request_round },
+  );
+  check(
+    "   the mentee is told why, and that they can ask again or ask another mentor",
+    s.messages.length === msgs + 1 && s.messages.some((m) => /cannot take your follow-up session right now \(no time this week\)\. \w+ wrote: "Busy this week\."/.test(m.body)),
+    s.messages.slice(-2).map((m) => m.body),
+  );
+  const other = s.matches.map((m) => m.mentor).find((m) => m.id !== asked?.mentor.id && m.slots_remaining > 0);
+  const alt = await call("POST", "/api/requests/ask", { mentor_id: other?.id });
+  s = await state();
+  check("   then the mentee can ask another mentor instead", alt.status === 200 && s.pending_request?.mentor.id === other?.id, { alt: alt.json, pending: s.pending_request });
 }
 
 async function coachRun(fx) {

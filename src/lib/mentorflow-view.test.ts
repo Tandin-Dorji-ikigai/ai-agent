@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SEED_MENTORS } from "./demo/seed-data";
 import { requestSummary } from "./mentorflow-view";
-import type { MentorRequestView, RequestRoundView } from "./state-types";
+import type { DemoState, MentorRequestView, RequestRoundView } from "./state-types";
 
 const deki = SEED_MENTORS[0];
 const sonam = SEED_MENTORS.find((m) => m.full_name === "Sonam Choden")!;
@@ -48,5 +48,39 @@ describe("what Pema's screens say about the mentor request", () => {
 
   it("with matches but no request yet, says the agent is asking (it starts by itself)", () => {
     expect(requestSummary({ booking: null, matches: [{} as never], request_round: null }).headline).toBe("Asking your best match");
+  });
+
+  it("a follow-up the mentor declined: says so plainly, with the reason, and who to ask instead", () => {
+    const ugyen = SEED_MENTORS.find((m) => m.full_name === "Ugyen Lhendup")!;
+    const followUp = { ...req({}).mentee_summary, follow_up: true };
+    const s = requestSummary({
+      booking: null,
+      matches: [{ mentor: deki }, { mentor: { ...sonam, slots_remaining: 0 } }, { mentor: ugyen }] as DemoState["matches"],
+      request_round: round({
+        kind: "direct",
+        status: "declined",
+        requests: [req({ kind: "direct", status: "declined", decline_reason: "no_time", decline_note: "Busy with harvest.", mentee_summary: followUp })],
+      }),
+    });
+    expect(s.phase).toBe("declined");
+    expect(s.headline).toBe("Deki can’t take your follow-up session right now");
+    expect(s.detail).toBe("Reason: no time this week. Deki wrote: “Busy with harvest.” You can ask Deki again later, or ask Ugyen Lhendup instead.");
+    expect(s.alternative?.full_name).toBe("Ugyen Lhendup"); // Deki was asked; Sonam has no open sessions
+  });
+
+  it("a chosen mentor who did not reply in time", () => {
+    const s = requestSummary({
+      booking: null, matches: [],
+      request_round: round({ kind: "direct", status: "declined", requests: [req({ kind: "direct", status: "expired" })] }),
+    });
+    expect(s.headline).toBe("Deki did not reply to your session request");
+    expect(s.detail).toBe("Deki did not reply in time. You can ask Deki again later.");
+    expect(s.alternative).toBeNull();
+  });
+
+  it("after the session: complete, not booked", () => {
+    const booking = { status: "completed", scheduled_at: "2026-11-12T04:00:00.000Z" } as DemoState["booking"];
+    const s = requestSummary({ booking, matches: [], request_round: round({ status: "accepted", requests: [req({ status: "accepted" })] }) });
+    expect(s.headline).toBe("Your session is complete");
   });
 });
