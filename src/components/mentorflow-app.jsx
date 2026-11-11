@@ -35,7 +35,7 @@ import { VoiceIntro } from "@/components/voice/voice-intro";
 import { VoiceRecorder } from "@/components/voice/voice-recorder";
 import { MatchList } from "@/components/match-list";
 import { MentorProgress } from "@/components/mentor-progress";
-import { SignInForm, SignOutButton } from "@/components/sign-in-form";
+import { SignInCard, SignOutButton } from "@/components/sign-in-form";
 import { CallAlerts } from "@/components/push/call-alerts";
 import { BeginnerCoach } from "@/components/coach/beginner-coach";
 
@@ -429,9 +429,7 @@ export default function App({ children }) {
     content = <div className="login-screen">
       <Button variant="ghost" className="self-start mb-5" onClick={() => go("welcome")}><ArrowLeft className="size-4" />Back</Button>
       <div className="page-header"><div><p className="kicker">SIGN IN</p><h1>Welcome back.</h1><p className="subtitle">One sign-in for everyone. Your password opens your workspace.</p></div></div>
-      <Card><CardHeader><CardTitle>Sign in</CardTitle><CardDescription>Enter the password the team gave you. It takes you to your workspace: entrepreneur, mentor or YDF staff. This test version has no personal accounts, so please don’t enter real personal details anywhere in it.</CardDescription></CardHeader><CardContent>
-        <SignInForm />
-      </CardContent></Card>
+      <SignInCard />
       <div className="login-footer"><p className="subtitle">New here? There’s a place for you.</p><Button variant="link" onClick={() => go("signup-choice")}>Start your journey<ArrowRight className="size-3.5" /></Button></div>
     </div>;
   } else if (isCall) {
@@ -500,7 +498,7 @@ export default function App({ children }) {
     <div className="entrepreneur-app">
       <header className="entrepreneur-topbar">
         <span className="app-area-label">Entrepreneur</span>
-        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar><SignOutButton /></div>
+        <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar><SignOutButton signedIn={state?.viewer?.signed_in !== false} /></div>
       </header>
       <main className="entrepreneur-content">{children}{notices}{content}</main>
       <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
@@ -528,7 +526,7 @@ export default function App({ children }) {
             <Badge variant="outline" className="demo-badge">MentorFlow</Badge>
             {notificationButton}
             <Avatar className="size-8 top-avatar"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar>
-            <SignOutButton />
+            <SignOutButton signedIn={state?.viewer?.signed_in !== false} />
           </div>
         </header>
         <div className="content">{children}{notices}{content}</div>

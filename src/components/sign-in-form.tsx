@@ -1,13 +1,74 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Eye, EyeOff, LogOut } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Eye, EyeOff, LogOut } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_LABEL, SIGN_IN_PATH, VIEWER_ROLES, type ViewerRole } from "@/lib/access";
+import { ROLE_LABEL, SIGN_IN_PATH, VIEWER_ROLES, homeFor, type ViewerRole } from "@/lib/access";
+
+const WORKSPACES: [ViewerRole, string][] = [
+  ["entrepreneur", "Entrepreneur workspace"],
+  ["mentor", "Mentor workspace"],
+  ["ydf", "YDF staff"],
+];
+
+/**
+ * The sign-in card. When no role passwords are set (local development), a
+ * password cannot pick the workspace, so it offers a workspace picker instead.
+ */
+export function SignInCard() {
+  const [required, setRequired] = useState<boolean | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch("/api/access", { signal: ctrl.signal, cache: "no-store" })
+      .then((res) => res.json() as Promise<{ sign_in?: boolean }>)
+      .then((json) => setRequired(json.sign_in !== false))
+      .catch(() => {}); // keep the password form
+    return () => ctrl.abort();
+  }, []);
+
+  if (required === false) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Choose a workspace</CardTitle>
+          <CardDescription>
+            Sign-in is off on this copy because no passwords are set (local development), so a password cannot choose your workspace. Pick one here.
+            On the live site, the password decides it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="stack-tight">
+          {WORKSPACES.map(([role, label]) => (
+            <Button key={role} variant="outline" className="justify-between" asChild>
+              <a href={homeFor(role)}>
+                {label}
+                <ArrowRight className="size-4" />
+              </a>
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Sign in</CardTitle>
+        <CardDescription>
+          Enter the password the team gave you. It takes you to your workspace: entrepreneur, mentor or YDF staff. This test version has no personal
+          accounts, so please don’t enter real personal details anywhere in it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <SignInForm />
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * The one sign-in form for every role (see src/lib/access.ts): the password
@@ -82,21 +143,26 @@ export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { la
   );
 }
 
-/** Signs this device out and goes to the sign-in page. */
-export function SignOutButton() {
+/**
+ * Signs this device out and goes to the sign-in page. When sign-in is off
+ * (local development) there is nothing to sign out of, so it reads
+ * "Switch workspace" and opens the workspace picker.
+ */
+export function SignOutButton({ signedIn = true }: { signedIn?: boolean }) {
   const [busy, setBusy] = useState(false);
   async function signOut() {
     setBusy(true);
     try {
-      await fetch("/api/access", { method: "DELETE" });
+      if (signedIn) await fetch("/api/access", { method: "DELETE" });
     } finally {
       window.location.assign(SIGN_IN_PATH);
     }
   }
+  const Icon = signedIn ? LogOut : ArrowLeftRight;
   return (
     <Button type="button" variant="ghost" size="sm" className="sign-out-button" disabled={busy} onClick={() => void signOut()}>
-      <LogOut className="size-4" />
-      <span>{busy ? "Signing out…" : "Sign out"}</span>
+      <Icon className="size-4" />
+      <span>{busy ? (signedIn ? "Signing out…" : "Opening…") : signedIn ? "Sign out" : "Switch workspace"}</span>
     </Button>
   );
 }

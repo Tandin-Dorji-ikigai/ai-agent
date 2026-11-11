@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { z } from "zod";
 import { ACCESS_COOKIE, ACCESS_DAYS, accessCookieValue, gateOn, nextAfterSignIn, roleForPassword, rolePasswords } from "@/lib/access";
 import { fail, ok, parseBody } from "@/lib/http";
@@ -8,6 +9,8 @@ import { fail, ok, parseBody } from "@/lib/http";
 // workspace). Sets an httpOnly cookie (a keyed hash, not the password) for 30
 // days and answers { role, next }.
 // DELETE /api/access: sign out on this device.
+// GET /api/access: { sign_in } — false when no role password is set (local
+// development), so the sign-in page can offer a workspace picker instead.
 const Body = z.object({
   password: z.string().min(1).max(200),
   next: z.string().max(500).optional(),
@@ -31,6 +34,11 @@ export async function POST(req: Request) {
   const res = ok({ role, next: nextAfterSignIn(role, body.data.next) });
   res.headers.append("Set-Cookie", cookie(await accessCookieValue(role, passwords[role]!), ACCESS_DAYS * 86400));
   return res;
+}
+
+export async function GET() {
+  await connection(); // read the passwords at request time, not at build time
+  return ok({ sign_in: gateOn(rolePasswords()) });
 }
 
 export async function DELETE() {
