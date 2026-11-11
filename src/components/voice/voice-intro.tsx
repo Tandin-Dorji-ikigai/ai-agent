@@ -21,9 +21,9 @@ import { LANGUAGE_LABEL, MENTORING_FORMAT_LABEL, SECTORS, STAGES, expertiseLabel
 import {
   draftToAnswers,
   isComplete,
-  isEmpty,
   mergeAnswers,
   statusesFor,
+  stillNeeded,
   toAssessmentInput,
   withDefaults,
   type AnswerStatus,
@@ -55,6 +55,22 @@ const STATUS_CLASS: Record<AnswerStatus, string> = {
 };
 
 type Statuses = Partial<Record<DraftField, AnswerStatus>>;
+
+/** The quick questions, in the order they are shown. */
+const QUESTION_FIELDS: DraftField[] = ["business_stage", "sector", "expertise_needs", "primary_challenge", "business_description"];
+type TypedField = "primary_challenge" | "business_description";
+
+const NEEDED_LABEL: Record<DraftField, string> = {
+  business_name: "your business name",
+  business_stage: "where you are now",
+  sector: "the area",
+  expertise_needs: "what you want help with",
+  primary_challenge: "your biggest challenge",
+  business_description: "what you do or want to do",
+  languages: "your languages",
+  preferred_language: "your preferred language",
+  budget: "your budget",
+};
 
 interface DraftResponse {
   draft: AssessmentDraft;
@@ -89,6 +105,9 @@ export function VoiceIntro({
   const [asked, setAsked] = useState<DraftField[]>([]);
   const [source, setSource] = useState<"live_ai" | "fallback" | null>(null);
   const [auto, setAuto] = useState<{ phase: "idle" | "counting" | "cancelled" | "saving"; left: number; run: number }>({ phase: "idle", left: AUTO_SECONDS, run: 0 });
+  // Text typed in a quick-question box; it counts once the box loses focus or "Find my mentor" is pressed.
+  const [typed, setTyped] = useState<Partial<Record<TypedField, string>>>({});
+  const [triedFind, setTriedFind] = useState(false);
   const answersRef = useRef<DraftAnswers | null>(null);
   const remaining = useRef(AUTO_SECONDS);
 
@@ -103,8 +122,8 @@ export function VoiceIntro({
     if (isComplete(next)) setAuto((a) => (a.phase === "idle" || a.phase === "counting" ? { phase: "counting", left: AUTO_SECONDS, run: a.run + 1 } : a));
   }
 
-  async function save() {
-    const current = answersRef.current;
+  async function save(from?: DraftAnswers) {
+    const current = from ?? answersRef.current;
     if (!current || !isComplete(current)) return;
     setAuto((a) => ({ ...a, phase: "saving" }));
     const ok = await onSave(toAssessmentInput(current));
@@ -128,6 +147,40 @@ export function VoiceIntro({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto.phase, auto.run]);
 
+  /** The answers with anything typed in the quick-question boxes that has not counted yet. */
+  function withTyped(a: DraftAnswers): { next: DraftAnswers; nextStatus: Statuses } {
+    const next = { ...a };
+    const nextStatus = { ...status };
+    for (const f of ["primary_challenge", "business_description"] as const) {
+      const v = typed[f]?.trim();
+      if (v && v !== a[f]) {
+        next[f] = v;
+        nextStatus[f] = "heard";
+      }
+    }
+    return { next, nextStatus };
+  }
+
+  /** "Find my mentor": goes ahead at once, or says exactly which answers are still needed. */
+  function findNow() {
+    if (!answers) return;
+    setTriedFind(true);
+    const { next, nextStatus } = withTyped(answers);
+    if (!isComplete(next)) return;
+    setAnswers(next);
+    setStatus(nextStatus);
+    onAnswers(next);
+    answersRef.current = next;
+    void save(next);
+  }
+
+  /** A typed answer counts when the box loses focus. */
+  function commitTyped(field: TypedField) {
+    const v = typed[field]?.trim();
+    setTyped((t) => ({ ...t, [field]: undefined }));
+    if (v && answers && v !== answers[field]) set(field, v);
+  }
+
   /** The first intro replaces the answers; answering by voice again only fills what is still missing. */
   async function draftFrom(transcript: string) {
     const res = await act("voice-draft", "/api/assessment/draft", { transcript });
@@ -136,7 +189,7 @@ export function VoiceIntro({
     const incoming = draftToAnswers(draft);
     setSource(from);
     if (!answers) {
-      const { answers: filled, assumed } = withDefaults(incoming);
+      const { answers: filled, assumed } = withDefaults(incoming, transcript);
       setAsked(missing.filter((f) => !assumed.includes(f)));
       update(filled, statusesFor(filled, missing.filter((f) => !assumed.includes(f)), suggested, assumed));
       return;
@@ -208,7 +261,10 @@ export function VoiceIntro({
       ["Wants to meet", answers.mentoring_format ? MENTORING_FORMAT_LABEL[answers.mentoring_format] : ""],
     ] as Array<[string, string]>
   ).filter(([, value]) => value);
-  const stillMissing = asked.filter((f) => isEmpty(answers[f as keyof DraftAnswers]));
+  const needed = stillNeeded(withTyped(answers).next);
+  // A question stays once asked (so a choice can be changed), and anything still needed is always asked.
+  const questions = QUESTION_FIELDS.filter((f) => asked.includes(f) || needed.includes(f));
+  const toAnswer = questions.filter((f) => needed.includes(f)).length;
   const complete = isComplete(answers);
 
   return (
@@ -216,9 +272,10 @@ export function VoiceIntro({
       <CardHeader>
         <div className="row between wrap">
           <CardTitle>Here is what I understood</CardTitle>
-          {source && <Badge variant="outline">{source === "live_ai" ? "Live AI" : "Saved response"}</Badge>}
+          {source && <Badge variant="outline">{source === "live_ai" ? "Live AI" : "Read without AI"}</Badge>}
         </div>
         <CardDescription>Check it. Anything marked &quot;Suggested&quot; or &quot;Assumed&quot; was not said outright; change it below if it is wrong.</CardDescription>
+        {source === "fallback" && <p className="muted">The AI is busy right now, so I read your intro with simple rules and may have missed some answers.</p>}
       </CardHeader>
       <CardContent className="stack">
         <div className="stack-tight" role="list" aria-label="Your answers">
@@ -249,10 +306,10 @@ export function VoiceIntro({
           ))}
         </div>
 
-        {stillMissing.length > 0 && (
+        {questions.length > 0 && (
           <div className="stack">
-            <h3>A few quick questions</h3>
-            {stillMissing.includes("business_stage") && (
+            <h3>{toAnswer === 0 ? "Your quick answers" : toAnswer === 1 ? "One quick question, then I find your mentor" : `${toAnswer} quick questions, then I find your mentor`}</h3>
+            {questions.includes("business_stage") && (
               <fieldset className="stack-tight">
                 <legend className="text-sm font-semibold">Where are you now?</legend>
                 <div className="row wrap">
@@ -264,7 +321,7 @@ export function VoiceIntro({
                 </div>
               </fieldset>
             )}
-            {stillMissing.includes("sector") && (
+            {questions.includes("sector") && (
               <fieldset className="stack-tight">
                 <legend className="text-sm font-semibold">Which area?</legend>
                 <div className="row wrap">
@@ -276,7 +333,7 @@ export function VoiceIntro({
                 </div>
               </fieldset>
             )}
-            {stillMissing.includes("expertise_needs") && (
+            {questions.includes("expertise_needs") && (
               <fieldset className="stack-tight">
                 <legend className="text-sm font-semibold">What do you want help with? (up to 5)</legend>
                 <div className="row wrap">
@@ -297,20 +354,34 @@ export function VoiceIntro({
                 </div>
               </fieldset>
             )}
-            {stillMissing.includes("primary_challenge") && (
+            {questions.includes("primary_challenge") && (
               <div className="field">
                 <label htmlFor="voice-challenge" className="text-sm font-semibold">
                   What is your biggest challenge right now?
                 </label>
-                <Textarea id="voice-challenge" rows={2} maxLength={1000} onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => e.target.value.trim() && set("primary_challenge", e.target.value.trim())} />
+                <Textarea
+                  id="voice-challenge"
+                  rows={2}
+                  maxLength={1000}
+                  value={typed.primary_challenge ?? answers.primary_challenge}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTyped((t) => ({ ...t, primary_challenge: e.target.value }))}
+                  onBlur={() => commitTyped("primary_challenge")}
+                />
               </div>
             )}
-            {stillMissing.includes("business_description") && (
+            {questions.includes("business_description") && (
               <div className="field">
                 <label htmlFor="voice-description" className="text-sm font-semibold">
                   In a sentence, what do you do or want to do?
                 </label>
-                <Textarea id="voice-description" rows={2} maxLength={1000} onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => e.target.value.trim() && set("business_description", e.target.value.trim())} />
+                <Textarea
+                  id="voice-description"
+                  rows={2}
+                  maxLength={1000}
+                  value={typed.business_description ?? answers.business_description}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTyped((t) => ({ ...t, business_description: e.target.value }))}
+                  onBlur={() => commitTyped("business_description")}
+                />
               </div>
             )}
           </div>
@@ -332,11 +403,18 @@ export function VoiceIntro({
             </AlertDescription>
           </Alert>
         )}
-        {complete && auto.phase === "saving" && <p role="status">Saving your answers and finding your mentor…</p>}
-        {complete && auto.phase === "cancelled" && (
-          <Button type="button" className="self-start" disabled={Boolean(busy)} onClick={() => void save()}>
-            Find my mentor
-          </Button>
+        {auto.phase === "saving" && <p role="status">Saving your answers and finding your mentor…</p>}
+        {!(complete && auto.phase === "counting") && auto.phase !== "saving" && (
+          <div className="stack-tight">
+            <Button type="button" className="self-start" disabled={Boolean(busy)} onClick={findNow}>
+              Find my mentor
+            </Button>
+            {triedFind && needed.length > 0 && (
+              <p role="alert" className="text-sm text-destructive">
+                Before I can find your mentor, answer: {needed.map((f) => NEEDED_LABEL[f]).join(", ")}.
+              </p>
+            )}
+          </div>
         )}
 
         <VoiceRecorder

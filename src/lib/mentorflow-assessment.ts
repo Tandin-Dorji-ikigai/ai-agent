@@ -50,11 +50,11 @@ export function profileFromEntrepreneur(entrepreneur: EntrepreneurRecord) {
 export function assessmentFromForm(
   values: Record<string, string>, expertiseNeeds: string[], exploring = false,
 ): AssessmentInput {
-  const sector = INDUSTRY_SECTORS[exploring ? values.interests : values.industry];
-  const stage = exploring ? "idea" : FORM_STAGES[values.stage];
-  if (!sector) throw new Error("Choose a supported industry so we can match you with a mentor.");
-  if (!stage) throw new Error("Choose your current business stage.");
-  if (!expertiseNeeds.length || expertiseNeeds.length > 5) throw new Error("Choose between one and five areas of mentorship support.");
+  // Nothing blocks finding a mentor: a blank answer gets a safe default the mentee can change later.
+  const sector = INDUSTRY_SECTORS[exploring ? values.interests : values.industry] ?? "undecided";
+  const stage = exploring ? "idea" : FORM_STAGES[values.stage] ?? "early";
+  if (expertiseNeeds.length > 5) throw new Error("Choose up to five areas of mentorship support.");
+  if (!expertiseNeeds.length) expertiseNeeds = [sector === "undecided" ? "idea_development" : "market_positioning"];
   const preferred = values.language === "English" ? "en" : "dz";
   const language: AssessmentInput["languages"] = values.languagePreference === "Either" ? ["dz", "en"]
     : [values.languagePreference === "English" ? "en" : "dz"];
@@ -65,13 +65,13 @@ export function assessmentFromForm(
     business_stage: stage,
     sector,
     // The interest is already the sector; the description keeps only their own words.
-    business_description: exploring ? [values.strengths, values.motivation].map(v => v?.trim()).filter(Boolean).join(" ") || "I am exploring business ideas." : values.description?.trim() ?? "",
-    primary_challenge: values.challenge?.trim() || (exploring ? "I need help finding and validating a business idea." : ""),
+    business_description: exploring ? [values.strengths, values.motivation].map(v => v?.trim()).filter(Boolean).join(" ") || "I am exploring business ideas." : values.description?.trim() || "I would like to talk my plans through with a mentor.",
+    primary_challenge: values.challenge?.trim() || (exploring ? "I need help finding and validating a business idea." : "I would like a mentor's advice on what to do next."),
     goals: (values.goal ?? "").split("\n").map(goal => goal.trim()).filter(Boolean),
     expertise_needs: expertiseNeeds as AssessmentInput["expertise_needs"],
     languages,
     preferred_language: preferred,
-    budget: Number(values.budget),
+    budget: Number(values.budget) || 0,
     // Optional extras (the no-idea form asks only when and how to meet).
     progress_so_far: exploring ? "" : values.currentState?.trim() ?? "",
     vision: exploring ? "" : values.vision?.trim() ?? "",

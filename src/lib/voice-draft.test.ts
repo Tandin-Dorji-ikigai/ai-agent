@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AssessmentInputSchema } from "./agent/schemas";
-import { draftToAnswers, isComplete, mergeAnswers, statusesFor, toAssessmentInput, withDefaults } from "./voice-draft";
+import { draftToAnswers, isComplete, mergeAnswers, statusesFor, stillNeeded, toAssessmentInput, withDefaults } from "./voice-draft";
 
 const pemaDraft = draftToAnswers({
   business_name: "Yangchen Village Walks and Homestay",
@@ -60,5 +60,31 @@ describe("voice intro extras (only when said)", () => {
     const input = toAssessmentInput({ ...pemaDraft, progress_so_far: " Itinerary ready ", vision: "Families host visitors", timeframe: "3 months", mentoring_format: "online" });
     expect(input).toMatchObject({ progress_so_far: "Itinerary ready", vision: "Families host visitors", timeframe: "3 months", mentoring_format: "online" });
     expect(AssessmentInputSchema.safeParse(input).success).toBe(true);
+  });
+});
+
+describe("what is still needed before the agent finds a mentor", () => {
+  it("lists the gaps a rule-based reading leaves, in the order they are asked, until they are answered", () => {
+    // A real intro read without AI: the challenge and the help were heard, the rest was not.
+    const answers = draftToAnswers({ goals: [], expertise_needs: ["pricing"], languages: ["en"], preferred_language: "en", budget: 0, primary_challenge: "I don't know how to price my coffee.", suggested_fields: [] });
+    expect(stillNeeded(answers)).toEqual(["business_stage", "sector", "business_description"]);
+    expect(isComplete(answers)).toBe(false);
+    const answered = { ...answers, business_stage: "idea" as const, sector: "retail", business_description: "I want to open a small coffee shop." };
+    expect(stillNeeded(answered)).toEqual([]);
+    expect(isComplete(answered)).toBe(true);
+  });
+
+  it("a preferred language they do not speak is still needed", () => {
+    expect(stillNeeded({ ...pemaDraft, preferred_language: "dz", languages: ["en"] })).toEqual(["preferred_language"]);
+  });
+});
+
+describe("the voice intro never blocks the mentor search", () => {
+  it("every gap gets a default marked Assumed, so it is complete and saves", () => {
+    const { answers, assumed } = withDefaults(draftToAnswers({ goals: [], expertise_needs: [], languages: [], suggested_fields: [] }), "I want to open a small coffee shop.");
+    expect(isComplete(answers)).toBe(true);
+    expect(answers.business_description).toBe("I want to open a small coffee shop.");
+    expect(assumed).toEqual(expect.arrayContaining(["business_stage", "sector", "expertise_needs", "business_description", "primary_challenge"]));
+    expect(AssessmentInputSchema.safeParse(toAssessmentInput(answers)).success).toBe(true);
   });
 });

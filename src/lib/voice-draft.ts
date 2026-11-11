@@ -47,26 +47,55 @@ export function draftToAnswers(d: AssessmentDraft): DraftAnswers {
   };
 }
 
-/** Enough to save and find a mentor. */
-export function isComplete(a: DraftAnswers): boolean {
-  return (
-    a.sector !== "" &&
-    a.business_stage !== "" &&
-    a.business_description.trim() !== "" &&
-    a.primary_challenge.trim() !== "" &&
-    a.expertise_needs.length > 0 &&
-    a.expertise_needs.length <= 5 &&
-    a.languages.length > 0 &&
-    a.preferred_language !== "" &&
-    a.languages.includes(a.preferred_language as Language) &&
-    a.budget !== ""
-  );
+/** The answers still needed before the agent can save and find a mentor, in the order they are asked. */
+export function stillNeeded(a: DraftAnswers): DraftField[] {
+  const out: DraftField[] = [];
+  if (a.business_stage === "") out.push("business_stage");
+  if (a.sector === "") out.push("sector");
+  if (a.expertise_needs.length === 0 || a.expertise_needs.length > 5) out.push("expertise_needs");
+  if (a.primary_challenge.trim() === "") out.push("primary_challenge");
+  if (a.business_description.trim() === "") out.push("business_description");
+  if (a.languages.length === 0) out.push("languages");
+  if (a.preferred_language === "" || !a.languages.includes(a.preferred_language as Language)) out.push("preferred_language");
+  if (a.budget === "") out.push("budget");
+  return out;
 }
 
-/** Safe defaults for small gaps, so the agent can go ahead; each is labelled "Assumed". */
-export function withDefaults(a: DraftAnswers): { answers: DraftAnswers; assumed: DraftField[] } {
+/** Enough to save and find a mentor. */
+export function isComplete(a: DraftAnswers): boolean {
+  return stillNeeded(a).length === 0;
+}
+
+/** What they said, as the description when nothing else was picked up. */
+const fromIntro = (transcript: string) => transcript.replace(/\s+/g, " ").trim().slice(0, 600);
+
+/**
+ * Safe defaults for every gap, so the agent never blocks and always goes ahead
+ * to find a mentor; each is labelled "Assumed" and can be changed in the form.
+ */
+export function withDefaults(a: DraftAnswers, transcript = ""): { answers: DraftAnswers; assumed: DraftField[] } {
   const next = { ...a, languages: [...a.languages] };
   const assumed: DraftField[] = [];
+  if (!next.business_stage) {
+    next.business_stage = next.sector === "undecided" ? "idea" : "early";
+    assumed.push("business_stage");
+  }
+  if (!next.sector) {
+    next.sector = "undecided";
+    assumed.push("sector");
+  }
+  if (next.expertise_needs.length === 0) {
+    next.expertise_needs = [next.sector === "undecided" ? "idea_development" : "market_positioning"];
+    assumed.push("expertise_needs");
+  }
+  if (!next.business_description.trim()) {
+    next.business_description = fromIntro(transcript) || "I would like to talk my plans through with a mentor.";
+    assumed.push("business_description");
+  }
+  if (!next.primary_challenge.trim()) {
+    next.primary_challenge = "I would like a mentor's advice on what to do next.";
+    assumed.push("primary_challenge");
+  }
   if (next.languages.length === 0) {
     next.languages = ["en"]; // the intro was spoken in English
     assumed.push("languages");

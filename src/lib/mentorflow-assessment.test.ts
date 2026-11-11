@@ -29,12 +29,17 @@ describe("prototype form to assessment API", () => {
     expect(AssessmentInputSchema.safeParse(input).success).toBe(true);
   });
 
-  it("rejects unsupported industries instead of assigning a different sector", () => {
-    expect(() => assessmentFromForm({ ...profileFromEntrepreneur(entrepreneur), industry: "Education" }, needs)).toThrow("supported industry");
+  it("never blocks: an unknown industry is 'not decided yet', never a different sector", () => {
+    const input = assessmentFromForm({ ...profileFromEntrepreneur(entrepreneur), industry: "Education" }, needs);
+    expect(input.sector).toBe("undecided");
+    expect(AssessmentInputSchema.safeParse(input).success).toBe(true);
   });
 
-  it("requires explicit support areas for deterministic matching", () => {
-    expect(() => assessmentFromForm(profileFromEntrepreneur(entrepreneur), [])).toThrow("one and five");
+  it("never blocks: blank answers get safe defaults that still save and match", () => {
+    const input = assessmentFromForm({ ...profileFromEntrepreneur(entrepreneur), stage: "", description: "", challenge: "", budget: "" }, []);
+    expect(input.business_stage).toBe("early");
+    expect(input.expertise_needs.length).toBe(1);
+    expect(AssessmentInputSchema.safeParse(input).success).toBe(true);
   });
 
   it("submits exploratory onboarding without requiring an invented business", () => {

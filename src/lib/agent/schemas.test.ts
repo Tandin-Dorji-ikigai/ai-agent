@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SessionCompleteInputSchema } from "./schemas";
+import { AssessmentDraftLiveSchema, AssessmentDraftSchema, SessionCompleteInputSchema, knownSuggestions } from "./schemas";
 
 const booking_id = "00000000-0000-4000-8000-000000000999";
 
@@ -21,5 +21,15 @@ describe("handover contract: POST /api/session/complete", () => {
 
   it("rejects unknown sources", () => {
     expect(SessionCompleteInputSchema.safeParse({ booking_id, notes: "x", source: "email" }).success).toBe(false);
+  });
+});
+
+describe("voice intro draft from the model", () => {
+  it("an unknown suggested field is dropped instead of failing the whole answer", () => {
+    const raw = { sector: "retail", goals: [], suggested_fields: ["sector", "goals", "timeframe", "sector"] };
+    expect(AssessmentDraftSchema.safeParse(raw).success).toBe(false);
+    expect(AssessmentDraftLiveSchema.safeParse(raw).success).toBe(true);
+    const parsed = AssessmentDraftSchema.parse(knownSuggestions(raw));
+    expect(parsed.suggested_fields).toEqual(["sector"]);
   });
 });

@@ -74,6 +74,25 @@ export const AssessmentDraftSchema = z.object({
 });
 export type AssessmentDraft = z.infer<typeof AssessmentDraftSchema>;
 
+/**
+ * What the model is asked to fill: the same draft, but suggested_fields as plain
+ * names. With a fixed list, one name outside it (say "goals") made the provider
+ * reject the whole answer; now unknown names are simply dropped (knownSuggestions).
+ */
+export const AssessmentDraftLiveSchema = AssessmentDraftSchema.extend({
+  suggested_fields: z.array(z.string()).default([]),
+});
+
+export const isDraftField = (f: unknown): f is DraftField => (DRAFT_FIELDS as readonly unknown[]).includes(f);
+
+/** Keeps only the suggested_fields the form knows, once each. */
+export function knownSuggestions(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const r = raw as { suggested_fields?: unknown };
+  if (!Array.isArray(r.suggested_fields)) return raw;
+  return { ...r, suggested_fields: [...new Set(r.suggested_fields.filter(isDraftField))] };
+}
+
 export const AssessmentDraftInputSchema = z.object({
   transcript: shortText(6000),
 });

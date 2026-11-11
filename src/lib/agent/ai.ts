@@ -125,6 +125,7 @@ export async function aiStep<S extends z.ZodType>(opts: {
     // saved response, without pausing other models.
     if (err instanceof BudgetWaitTooLongError) return fallbackResult("rate_limited");
     if (err instanceof RateLimitError) {
+      console.warn(`[ai] ${opts.task}: rate limited (${err.limit}), retry in ${Math.round(err.retryAfterMs / 1000)} s`);
       cooldownUntil = Date.now() + Math.min(err.retryAfterMs, 60_000);
       return fallbackResult("rate_limited");
     }

@@ -307,18 +307,19 @@ export default function App({ children }) {
       <Card className="form-card"><CardContent><form onSubmit={event => { event.preventDefault(); void saveAssessment(); }}>
         <div className="form-grid" key={exploring ? "exploring" : "idea"}>
           {fields.map(field => <div className={`field ${field.full ? "field-full" : ""}`} key={field.name}>
-            <Label htmlFor={field.name}>{field.label}{field.required && " *"}</Label>
+            <Label htmlFor={field.name}>{field.label}</Label>
             {field.options ? (
-              <Select value={String(values[field.name] ?? "")} onValueChange={value => updateValue(field.name, value)} required={field.required}>
+              <Select value={String(values[field.name] ?? "")} onValueChange={value => updateValue(field.name, value)}>
                 <SelectTrigger id={field.name} className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>{field.options.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
               </Select>
             ) : field.type === "textarea" ? (
-              <Textarea id={field.name} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} required={field.required} maxLength={1000} rows={3} />
-            ) : <Input id={field.name} type={field.type || "text"} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} required={field.required} min={field.type === "number" ? 0 : undefined} max={field.name === "budget" ? 100000 : undefined} maxLength={field.name === "productName" ? 120 : 200} />}
+              <Textarea id={field.name} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} maxLength={1000} rows={3} />
+            ) : <Input id={field.name} type={field.type || "text"} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} min={field.type === "number" ? 0 : undefined} max={field.name === "budget" ? 100000 : undefined} maxLength={field.name === "productName" ? 120 : 200} />}
           </div>)}
         </div>
         <fieldset className="mt-6"><legend className="text-sm font-semibold">Where would you like support? (choose 1–5)</legend><div className="form-grid mt-3">{EXPERTISE.map(key => <div className="checkbox-row" key={key}><Checkbox id={`support-${key}`} checked={supportNeeds.includes(key)} disabled={!supportNeeds.includes(key) && supportNeeds.length >= 5} onCheckedChange={checked => setSupportDraft(current => { const selected = current ?? supportNeeds; return checked ? [...selected, key] : selected.filter(item => item !== key); })} /><Label htmlFor={`support-${key}`}>{expertiseLabel(key)}</Label></div>)}</div></fieldset>
+        {formError && <Alert variant="destructive" className="mt-6"><AlertTitle>Please check your answers</AlertTitle><AlertDescription>{formError}</AlertDescription></Alert>}
         <div className="form-nav">
           <Button type="submit" disabled={Boolean(busy)}>{busy === "assessment" ? "Saving…" : busy === "matches" ? "Finding a mentor…" : "Save needs & find mentor"}<ArrowRight className="size-4" /></Button>
         </div>
@@ -454,7 +455,7 @@ export default function App({ children }) {
   const notices = <>
     {otherWaiting && <Alert className="mb-6"><Video className="size-4" /><AlertTitle>{role === "mentor" ? firstName(state?.entrepreneur?.full_name) || "Your mentee" : firstName(mentor.name) || "Your mentor"} is in the session room</AlertTitle><AlertDescription>Join now to start your mentoring call. {RECORDING_NOTICE}<Button size="sm" className="self-start mt-2" onClick={() => go(callPage, "?join=1")}>Join now<ArrowRight className="size-4" /></Button></AlertDescription></Alert>}
     {lastError && <Alert variant="destructive" className="mb-6"><AlertTitle>That didn’t work</AlertTitle><AlertDescription>{lastError.message}<Button type="button" variant="link" className="self-start px-0" onClick={clearLastError}>Dismiss</Button></AlertDescription></Alert>}
-    {formError && <Alert variant="destructive" className="mb-6"><AlertTitle>Please check your answers</AlertTitle><AlertDescription>{formError}</AlertDescription></Alert>}
+    {formError && page !== "assessment" && <Alert variant="destructive" className="mb-6"><AlertTitle>Please check your answers</AlertTitle><AlertDescription>{formError}</AlertDescription></Alert>}
     {previewNotice && <Alert className="mb-6"><AlertTitle>Saved</AlertTitle><AlertDescription>{previewNotice}</AlertDescription></Alert>}
     {!isPublic && state?.seeded && error && <Alert variant="destructive" className="mb-6"><AlertTitle>Updates are unavailable</AlertTitle><AlertDescription>You’re viewing the last loaded information.<Button variant="link" onClick={() => refresh()}>Try again</Button></AlertDescription></Alert>}
   </>;

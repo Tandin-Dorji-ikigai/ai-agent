@@ -36,7 +36,11 @@ export function transcribeKeyName(): "transcription key" | "agent key" {
 }
 
 export class RateLimitError extends Error {
-  constructor(public retryAfterMs: number) {
+  /** Which provider limit was hit, e.g. TPM (tokens per minute) or TPD (tokens per day). */
+  constructor(
+    public retryAfterMs: number,
+    public limit = "unknown",
+  ) {
     super("rate_limited");
   }
 }
@@ -140,7 +144,9 @@ export async function providerPost(
   });
   if (res.status === 429) {
     const retry = Number(res.headers.get("retry-after") ?? "20");
-    throw new RateLimitError((Number.isFinite(retry) ? retry : 20) * 1000);
+    // Only the limit's short name is kept (the message also names the account).
+    const limit = (await res.text().catch(() => "")).match(/\((TPM|TPD|RPM|RPD|ASH|ASD)\)/)?.[1];
+    throw new RateLimitError((Number.isFinite(retry) ? retry : 20) * 1000, limit);
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
@@ -204,6 +210,22 @@ export async function structured(opts: {
   const content = (data.choices as Array<{ message?: { content?: string } }> | undefined)?.[0]?.message?.content;
   if (!content) throw new ProviderError("Empty response.");
   return stripNulls(JSON.parse(content));
+}
+
+/**
+ * The main model, or the light model (it has its own rate limits) when the main
+ * one is rate limited or out of this minute's budget. For steps where the
+ * rule-based fallback is much weaker than either model.
+ */
+export async function structuredMainOrLight(opts: Omit<Parameters<typeof structured>[0], "model">): Promise<unknown> {
+  try {
+    return await structured({ ...opts, model: MODELS.main });
+  } catch (err) {
+    const busy = err instanceof RateLimitError || err instanceof BudgetWaitTooLongError;
+    if (!busy || MODELS.light === MODELS.main || opts.signal.aborted) throw err;
+    console.warn(`[ai] ${opts.task}: ${MODELS.main} is busy (${err instanceof RateLimitError ? err.limit : "minute budget"}); trying ${MODELS.light}`);
+    return structured({ ...opts, model: MODELS.light });
+  }
 }
 
 export interface ToolSpec {

@@ -12,12 +12,12 @@ import {
   type MentorRecord,
 } from "../types";
 import { explainMatch } from "./fallbacks";
-import { BACKGROUND_MAX_WAIT_MS, MODELS, chooseTool, structured, type ToolSpec } from "./llm";
+import { BACKGROUND_MAX_WAIT_MS, MODELS, chooseTool, structured, structuredMainOrLight, type ToolSpec } from "./llm";
 import { SENSITIVE_TOPICS, type DecisionContext } from "./policy";
 import { AGENT_BOUNDARIES, MATCH_EXPLANATION_RULE, NO_GENDER_RULE } from "./prompts";
 import type { CoachSummary } from "./schemas";
 import {
-  AssessmentDraftSchema,
+  AssessmentDraftLiveSchema,
   AssessmentSummarySchema,
   BriefsSchema,
   ChunkNotesSchema,
@@ -25,6 +25,7 @@ import {
   FollowUpSchema,
   MatchExplanationsSchema,
   ReplyClassificationSchema,
+  knownSuggestions,
 } from "./schemas";
 import { bhutanToday } from "./transcripts";
 
@@ -90,36 +91,39 @@ export const live = {
 
   assessmentDraft:
     (transcript: string): Live =>
-    (signal) =>
-      structured({
-        task: "assessment_from_speech",
-        model: MODELS.main,
-        maxTokens: 900,
-        schema: AssessmentDraftSchema,
-        signal,
-        system: sys(
-          "Someone introduced themselves and their business (or business idea) by voice, in English; the text may contain " +
-            "transcription errors. Fill a needs-assessment DRAFT that they will check. They may be an aspiring entrepreneur with no business yet. " +
-            "HEARD: fill what they said outright. SUGGESTED: you may also fill business_stage, business_description, primary_challenge, " +
-            "expertise_needs and sector when the meaning is clear (e.g. 'I don't have a business idea yet' means business_stage idea, " +
-            "sector undecided and the need idea_development). List every suggested field in suggested_fields. " +
-            "NEVER guess business_name or budget: leave them null unless said. Leave preferred_language null unless they state a preference. " +
-            `sector: one of ${["tourism", "agriculture", "handicrafts", "retail", "fintech", "technology", "undecided"].join(", ")}, ` +
-            "for what the business itself is (an app or website is technology, even if its users are farmers); undecided if they have no business or idea yet. " +
-            "Speech-to-text may spell Dzongkha as Zonka and ngultrum as Gultrim. " +
-            "business_stage: idea (no business yet, or only an idea), early (started, first customers), growth (growing or hiring), established (many years). " +
-            `expertise_needs: up to 5 from this list that match the help they ask for or clearly need: ${EXPERTISE_KEYS}. ` +
-            "languages: dz (Dzongkha) and/or en (English) that they say they speak; if they name none, en (they are speaking English), marked suggested. " +
-            "budget: the amount per mentoring session in Ngultrum as a number, only if they said one. " +
-            "Optional, only if they said it (never guess, never ask): progress_so_far (what they have already done or have ready, in their words); " +
-            "vision (how they want the finished product or service to work); timeframe (when they hope to get there: 1 month, 3 months, 6 months, 12 months or Flexible, the nearest); " +
-            "mentoring_format (either, online or in_person, if they said how they want to meet). " +
-            "business_description and primary_challenge: 1 to 2 sentences in the first person, close to their words, without greetings or their name. " +
-            "Mentions of using this platform or app are about our mentoring service, not their business. " +
-            "goals: only goals they stated.",
-        ),
-        user: transcript,
-      }),
+    async (signal) =>
+      // The voice intro is where the rule-based reader is weakest, so a busy main model hands over to the light one.
+      knownSuggestions(
+        await structuredMainOrLight({
+          task: "assessment_from_speech",
+          maxTokens: 900,
+          schema: AssessmentDraftLiveSchema,
+          signal,
+          system: sys(
+            "Someone introduced themselves and their business (or business idea) by voice, in English; the text may contain " +
+              "transcription errors. Fill a needs-assessment DRAFT that they will check. They may be an aspiring entrepreneur with no business yet. " +
+              "HEARD: fill what they said outright. SUGGESTED: you may also fill business_stage, business_description, primary_challenge, " +
+              "expertise_needs and sector when the meaning is clear (e.g. 'I don't have a business idea yet' means business_stage idea, " +
+              "sector undecided and the need idea_development). List the names of the fields you suggested in suggested_fields " +
+              "(only these: sector, business_stage, business_description, primary_challenge, expertise_needs, languages). " +
+              "NEVER guess business_name or budget: leave them null unless said. Leave preferred_language null unless they state a preference. " +
+              `sector: one of ${["tourism", "agriculture", "handicrafts", "retail", "fintech", "technology", "undecided"].join(", ")}, ` +
+              "for what the business itself is (an app or website is technology, even if its users are farmers); undecided if they have no business or idea yet. " +
+              "Speech-to-text may spell Dzongkha as Zonka and ngultrum as Gultrim. " +
+              "business_stage: idea (no business yet, or only an idea), early (started, first customers), growth (growing or hiring), established (many years). " +
+              `expertise_needs: up to 5 from this list that match the help they ask for or clearly need: ${EXPERTISE_KEYS}. ` +
+              "languages: dz (Dzongkha) and/or en (English) that they say they speak; if they name none, en (they are speaking English), marked suggested. " +
+              "budget: the amount per mentoring session in Ngultrum as a number, only if they said one. " +
+              "Optional, only if they said it (never guess, never ask): progress_so_far (what they have already done or have ready, in their words); " +
+              "vision (how they want the finished product or service to work); timeframe (when they hope to get there: 1 month, 3 months, 6 months, 12 months or Flexible, the nearest); " +
+              "mentoring_format (either, online or in_person, if they said how they want to meet). " +
+              "business_description and primary_challenge: 1 to 2 sentences in the first person, close to their words, without greetings or their name. " +
+              "Mentions of using this platform or app are about our mentoring service, not their business. " +
+              "goals: only goals they stated.",
+          ),
+          user: transcript,
+        }),
+      ),
 
   matchExplanations:
     (e: EntrepreneurRecord, ranked: ScoredMentor[]): Live =>
