@@ -93,7 +93,7 @@ export const ALLOWED_TOOLS: Record<EventType, readonly ToolName[]> = {
   "mentor.request.declined": ["get_entrepreneur_context", ...REQUEST_TOOLS],
   "mentor.request.expired": ["get_entrepreneur_context", ...REQUEST_TOOLS],
   "booking.confirmed": ["create_session_brief", "send_inbox_message"],
-  "session.completed": ["extract_action_items"],
+  "session.completed": ["extract_action_items", "write_session_recap", "send_inbox_message"],
   "action.due_soon": ["get_entrepreneur_context", "send_inbox_message"],
   "action.overdue": ["get_entrepreneur_context", "send_inbox_message"],
   "checkin.replied": REPLY_TOOLS,
@@ -534,12 +534,32 @@ const sessionCompleted: Handler = async ({ event, tools }) => {
   const source = (["typed", "voice_note", "call_recording"] as const).find((s) => s === event.payload.source) ?? "typed";
   const out = await tools.call("extract_action_items", { session_id: event.entity_id, notes, source });
   const label = { typed: "typed notes", voice_note: "voice note", call_recording: "call transcript" }[source];
+  const parts = out.parts > 1 ? ` from a ${out.parts}-part transcript (${out.liveParts} part${out.liveParts === 1 ? "" : "s"} read by live AI)` : "";
+  // What the session covered and achieved, for both people's history. A failed
+  // recap must not undo the actions above (it can be written again later).
+  let recapNote = "";
+  try {
+    await tools.call("write_session_recap", { session_id: event.entity_id, notes, summary: out.summary });
+  } catch (err) {
+    console.warn("[agent] session recap failed:", err instanceof Error ? err.message : err);
+    recapNote = " The recap could not be written.";
+  }
+  // A casual talk with nothing agreed: there is nothing for the mentor to
+  // confirm, so the follow-up is open to the mentee straight away.
+  if (out.actions.length === 0) {
+    await tools.call("send_inbox_message", {
+      entrepreneur_id: requireEntrepreneur(event),
+      kind: "info",
+      body: "Your session notes are ready. No next steps were agreed this time, so there is nothing to track. When you are ready, you can ask your mentor for a follow-up session from My bookings.",
+      source: "system",
+    });
+  }
   return {
     input_summary: `Mentor session ${label} (${notes.length.toLocaleString("en-IN")} characters)`,
     output:
-      `${out.actions.length} draft SMART actions extracted` +
-      (out.parts > 1 ? ` from a ${out.parts}-part transcript (${out.liveParts} part${out.liveParts === 1 ? "" : "s"} read by live AI)` : "") +
-      ". Waiting for a human to confirm them.",
+      out.actions.length === 0
+        ? `No agreed actions found${parts}; told the mentee a follow-up can be requested.${recapNote}`
+        : `${out.actions.length} draft SMART actions extracted${parts}. Waiting for a human to confirm them.${recapNote}`,
     source: out.source,
   };
 };

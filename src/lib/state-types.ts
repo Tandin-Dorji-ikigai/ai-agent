@@ -77,6 +77,25 @@ export interface SessionView {
   transcript_chars: number;
 }
 
+/** One completed session, for both people's session history (newest first). */
+export interface SessionHistoryItem {
+  id: string;
+  booking_id: string;
+  scheduled_at: string;
+  completed_at: string;
+  mentor_id: string;
+  mentor_name: string;
+  agent_summary: string | null;
+  /** What the session covered and achieved (null until the agent writes it). */
+  recap: { discussed: string[]; achieved: string[] } | null;
+  recap_source: "live_ai" | "fallback" | null;
+  mentor_notes: string | null;
+  notes_source: "typed" | "voice_note" | "call_recording";
+  summary_confirmed: boolean;
+  /** 0 if no call transcript (fetch it from /api/session/transcript). */
+  transcript_chars: number;
+}
+
 export interface MessageView {
   id: string;
   sender: "agent" | "entrepreneur" | "mentor" | "ydf";
@@ -233,6 +252,8 @@ export interface DemoState {
   most_booked: { mentor: MentorRecord; score: number; rank: number | null; eligible_count: number } | null;
   booking: BookingView | null;
   session: SessionView | null;
+  /** Every completed session, newest first. */
+  sessions_history: SessionHistoryItem[];
   actions: ActionItemRecord[];
   messages: MessageView[];
   escalations: EscalationView[];

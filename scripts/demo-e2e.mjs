@@ -236,6 +236,7 @@ async function runOnce(n, fx) {
   check("   session records where the text came from", s.session?.notes_source === (VIA_CALL || VIA_TRACKS ? "call_recording" : "typed"), s.session);
   const drafts = s.actions.filter((x) => x.status === "draft");
   check("10 three draft actions extracted", drafts.length === 3, s.actions);
+  check("   the agent writes a recap: what was discussed and achieved", s.sessions_history[0]?.id === s.session?.id && s.sessions_history[0].recap?.discussed.length > 0, s.sessions_history);
 
   // 11. Human confirmation
   const ids = drafts.map((x) => x.id);
@@ -424,6 +425,62 @@ async function declineRun(fx) {
 }
 
 /** No business idea yet: four beginner-coach steps, then the usual mentor request with what was found. */
+// A casual talk where nothing concrete was agreed: no actions to confirm, so
+// the follow-up opens straight away; the session still gets a recap and the
+// whole conversation for both people.
+async function noActionsRun(fx) {
+  console.log("\nA casual talk with no agreed actions: recap, transcript, then a follow-up");
+  await call("POST", "/api/demo/reset");
+  await call("POST", "/api/assessment", fx.assessment);
+  await call("POST", "/api/matches");
+  await call("POST", "/api/requests/start");
+  let s = await state();
+  const asked = s.pending_request;
+  const b = await call("POST", "/api/requests/accept", { request_id: asked?.id, scheduled_at: asked?.offered_slots[0] });
+  const before = (await state()).messages.length;
+  const transcript = [
+    "[Mentor] Hello. How are you feeling about starting your entrepreneurship journey?",
+    "[Entrepreneur] Excited but also confused. I have no clear business idea yet.",
+    "[Mentor] Visitors already pass through your village. Community tourism could be an opportunity.",
+    "[Entrepreneur] I like the idea of village walks with local food. That makes me feel more confident.",
+  ].join("\n");
+  const done = await call("POST", "/api/session/complete", { booking_id: b.json.booking_id, transcript, source: "call_recording" });
+  s = await state();
+  check(
+    "   casual talk: the agent finishes with a summary and no actions to confirm",
+    done.status === 200 && !!s.session?.agent_summary && s.actions.length === 0 && s.session.summary_confirmed === false,
+    { session: s.session, actions: s.actions },
+  );
+  check(
+    "   the mentee is told once that a follow-up can be asked for",
+    s.messages.length === before + 1 && s.messages.some((m) => /ask your mentor for a follow-up session/.test(m.body)),
+    { before, after: s.messages.length },
+  );
+  const h = s.sessions_history[0];
+  check(
+    "   the session history has it, with a recap of what was discussed",
+    s.sessions_history.length === 1 && h?.id === s.session.id && h.recap?.discussed.length > 0 && Array.isArray(h.recap.achieved) && h.transcript_chars > 0,
+    s.sessions_history,
+  );
+  const t = await call("GET", `/api/session/transcript?session_id=${s.session.id}`);
+  check(
+    "   both people can read the whole conversation, turn by turn",
+    t.status === 200 && t.json.turns?.length === 4 && t.json.turns[0].speaker === "mentor" && t.json.turns[1].speaker === "entrepreneur",
+    t.json,
+  );
+  const r = await call("POST", "/api/session/recap", { session_id: s.session.id });
+  check("   asking for the recap again reuses it", r.status === 200 && r.json.reused === true, r.json);
+  await call("POST", "/api/actions/confirm", { session_id: done.json.session_id, action_ids: [] });
+  check("   confirming with nothing to confirm sends no second message", (await state()).messages.length === before + 1);
+  const fr = await call("POST", "/api/requests/ask", { mentor_id: asked?.mentor.id });
+  s = await state();
+  check(
+    "   the mentee asks the same mentor for a follow-up straight away",
+    fr.status === 200 && s.pending_request?.mentor.id === asked?.mentor.id && s.pending_request.mentee_summary.follow_up === true,
+    { fr: fr.json, pending: s.pending_request },
+  );
+}
+
 async function coachRun(fx) {
   console.log("\nNo idea yet: the beginner coach, then a mentor");
   await call("POST", "/api/demo/reset");
@@ -499,6 +556,7 @@ if (process.env.KEEP_END_STATE === "1") {
   for (let i = 1; i <= RUNS; i++) await runOnce(i, fx);
   await declineRun(fx);
   await coachRun(fx);
+  await noActionsRun(fx);
 }
 console.log(failures === 0 ? `\nAll checks passed (${RUNS} runs).` : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

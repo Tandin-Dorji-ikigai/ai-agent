@@ -24,6 +24,7 @@ import type {
   MessageView,
   ProgressView,
   RequestRoundView,
+  SessionHistoryItem,
   SessionView,
 } from "./state-types";
 import { db, must } from "./supabase/server";
@@ -54,6 +55,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       most_booked: null,
       booking: null,
       session: null,
+      sessions_history: [],
       actions: [],
       messages: [],
       escalations: [],
@@ -78,7 +80,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     db().from("messages").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at"),
     db().from("escalations").select("*, profiles!escalations_entrepreneur_id_fkey(full_name), action_items(title)").order("created_at", { ascending: false }),
     db().from("agent_runs").select("*").order("created_at", { ascending: false }).limit(40),
-    db().from("sessions").select("*, bookings!inner(entrepreneur_id)").eq("bookings.entrepreneur_id", entrepreneurId),
+    db().from("sessions").select("*, bookings!inner(entrepreneur_id, scheduled_at, mentor_id)").eq("bookings.entrepreneur_id", entrepreneurId),
     db().from("progress_updates").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at"),
     db().from("mentor_requests").select("*").eq("entrepreneur_id", entrepreneurId).order("created_at"),
   ]);
@@ -125,7 +127,12 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
       : null;
 
   const sessions = must(sessionRows, "load sessions") as Array<
-    Omit<SessionView, "transcript_chars"> & { bookings: unknown; transcript: string | null }
+    Omit<SessionView, "transcript_chars"> & {
+      bookings: { scheduled_at: string; mentor_id: string };
+      transcript: string | null;
+      recap?: SessionHistoryItem["recap"];
+      recap_source?: SessionHistoryItem["recap_source"];
+    }
   >;
   const sessionRow = booking ? sessions.find((s) => s.booking_id === booking.id) : undefined;
   const session: SessionView | null = sessionRow
@@ -141,6 +148,25 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
         transcript_chars: sessionRow.transcript?.length ?? 0,
       }
     : null;
+
+  const sessions_history: SessionHistoryItem[] = sessions
+    .filter((s) => s.completed_at)
+    .map((s) => ({
+      id: s.id,
+      booking_id: s.booking_id,
+      scheduled_at: s.bookings.scheduled_at,
+      completed_at: s.completed_at!,
+      mentor_id: s.bookings.mentor_id,
+      mentor_name: mentors.find((m) => m.id === s.bookings.mentor_id)?.full_name ?? "Your mentor",
+      agent_summary: s.agent_summary,
+      recap: s.recap ?? null,
+      recap_source: s.recap_source ?? null,
+      mentor_notes: s.mentor_notes,
+      notes_source: s.notes_source ?? "typed",
+      summary_confirmed: s.summary_confirmed,
+      transcript_chars: s.transcript?.length ?? 0,
+    }))
+    .sort((a, b) => b.completed_at.localeCompare(a.completed_at));
 
   const actions = must(actionRows, "load actions") as ActionItemRecord[];
   const messages = must(messageRows, "load messages") as MessageView[];
@@ -259,6 +285,7 @@ export async function buildDemoState(entrepreneurId: string = DEMO_IDS.pema): Pr
     most_booked,
     booking,
     session,
+    sessions_history,
     actions,
     messages,
     escalations,

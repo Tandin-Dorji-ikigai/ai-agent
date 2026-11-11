@@ -3,6 +3,7 @@ import { COACH_STEP_COUNT, COACH_STEPS, MAX_ATTEMPTS } from "../coach-steps";
 import type { EntrepreneurRecord } from "../types";
 import { isExploring } from "../mentorflow-assessment";
 import { db, must } from "../supabase/server";
+import { groundPoints } from "./grounding";
 import { sectorLabel } from "../types";
 import { structured, MODELS } from "./llm";
 import { NO_GENDER_RULE } from "./prompts";
@@ -38,13 +39,9 @@ export function nextMove(step: number, outcome: CoachReview["outcome"], attempts
   return step >= COACH_STEP_COUNT ? "hand_over" : "advance";
 }
 
-const WORD = /[a-zༀ-࿿]{4,}/gi;
-const STOP = new Set(["that", "this", "with", "they", "them", "their", "have", "about", "would", "could", "there", "from", "what", "when", "your", "people", "think", "because", "really", "some"]);
-
 /** Keep only learnings that share a real word with what the person wrote (no invented facts). */
 export function groundLearnings(learnings: string[], reply: string): string[] {
-  const said = new Set((reply.toLowerCase().match(WORD) ?? []).filter((w) => !STOP.has(w)));
-  return learnings.filter((l) => (l.toLowerCase().match(WORD) ?? []).some((w) => !STOP.has(w) && said.has(w))).slice(0, 4);
+  return groundPoints(learnings, reply, 4);
 }
 
 // ---------------------------------------------------------------------------

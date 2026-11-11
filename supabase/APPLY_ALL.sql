@@ -2,7 +2,7 @@
 -- Every migration in supabase/migrations/, in order, for pasting into the
 -- Supabase SQL Editor on a NEW, empty project. On an existing project, use
 -- `npx supabase db push` instead (it applies only the missing migrations).
--- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql, 20261111000008_push_subscriptions.sql, 20261111000009_beginner_coach.sql
+-- Includes: 20261110000001_schema.sql, 20261110000002_demo_functions.sql, 20261110000003_checkin_loop.sql, 20261110000004_session_sources.sql, 20261110000005_mentor_requests.sql, 20261110000006_calls.sql, 20261111000007_livekit_calls.sql, 20261111000008_push_subscriptions.sql, 20261111000009_beginner_coach.sql, 20261111000010_session_recap.sql
 
 -- ===== 20261110000001_schema.sql =====
 -- AI Mentoring Platform: hackathon prototype schema.
@@ -1165,3 +1165,11 @@ alter table agent_events add constraint agent_events_event_type_check check (eve
   'escalation.requested',
   'coach.started',
   'coach.replied'));
+
+-- ===== 20261111000010_session_recap.sql =====
+-- Session recap: what the session covered and what it achieved, written by the
+-- agent from the call transcript (or the mentor's notes) when a session ends.
+-- Both people see it in their session history, with the agreed actions and
+-- the full transcript. Additive: older app code keeps working.
+alter table sessions add column recap jsonb;
+alter table sessions add column recap_source text check (recap_source in ('live_ai', 'fallback'));

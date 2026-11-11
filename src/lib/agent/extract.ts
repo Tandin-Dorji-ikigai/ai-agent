@@ -186,7 +186,7 @@ export function extractionFromNotes(notes: ChunkNotes[], parts: number, now?: Da
     summary:
       actions.length > 0
         ? `Found ${actions.length} agreed action${actions.length === 1 ? "" : "s"} in a ${parts}-part call transcript. Check them before confirming.`
-        : "No clear agreed actions were found in the call. Add them by hand if the session agreed any.",
+        : "No clear agreed actions were found in the call.",
     actions,
   };
 }

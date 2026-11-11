@@ -120,6 +120,13 @@ export const MentorAvailabilityInputSchema = z.object({
     .refine((slots) => new Set(slots.map((s) => `${s.day} ${s.time}`)).size === slots.length, { message: "Each time can be listed once." }),
 });
 
+/** Session recap: what the session covered and what it achieved (from the transcript or notes). */
+export const SessionRecapSchema = z.object({
+  discussed: z.array(shortText(200)).min(1).max(6),
+  achieved: z.array(shortText(200)).max(6),
+});
+export type SessionRecap = z.infer<typeof SessionRecapSchema>;
+
 /** The mentee asks for a specific mentor (a follow-up, or the agent's suggestion). */
 export const AskMentorInputSchema = z.object({
   mentor_id: z.uuid(),
@@ -307,6 +314,11 @@ export const ToolInputs = {
     session_id: z.uuid(),
     notes: z.string().trim().min(1).max(MAX_TRANSCRIPT_CHARS + 4100),
     source: z.enum(NOTES_SOURCES).default("typed"),
+  }),
+  write_session_recap: z.object({
+    session_id: z.uuid(),
+    notes: z.string().trim().min(1).max(MAX_TRANSCRIPT_CHARS + 4100),
+    summary: z.string().max(2000).nullable().optional(),
   }),
   update_action_status: z.object({
     entrepreneur_id: z.uuid(),

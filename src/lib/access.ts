@@ -143,6 +143,8 @@ export const API_RULES: Record<string, Rule> = {
   "/api/calls/track": BOTH,
   "/api/calls/end": BOTH,
   "/api/transcribe": BOTH,
+  "/api/session/transcript": BOTH,
+  "/api/session/recap": BOTH,
   // Call notifications on this device (subscribe checks the side matches the sign-in)
   "/api/push/subscribe": BOTH,
   "/api/push/unsubscribe": BOTH,

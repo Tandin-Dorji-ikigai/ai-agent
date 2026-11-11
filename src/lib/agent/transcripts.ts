@@ -215,7 +215,7 @@ export function heuristicExtraction(text: string, parts = 1, now?: Date): Extrac
     summary:
       agreements.length > 0
         ? `Found ${agreements.length} agreed action${agreements.length === 1 ? "" : "s"} in ${parts > 1 ? `a ${parts}-part call transcript` : "the session text"} (rule-based reading; check before confirming).`
-        : "No clear agreed actions were found. Add them by hand if the session agreed any.",
+        : "No clear agreed actions were found.",
     actions: agreements.map((a) => ({
       title: a.what,
       description: a.sentence,

@@ -6,7 +6,11 @@ import { isEligible, scoreMentor, topMatches } from "../matching/score-mentor";
 import { upcomingSlots } from "../matching/slots";
 import { db, DbError, must } from "../supabase/server";
 import type { ActionItemRecord, ActionStatus, MentorRequestRecord, ResourceRecord } from "../types";
+import { aiStep } from "./ai";
 import { extractFromText } from "./extract";
+import { rejectGenderedText } from "./prompts";
+import { fallbackRecap, groundRecap, recapInput, recapLive } from "./recap";
+import { SessionRecapSchema } from "./schemas";
 import { ToolInputs, type ToolName } from "./schemas";
 
 // The agent's controlled tools (CLAUDE_WORKING_PLAN.md, "Agent tools").
@@ -233,6 +237,28 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
       `${inserted.length} draft actions extracted (${step.source})` +
       (out.parts > 1 ? ` from ${out.parts} transcript parts (${out.liveParts} read by live AI)` : "") +
       "; waiting for human confirmation.",
+  };
+}
+
+/** What the session covered and achieved, for both people's session history. */
+async function write_session_recap(input: In<"write_session_recap">) {
+  const step = await aiStep({
+    task: "session_recap",
+    schema: SessionRecapSchema,
+    fallback: () => fallbackRecap(input.notes, input.summary),
+    live: recapLive(recapInput(input.notes)),
+    validate: rejectGenderedText,
+  });
+  const grounded = step.source === "live_ai" ? groundRecap(step.value, input.notes) : step.value;
+  const recap = grounded ?? fallbackRecap(input.notes, input.summary);
+  const source = grounded && step.source === "live_ai" ? "live_ai" : "fallback";
+  must(
+    await db().from("sessions").update({ recap, recap_source: source }).eq("id", input.session_id).select("id"),
+    "save session recap",
+  );
+  return {
+    result: { recap, source },
+    summary: `Session recap written (${source}): ${recap.discussed.length} topic(s) discussed, ${recap.achieved.length} achieved.`,
   };
 }
 
@@ -510,6 +536,7 @@ const IMPLEMENTATIONS = {
   send_mentor_request,
   create_session_brief,
   extract_action_items,
+  write_session_recap,
   update_action_status,
   recommend_approved_resource,
   suggest_mentor_session,

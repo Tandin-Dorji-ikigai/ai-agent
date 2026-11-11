@@ -57,6 +57,7 @@ Every AI step has a **saved response** as a backup. The demo still works with no
 | Booking | Created only when a mentor accepts: YDF credit or simulated self-payment; cannot double-book or double-charge | SQL `accept_mentor_request` → `create_booking` |
 | Session prep | AI briefs for both sides; follow-up briefs built from progress | `agent/handlers.ts` |
 | After the session | Mentor's quick notes (or a recorded call) become SMART draft actions; the mentor confirms them | `mentorflow-app.jsx` (Session workspace), `/api/session/complete`, `/api/actions/confirm` |
+| Session history | A recap of each session (discussed, achieved), its next steps and progress, and the whole conversation, for both people; follow-up requests | `src/components/session-history.tsx`, `src/lib/agent/recap.ts`, `/api/session/transcript`, `/api/session/recap` |
 | Check-in loop (our workflow diagram) | Check-ins before due dates and follow-ups once overdue. Replies are read as done, on track, or stuck, and every branch is handled | `agent/handlers.ts`, `agent/policy.ts` |
 | Getting help | The AI picks one tool (approved resource, own mentor, another mentor, or YDF escalation), and our rules double-check its choice | `agent/live.ts`, `agent/policy.ts` |
 | Mentor progress | Progress feed and next-session agenda in the session workspace | `progress.ts`, `mentor-progress.tsx` |
