@@ -9,8 +9,8 @@ import type { ActionItemRecord, ActionStatus, MentorRequestRecord, ResourceRecor
 import { aiStep } from "./ai";
 import { extractFromText } from "./extract";
 import { rejectGenderedText } from "./prompts";
-import { fallbackRecap, groundRecap, recapInput, recapLive } from "./recap";
-import { SessionRecapSchema } from "./schemas";
+import { fallbackRecap, finishRecap, groundRecap, recapInput, recapLive } from "./recap";
+import { SessionRecapDraftSchema } from "./schemas";
 import { ToolInputs, type ToolName } from "./schemas";
 
 // The agent's controlled tools (CLAUDE_WORKING_PLAN.md, "Agent tools").
@@ -241,24 +241,27 @@ async function extract_action_items(input: In<"extract_action_items">, env: Tool
 }
 
 /** What the session covered and achieved, for both people's session history. */
-async function write_session_recap(input: In<"write_session_recap">) {
+async function write_session_recap(input: In<"write_session_recap">, env: ToolEnv) {
   const step = await aiStep({
     task: "session_recap",
-    schema: SessionRecapSchema,
+    schema: SessionRecapDraftSchema,
     fallback: () => fallbackRecap(input.notes, input.summary),
     live: recapLive(recapInput(input.notes)),
     validate: rejectGenderedText,
   });
-  const grounded = step.source === "live_ai" ? groundRecap(step.value, input.notes) : step.value;
-  const recap = grounded ?? fallbackRecap(input.notes, input.summary);
-  const source = grounded && step.source === "live_ai" ? "live_ai" : "fallback";
+  const draft = step.source === "live_ai" ? groundRecap(step.value, input.notes, input.summary) : step.value;
+  const heldAt = input.held_at && !Number.isNaN(Date.parse(input.held_at)) ? new Date(input.held_at) : env.now;
+  const recap = finishRecap(draft, input.notes, heldAt);
+  const source = step.source;
   must(
     await db().from("sessions").update({ recap, recap_source: source }).eq("id", input.session_id).select("id"),
     "save session recap",
   );
   return {
     result: { recap, source },
-    summary: `Session recap written (${source}): ${recap.discussed.length} topic(s) discussed, ${recap.achieved.length} achieved.`,
+    summary:
+      `Session summary written (${source}): ${recap.discussed.length} topic(s), ${recap.advice.length} piece(s) of advice, ` +
+      `${recap.next_step ? "a next step" : "no next step"}, follow-up around ${recap.follow_up_on}.`,
   };
 }
 

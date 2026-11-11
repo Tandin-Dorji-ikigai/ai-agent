@@ -150,11 +150,37 @@ export const MentorAvailabilityInputSchema = z.object({
 });
 
 /** Session recap: what the session covered and what it achieved (from the transcript or notes). */
+/**
+ * The session summary both people see: what was discussed, the mentor's main
+ * advice, what was achieved, one suggested next step and when to meet again.
+ * It needs no action tracking, so a session that was only a conversation still
+ * ends with clear advice and a next step. Older recaps have only the first two.
+ */
 export const SessionRecapSchema = z.object({
   discussed: z.array(shortText(200)).min(1).max(6),
   achieved: z.array(shortText(200)).max(6),
+  advice: z.array(shortText(200)).max(4).default([]),
+  next_step: shortText(200).nullable().default(null),
+  /** Recommended follow-up date (YYYY-MM-DD, Bhutan time) and why then. */
+  follow_up_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  follow_up_reason: shortText(200).nullable().default(null),
 });
 export type SessionRecap = z.infer<typeof SessionRecapSchema>;
+
+/**
+ * What the model (or the rule-based reader) writes. Looser than the saved recap:
+ * a short call may give nothing "discussed" (the reader fills it in), and the
+ * follow-up is a number of days; the code turns it into a date.
+ */
+export const SessionRecapDraftSchema = z.object({
+  discussed: z.array(shortText(200)).max(6),
+  achieved: z.array(shortText(200)).max(6),
+  advice: z.array(shortText(200)).max(4),
+  next_step: shortText(200).optional(),
+  follow_up_in_days: z.number().int().min(1).max(365).optional(),
+  follow_up_reason: shortText(200).optional(),
+});
+export type SessionRecapDraft = z.infer<typeof SessionRecapDraftSchema>;
 
 /** The mentee asks for a specific mentor (a follow-up, or the agent's suggestion). */
 export const AskMentorInputSchema = z.object({
@@ -348,6 +374,8 @@ export const ToolInputs = {
     session_id: z.uuid(),
     notes: z.string().trim().min(1).max(MAX_TRANSCRIPT_CHARS + 4100),
     summary: z.string().max(2000).nullable().optional(),
+    /** When the session was held (ISO); the follow-up date counts from it. Default: now. */
+    held_at: z.string().nullable().optional(),
   }),
   update_action_status: z.object({
     entrepreneur_id: z.uuid(),

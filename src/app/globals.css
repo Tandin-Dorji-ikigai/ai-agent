@@ -340,6 +340,9 @@ h3 { font-weight: 650; font-size: 13px; }
 .transcript-turn.theirs { align-self: flex-start; }
 .transcript-speaker { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 650; color: var(--muted-foreground); }
 .transcript-turn.mine .transcript-speaker { color: inherit; opacity: .8; }
-@media (max-width: 640px) { .session-recap { grid-template-columns: 1fr; } }
+.session-next { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; padding: 14px 16px; border: 1px solid var(--accent-border); border-radius: 12px; background: var(--accent); }
+.session-next-label { font-size: 12px; font-weight: 600; color: var(--primary); }
+.session-next-value { margin-top: 3px; font-size: 14px; font-weight: 600; line-height: 1.45; color: var(--foreground); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .session-recap, .session-next { grid-template-columns: 1fr; } }
 /* Needs assessment: "I have an idea" / "No idea yet" */
 .path-choice { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }

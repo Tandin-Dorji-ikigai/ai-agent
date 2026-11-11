@@ -87,7 +87,16 @@ export interface SessionHistoryItem {
   mentor_name: string;
   agent_summary: string | null;
   /** What the session covered and achieved (null until the agent writes it). */
-  recap: { discussed: string[]; achieved: string[] } | null;
+  /** The agent's session summary. Recaps written before the full summary have only discussed and achieved. */
+  recap: {
+    discussed: string[];
+    achieved: string[];
+    advice?: string[];
+    next_step?: string | null;
+    /** Recommended follow-up date, YYYY-MM-DD (Bhutan). */
+    follow_up_on?: string | null;
+    follow_up_reason?: string | null;
+  } | null;
   recap_source: "live_ai" | "fallback" | null;
   mentor_notes: string | null;
   notes_source: "typed" | "voice_note" | "call_recording";

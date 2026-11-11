@@ -448,7 +448,7 @@ async function noActionsRun(fx) {
   const transcript = [
     "[Mentor] Hello. How are you feeling about starting your entrepreneurship journey?",
     "[Entrepreneur] Excited but also confused. I have no clear business idea yet.",
-    "[Mentor] Visitors already pass through your village. Community tourism could be an opportunity.",
+    "[Mentor] Visitors already pass through your village. I suggest you try community tourism. We can talk again in two weeks.",
     "[Entrepreneur] I like the idea of village walks with local food. That makes me feel more confident.",
   ].join("\n");
   const done = await call("POST", "/api/session/complete", { booking_id: b.json.booking_id, transcript, source: "call_recording" });
@@ -468,6 +468,17 @@ async function noActionsRun(fx) {
     "   the session history has it, with a recap of what was discussed",
     s.sessions_history.length === 1 && h?.id === s.session.id && h.recap?.discussed.length > 0 && Array.isArray(h.recap.achieved) && h.transcript_chars > 0,
     s.sessions_history,
+  );
+  const inTwoWeeks = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Thimphu", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.parse(s.clock.now) + 14 * 864e5));
+  check(
+    "   the summary gives the mentor's main advice, a next step, and the follow-up they agreed (two weeks)",
+    h?.recap?.advice?.length > 0 && typeof h.recap.next_step === "string" && h.recap.follow_up_on === inTwoWeeks && !!h.recap.follow_up_reason,
+    h?.recap,
+  );
+  check(
+    "   the mentee's message has the next step and when to meet again",
+    s.messages.some((m) => /Suggested next step: .+\. A follow-up around \w{3} \d{1,2} \w{3} would be a good time/.test(m.body)),
+    s.messages.at(-1)?.body,
   );
   const t = await call("GET", `/api/session/transcript?session_id=${s.session.id}`);
   check(

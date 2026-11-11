@@ -39,6 +39,7 @@ import {
   ReplyClassificationSchema,
   type CoachSummary,
   type Decision,
+  type SessionRecap,
   type ToolName,
 } from "./schemas";
 import type { Toolbox } from "./tools";
@@ -107,6 +108,8 @@ export const ALLOWED_TOOLS: Record<EventType, readonly ToolName[]> = {
 const iso = (d: Date) => d.toISOString();
 const dayMs = 86_400_000;
 const shortDate = (d: Date) => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+/** "2026-11-25" -> "Wed 25 Nov". */
+const followUpDay = (ymd: string) => shortDate(new Date(`${ymd}T12:00:00+06:00`));
 
 /** What someone who started with no idea found with the AI coach (null if they did not finish it). */
 async function coachSummaryFor(entrepreneurId: string): Promise<CoachSummary | null> {
@@ -565,19 +568,23 @@ const sessionCompleted: Handler = async ({ event, tools }) => {
   // What the session covered and achieved, for both people's history. A failed
   // recap must not undo the actions above (it can be written again later).
   let recapNote = "";
+  let recap: SessionRecap | null = null;
   try {
-    await tools.call("write_session_recap", { session_id: event.entity_id, notes, summary: out.summary });
+    recap = (await tools.call("write_session_recap", { session_id: event.entity_id, notes, summary: out.summary })).recap;
   } catch (err) {
     console.warn("[agent] session recap failed:", err instanceof Error ? err.message : err);
     recapNote = " The recap could not be written.";
   }
   // A casual talk with nothing agreed: there is nothing for the mentor to
-  // confirm, so the follow-up is open to the mentee straight away.
+  // confirm, so the follow-up is open to the mentee straight away. The summary
+  // still gives them the mentor's advice, a next step and when to meet again.
   if (out.actions.length === 0) {
+    const next = recap?.next_step ? ` Suggested next step: ${recap.next_step.replace(/[.!?…]*$/, "")}.` : "";
+    const when = recap?.follow_up_on ? ` A follow-up around ${followUpDay(recap.follow_up_on)} would be a good time to talk again.` : "";
     await tools.call("send_inbox_message", {
       entrepreneur_id: requireEntrepreneur(event),
       kind: "info",
-      body: "Your session notes are ready. No next steps were agreed this time, so there is nothing to track. When you are ready, you can ask your mentor for a follow-up session from My bookings.",
+      body: `Your session summary is ready in My bookings, with your mentor's main advice.${next}${when} You can ask your mentor for a follow-up session from My bookings whenever you are ready.`,
       source: "system",
     });
   }
