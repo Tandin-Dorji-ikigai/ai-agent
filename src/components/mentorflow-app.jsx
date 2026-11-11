@@ -291,7 +291,7 @@ export default function App({ children }) {
           <Alert>{summary.phase === "declined" ? <Inbox className="size-4" /> : <Check className="size-4" />}<AlertTitle className="line-clamp-none">{summary.headline}</AlertTitle><AlertDescription>{autoStalled ? "I could not reach a mentor just now. I will try again when you next open this page." : summary.detail}</AlertDescription></Alert>
           <div className="row wrap"><Button onClick={() => go("bookings")}><CalendarDays className="size-4" />{booking ? "My bookings" : "Request status"}<ArrowRight className="size-4" /></Button>{summary.phase === "escalated" && <Button variant="outline" disabled={Boolean(busy)} onClick={() => act("matches", "/api/matches")}>{busy === "matches" ? "Asking again…" : "Ask my matches again"}</Button>}</div>
         </CardContent></Card>}
-      {mentorRecord && <MatchList matches={state?.matches ?? []} round={state?.request_round ?? null} />}
+      {mentorRecord && <div className="mt-5"><MatchList matches={state?.matches ?? []} round={state?.request_round ?? null} /></div>}
     </>;
   } else if (page === "assessment") {
     const fields = exploring ? explorerSteps.slice(1).flatMap(item => item.fields) : assessmentFields;
@@ -303,7 +303,7 @@ export default function App({ children }) {
         <Button type="button" variant={exploring ? "outline" : "default"} aria-pressed={!exploring} onClick={() => setSignupPath("idea")}><Lightbulb className="size-4" />I have an idea</Button>
         <Button type="button" variant={exploring ? "default" : "outline"} aria-pressed={exploring} onClick={() => setSignupPath("exploring")}><Compass className="size-4" />No idea yet</Button>
       </div>
-      <VoiceIntro live={state?.ai_mode === "live"} onAnswers={applyVoiceAnswers} onSave={saveFromVoice} />
+      <div className="mb-5"><VoiceIntro live={state?.ai_mode === "live"} onAnswers={applyVoiceAnswers} onSave={saveFromVoice} /></div>
       <Card className="form-card"><CardContent><form onSubmit={event => { event.preventDefault(); void saveAssessment(); }}>
         <div className="form-grid" key={exploring ? "exploring" : "idea"}>
           {fields.map(field => <div className={`field ${field.full ? "field-full" : ""}`} key={field.name}>

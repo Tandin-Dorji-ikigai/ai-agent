@@ -142,9 +142,11 @@ export function BeginnerCoach({ onMentor, onUpdateNeeds }: { onMentor: () => voi
             <CardDescription>The agent is asking a mentor to meet you and will share this, so you do not have to repeat it.</CardDescription>
           </CardHeader>
           <CardContent className="stack">
-            <div className="info-pair"><span>The problem</span><strong>{coach.summary.problem}</strong></div>
-            <div className="info-pair"><span>Who has it</span><strong>{coach.summary.who_has_it}</strong></div>
-            <div className="info-pair"><span>Your idea</span><strong>{coach.summary.idea}</strong></div>
+            <dl className="coach-facts">
+              <div><dt>The problem</dt><dd>{coach.summary.problem}</dd></div>
+              <div><dt>Who has it</dt><dd>{coach.summary.who_has_it}</dd></div>
+              <div><dt>Your idea</dt><dd>{coach.summary.idea}</dd></div>
+            </dl>
             <div>
               <h3>What you found</h3>
               <ul className="mt-2 list-disc pl-5 space-y-1 muted">{coach.summary.evidence.map((e) => <li key={e}>{e}</li>)}</ul>
@@ -162,7 +164,7 @@ export function BeginnerCoach({ onMentor, onUpdateNeeds }: { onMentor: () => voi
       )}
 
       {done.length > 0 && (
-        <Card className="form-card">
+        <Card className="form-card mt-6">
           <CardHeader>
             <CardTitle>What you have found so far</CardTitle>
           </CardHeader>
@@ -181,13 +183,13 @@ export function BeginnerCoach({ onMentor, onUpdateNeeds }: { onMentor: () => voi
         </Card>
       )}
 
-      <div className="row wrap mt-6">
+      <div className="stack-tight items-start mt-6">
         {coach?.status === "active" && (
-          <Button variant="ghost" disabled={Boolean(busy)} onClick={() => void askMentor()}>
+          <Button variant="outline" disabled={Boolean(busy)} onClick={() => void askMentor()}>
             Ask a human mentor now
           </Button>
         )}
-        <Button variant="link" className="px-0" onClick={onUpdateNeeds}>
+        <Button variant="link" className="h-auto px-0" onClick={onUpdateNeeds}>
           Have an idea now? Update your needs
         </Button>
       </div>
@@ -219,8 +221,10 @@ function OpenStep({
         <CardDescription className="coach-mission">{step.mission}</CardDescription>
       </CardHeader>
       <CardContent className="stack">
-        {step.why && <div className="info-pair"><span>Why it matters</span><strong>{step.why}</strong></div>}
-        <div className="info-pair"><span>Report back when</span><strong>{step.done_when}</strong></div>
+        <dl className="coach-facts">
+          {step.why && <div><dt>Why it matters</dt><dd>{step.why}</dd></div>}
+          <div><dt>Report back when</dt><dd>{step.done_when}</dd></div>
+        </dl>
         {step.example && <p className="muted text-sm">Example of a report: “{step.example}”</p>}
 
         {step.attempts > 0 && step.feedback && (
