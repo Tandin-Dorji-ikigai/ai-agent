@@ -396,7 +396,14 @@ export function CallRoom({
   });
 
   // The other person left (a room message, or the shared state): leave too, saving this phone's last part.
-  const otherLeft = endedByOther || (role === "mentor" ? !!call?.done.entrepreneur : !!call?.done.mentor);
+  // A "finished" flag only counts once the other person has been in the call with this phone; an old flag
+  // (they left before this person joined) must not end the call the moment this person arrives.
+  const other = role === "mentor" ? "entrepreneur" : "mentor";
+  const otherDone = !!call?.done[other];
+  const otherHereNow = phase === "ready" && (remotePresent || (!!call?.joined[other] && !otherDone));
+  const [otherWasHere, setOtherWasHere] = useState(false);
+  if (otherHereNow && !otherWasHere) setOtherWasHere(true);
+  const otherLeft = endedByOther || (otherWasHere && otherDone);
   useEffect(() => {
     if (phase === "ready" && otherLeft) void leaveRef.current();
   }, [phase, otherLeft]);

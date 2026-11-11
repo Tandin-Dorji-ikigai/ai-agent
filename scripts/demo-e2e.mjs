@@ -500,6 +500,46 @@ async function noActionsRun(fx) {
   check("   then the mentee can ask another mentor instead", alt.status === 200 && s.pending_request?.mentor.id === other?.id, { alt: alt.json, pending: s.pending_request });
 }
 
+// What broke a real call: someone left (or tapped back) while alone, so they
+// were marked finished; the other person joining later must not end the call,
+// and a call that ended with nothing recorded must open again.
+async function callRejoinRun(fx) {
+  console.log("\nCalls: leaving and coming back, and a call that ended with nothing recorded");
+  await call("POST", "/api/demo/reset");
+  await call("POST", "/api/assessment", fx.assessment);
+  await call("POST", "/api/matches");
+  await call("POST", "/api/requests/start");
+  let s = await state();
+  const b = await call("POST", "/api/requests/accept", { request_id: s.pending_request.id, scheduled_at: s.pending_request.offered_slots[0] });
+  const bookingId = b.json.booking_id;
+  const j1 = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "mentor" });
+  await call("POST", "/api/calls/end", { call_id: j1.json.call_id, role: "mentor" });
+  s = await state();
+  check("   the mentor leaves while alone: marked finished, the call stays open", s.call?.status === "open" && s.call.done.mentor === true, s.call);
+  await call("POST", "/api/calls/join", { booking_id: bookingId, role: "mentor" });
+  s = await state();
+  check("   rejoining clears the mentor's finished flag", s.call?.status === "open" && s.call.done.mentor === false && s.call.joined.mentor === true, s.call);
+  await call("POST", "/api/calls/end", { call_id: j1.json.call_id, role: "mentor" });
+  const je = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
+  s = await state();
+  check("   the mentee can still join after the mentor left", je.status === 200 && s.call?.status === "open", { je: je.json, call: s.call });
+  const ee = await call("POST", "/api/calls/end", { call_id: je.json.call_id, role: "entrepreneur" });
+  s = await state();
+  check(
+    "   both finished with nothing recorded: the call ends but the booking stays confirmed",
+    ee.json.finalized === true && s.call?.status === "ended" && s.booking?.status === "confirmed",
+    { ee: ee.json, call: s.call, booking: s.booking?.status },
+  );
+  const again = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
+  s = await state();
+  check(
+    "   joining again opens it as a fresh call (the session can still happen)",
+    again.status === 200 && again.json.call_id === je.json.call_id && s.call?.status === "open" &&
+      s.call.joined.entrepreneur === true && s.call.joined.mentor === false && s.call.done.mentor === false && s.call.done.entrepreneur === false,
+    { again: again.json, call: s.call },
+  );
+}
+
 async function coachRun(fx) {
   console.log("\nNo idea yet: the beginner coach, then a mentor");
   await call("POST", "/api/demo/reset");
@@ -576,6 +616,7 @@ if (process.env.KEEP_END_STATE === "1") {
   await declineRun(fx);
   await coachRun(fx);
   await noActionsRun(fx);
+  await callRejoinRun(fx);
 }
 console.log(failures === 0 ? `\nAll checks passed (${RUNS} runs).` : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

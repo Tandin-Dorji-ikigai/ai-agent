@@ -56,6 +56,48 @@ async function loadCall(callId: string): Promise<CallRow> {
   return call;
 }
 
+/** After this long an ended call's transcript is surely built, so it may be reopened even if parts were recorded. */
+const REOPEN_AFTER_MS = 60_000;
+
+/**
+ * A call that ended without becoming a session (nothing was said, or both left
+ * within seconds) would otherwise block its booking for good: the booking is
+ * still confirmed, so the next join opens it again as a fresh call (new room,
+ * nobody joined yet). A call that recorded something waits REOPEN_AFTER_MS, so
+ * a transcript being built is never disturbed.
+ */
+async function reopenIfNoSession(call: CallRow, now: Date): Promise<CallRow> {
+  if (call.status !== "ended") return call;
+  const parts = must(await db().from("call_track_parts").select("id").eq("call_id", call.id).limit(1), "check parts") as unknown[];
+  const settled = !!call.ended_at && now.getTime() - Date.parse(call.ended_at) > REOPEN_AFTER_MS;
+  if (parts.length > 0 && !settled) return call;
+  must(await db().from("call_track_parts").delete().eq("call_id", call.id).select("id"), "clear old parts");
+  const reopened = must(
+    await db()
+      .from("calls")
+      .update({
+        status: "open",
+        provider: callProvider(),
+        room_name: `ydf-${randomBytes(12).toString("hex")}`,
+        room_url: null,
+        mentor_joined_at: null,
+        entrepreneur_joined_at: null,
+        mentor_consent_at: null,
+        entrepreneur_consent_at: null,
+        mentor_done_at: null,
+        entrepreneur_done_at: null,
+        transcript_built_at: null,
+        ended_at: null,
+      })
+      .eq("id", call.id)
+      .eq("status", "ended") // both joining at once: one reopens, the other reloads it
+      .select("*"),
+    "reopen call",
+  ) as CallRow[];
+  if (reopened.length > 0) console.info(`[calls] reopened call ${call.id} (it ended without a session)`);
+  return reopened[0] ?? loadCall(call.id);
+}
+
 function requireOpen(call: CallRow) {
   if (call.status !== "open") throw new ToolError("CALL_ENDED", "This call has ended.");
 }
@@ -100,6 +142,7 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
     "create call",
   );
   let call = must(await db().from("calls").select("*").eq("booking_id", bookingId).single(), "load call") as CallRow;
+  call = await reopenIfNoSession(call, now);
   requireOpen(call);
 
   if (call.provider === "livekit" && !call.room_url) {
@@ -108,6 +151,12 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
   }
   const joinedField = role === "mentor" ? "mentor_joined_at" : "entrepreneur_joined_at";
   const consentField = role === "mentor" ? "mentor_consent_at" : "entrepreneur_consent_at";
+  const doneField = role === "mentor" ? "mentor_done_at" : "entrepreneur_done_at";
+  // Back in the call after leaving (or tapping back): no longer finished, so the
+  // other person's screen does not take the old "left" as leaving now.
+  if (call[doneField]) {
+    call = must(await db().from("calls").update({ [doneField]: null }).eq("id", call.id).eq("status", "open").select("*").single(), "rejoin") as CallRow;
+  }
   // Tell the other person only when this is the first one in (rejoining, or
   // joining after them, sends nothing).
   const firstIn = !call[joinedField] && !call[role === "mentor" ? "entrepreneur_joined_at" : "mentor_joined_at"];
