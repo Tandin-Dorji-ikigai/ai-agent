@@ -98,6 +98,17 @@ async function reopenIfNoSession(call: CallRow, now: Date): Promise<CallRow> {
   return reopened[0] ?? loadCall(call.id);
 }
 
+/**
+ * The other person left before this person first arrived, and has not come
+ * back: they were never in the call together, so nothing this person records
+ * is a conversation (a one-person "session" must not be kept).
+ */
+function neverTogether(call: CallRow, role: CallRole): boolean {
+  const mine = role === "mentor" ? call.mentor_joined_at : call.entrepreneur_joined_at;
+  const otherLeft = role === "mentor" ? call.entrepreneur_done_at : call.mentor_done_at;
+  return !!mine && !!otherLeft && Date.parse(mine) > Date.parse(otherLeft);
+}
+
 function requireOpen(call: CallRow) {
   if (call.status !== "open") throw new ToolError("CALL_ENDED", "This call has ended.");
 }
@@ -152,14 +163,18 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
   const joinedField = role === "mentor" ? "mentor_joined_at" : "entrepreneur_joined_at";
   const consentField = role === "mentor" ? "mentor_consent_at" : "entrepreneur_consent_at";
   const doneField = role === "mentor" ? "mentor_done_at" : "entrepreneur_done_at";
+  const otherJoined = role === "mentor" ? "entrepreneur_joined_at" : "mentor_joined_at";
+  const otherDone = role === "mentor" ? "entrepreneur_done_at" : "mentor_done_at";
+  // Tell the other person whenever this person arrives and the other is not in
+  // the call (not joined yet, or left). A refresh while already in sends nothing.
+  const arriving = !(call[joinedField] && !call[doneField]);
+  const otherIn = !!call[otherJoined] && !call[otherDone];
+  const notifyOther = arriving && !otherIn;
   // Back in the call after leaving (or tapping back): no longer finished, so the
   // other person's screen does not take the old "left" as leaving now.
   if (call[doneField]) {
     call = must(await db().from("calls").update({ [doneField]: null }).eq("id", call.id).eq("status", "open").select("*").single(), "rejoin") as CallRow;
   }
-  // Tell the other person only when this is the first one in (rejoining, or
-  // joining after them, sends nothing).
-  const firstIn = !call[joinedField] && !call[role === "mentor" ? "entrepreneur_joined_at" : "mentor_joined_at"];
   if (!call[joinedField]) {
     // Joining is agreeing to recording: the call screen says the call is
     // recorded, before and during it, and either person can stop it
@@ -195,8 +210,8 @@ export async function joinCall(bookingId: string, role: CallRole, now: Date) {
     // time: offset = server_time_ms - Date.now() at the moment this arrives.
     server_time_ms: Date.now(),
     part_seconds: PART_SECONDS,
-    /** The other person has not joined yet: the route sends them a push notification. */
-    notify_other: firstIn,
+    /** The other person is not in the call: the route sends them a push notification. */
+    notify_other: notifyOther,
   };
 }
 
@@ -229,6 +244,7 @@ export async function uploadPart(input: { callId: string; role: CallRole; part: 
   const call = await loadCall(input.callId);
   requireOpen(call);
   if (!recordingState(call).allowed) throw new ToolError("RECORDING_NOT_ALLOWED", "Recording needs both people to agree first.");
+  if (neverTogether(call, input.role)) throw new ToolError("RECORDING_NOT_ALLOWED", "Recording waits until both of you are in the call.");
 
   const existing = must(
     await db().from("call_track_parts").select("id, segments, source").eq("call_id", call.id).eq("role", input.role).eq("part", input.part).maybeSingle(),

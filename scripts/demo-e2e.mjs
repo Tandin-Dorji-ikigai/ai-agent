@@ -523,6 +523,13 @@ async function callRejoinRun(fx) {
   const je = await call("POST", "/api/calls/join", { booking_id: bookingId, role: "entrepreneur" });
   s = await state();
   check("   the mentee can still join after the mentor left", je.status === 200 && s.call?.status === "open", { je: je.json, call: s.call });
+  check("   the mentor is away, so they are told the mentee has arrived", je.json.notify_other === true, je.json);
+  const alone = await upload({ call_id: je.json.call_id, role: "entrepreneur", part: 0, started_at_ms: je.json.server_time_ms });
+  check(
+    "   the mentee alone is not recorded (they were never in the call together)",
+    alone.status === 409 && alone.json.code === "RECORDING_NOT_ALLOWED",
+    alone.json,
+  );
   const ee = await call("POST", "/api/calls/end", { call_id: je.json.call_id, role: "entrepreneur" });
   s = await state();
   check(

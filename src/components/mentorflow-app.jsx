@@ -448,7 +448,9 @@ export default function App({ children }) {
 
   // The other person is already in the session room and this one is not (only while the call is open).
   const otherWaiting = !isCall && !isPublic && booking?.status === "confirmed" && (role === "entrepreneur" || myBooking) && state?.call?.status === "open"
-    && (role === "mentor" ? state.call.joined.entrepreneur && !state.call.joined.mentor : state.call.joined.mentor && !state.call.joined.entrepreneur);
+    && (role === "mentor"
+      ? state.call.joined.entrepreneur && !state.call.done.entrepreneur && !(state.call.joined.mentor && !state.call.done.mentor)
+      : state.call.joined.mentor && !state.call.done.mentor && !(state.call.joined.entrepreneur && !state.call.done.entrepreneur));
   const notices = <>
     {otherWaiting && <Alert className="mb-6"><Video className="size-4" /><AlertTitle>{role === "mentor" ? firstName(state?.entrepreneur?.full_name) || "Your mentee" : firstName(mentor.name) || "Your mentor"} is in the session room</AlertTitle><AlertDescription>Join now to start your mentoring call. {RECORDING_NOTICE}<Button size="sm" className="self-start mt-2" onClick={() => go(callPage, "?join=1")}>Join now<ArrowRight className="size-4" /></Button></AlertDescription></Alert>}
     {lastError && <Alert variant="destructive" className="mb-6"><AlertTitle>That didn’t work</AlertTitle><AlertDescription>{lastError.message}<Button type="button" variant="link" className="self-start px-0" onClick={clearLastError}>Dismiss</Button></AlertDescription></Alert>}

@@ -130,6 +130,10 @@ export function CallRoom({
   const myConsent = role === "mentor" ? !!call?.consent.mentor : !!call?.consent.entrepreneur;
   const otherConsent = role === "mentor" ? !!call?.consent.entrepreneur : !!call?.consent.mentor;
   const bothAgreed = myConsent && otherConsent;
+  // Record only while the other person is in the call with this phone (not
+  // before they arrive, not after they leave): one person alone is not a session.
+  const otherRole = role === "mentor" ? "entrepreneur" : "mentor";
+  const otherInCall = remotePresent || (!!call?.joined[otherRole] && !call?.done[otherRole]);
   const video = info?.provider === "livekit" && connected;
 
   // ---- Join: personal pass, then connect to the room ----------------------
@@ -274,7 +278,7 @@ export function CallRoom({
   );
 
   useEffect(() => {
-    if (phase !== "ready" || !info || !bothAgreed || recorderRef.current || leavingRef.current) return;
+    if (phase !== "ready" || !info || !bothAgreed || !otherInCall || recorderRef.current || leavingRef.current) return;
     let stopped = false;
     void micStream()
       .then((stream) => {
@@ -287,7 +291,7 @@ export function CallRoom({
     return () => {
       stopped = true;
     };
-  }, [phase, info, bothAgreed, micStream, startPart]);
+  }, [phase, info, bothAgreed, otherInCall, micStream, startPart]);
 
   // Someone stopped the recording: stop this microphone too (the server refuses further parts anyway).
   useEffect(() => {
@@ -398,9 +402,8 @@ export function CallRoom({
   // The other person left (a room message, or the shared state): leave too, saving this phone's last part.
   // A "finished" flag only counts once the other person has been in the call with this phone; an old flag
   // (they left before this person joined) must not end the call the moment this person arrives.
-  const other = role === "mentor" ? "entrepreneur" : "mentor";
-  const otherDone = !!call?.done[other];
-  const otherHereNow = phase === "ready" && (remotePresent || (!!call?.joined[other] && !otherDone));
+  const otherDone = !!call?.done[otherRole];
+  const otherHereNow = phase === "ready" && otherInCall;
   const [otherWasHere, setOtherWasHere] = useState(false);
   if (otherHereNow && !otherWasHere) setOtherWasHere(true);
   const otherLeft = endedByOther || (otherWasHere && otherDone);
@@ -541,7 +544,7 @@ export function CallRoom({
         <div className="call-stage-caption">
           <span className="call-stage-status" role="status">
             {recording ? <span className="call-recording-dot" aria-hidden /> : <ShieldCheck className="size-3.5" />}
-            <span>{recording ? "Recording for the agent's notes" : phase === "ready" && bothAgreed ? "Starting the recording…" : "Not recording"}</span>
+            <span>{recording ? "Recording for the agent's notes" : phase === "ready" && myConsent && !otherInCall ? `Recording starts when ${otherFirst} joins` : phase === "ready" && bothAgreed ? "Starting the recording…" : "Not recording"}</span>
           </span>
           {phase === "ready" && info && (
             <Button type="button" size="sm" variant="outline" className="call-record-toggle" onClick={() => void setRecordingOn(!myConsent)}>
