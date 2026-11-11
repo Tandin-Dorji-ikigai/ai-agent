@@ -71,4 +71,21 @@ describe("agent activity timeline", () => {
     });
     expect(items.filter((i) => i.status === "done").map((i) => i.kind)).toEqual(["assessed", "support", "compared", "selected", "requested"]);
   });
+
+  it("a follow-up that is turned down says the mentee was told, not that the agent moved on", () => {
+    const items = agentTimeline({
+      ...empty,
+      entrepreneur,
+      requests: [
+        request({ id: "f1", kind: "direct", status: "declined", created_at: "2026-11-12T04:00:00Z" }),
+        request({ id: "f2", kind: "direct", status: "accepted", created_at: "2026-11-13T04:00:00Z", responded_at: "2026-11-13T05:00:00Z", booking_id: "b2", scheduled_at: "2026-11-15T04:00:00Z" }),
+      ],
+    });
+    const follow = items.filter((i) => i.kind === "requested" || i.kind === "scheduled");
+    expect(follow.map((i) => [i.title, i.detail.split(",")[0]])).toEqual([
+      ["Asked Karma for a follow-up session", "Could not take it this time"],
+      ["Asked Karma for a follow-up session", "Said yes."],
+      ["Scheduled your follow-up session", "With Karma Dorji"],
+    ]);
+  });
 });

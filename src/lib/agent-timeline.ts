@@ -50,6 +50,13 @@ const REQUEST_OUTCOME: Record<string, string> = {
   cancelled: "Request withdrawn.",
 };
 
+/** A follow-up goes to one mentor only: a no is passed on to the mentee, nobody else is asked. */
+const FOLLOW_UP_OUTCOME: Record<string, string> = {
+  ...REQUEST_OUTCOME,
+  declined: "Could not take it this time, so the agent told you.",
+  expired: "Did not reply in time, so the agent told you.",
+};
+
 const firstName = (full: string) => full.split(" ")[0];
 
 export function sessionWhen(iso: string): string {
@@ -97,7 +104,7 @@ export function agentTimeline(input: TimelineInput): TimelineItem[] {
       key: `request-${r.id}`,
       kind: "requested",
       title: r.kind === "direct" ? `Asked ${firstName(name)} for a follow-up session` : `Asked ${name} to mentor you`,
-      detail: REQUEST_OUTCOME[r.status] ?? "",
+      detail: (r.kind === "direct" ? FOLLOW_UP_OUTCOME : REQUEST_OUTCOME)[r.status] ?? "",
       at: r.created_at,
     });
     if (r.status === "accepted" && r.booking_id && r.scheduled_at) {
@@ -105,7 +112,7 @@ export function agentTimeline(input: TimelineInput): TimelineItem[] {
       done.push({
         key: `booking-${r.booking_id}`,
         kind: "scheduled",
-        title: "Scheduled your session",
+        title: r.kind === "direct" ? "Scheduled your follow-up session" : "Scheduled your session",
         detail: `With ${name}, ${sessionWhen(r.scheduled_at)}, Bhutan time.`,
         at: r.responded_at ?? r.created_at,
       });
