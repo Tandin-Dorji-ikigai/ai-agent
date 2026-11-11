@@ -53,9 +53,9 @@ const navigation = {
   ],
   mentor: [
     ["mentor-dashboard", "Dashboard", Home],
-    ["mentor-requests", "Mentor requests", Inbox],
-    ["availability", "My availability", CalendarDays],
-    ["workspace", "Session workspace", FileText],
+    ["mentor-requests", "Requests", Inbox],
+    ["availability", "Availability", CalendarDays],
+    ["workspace", "Session", FileText],
   ],
 };
 
@@ -450,38 +450,26 @@ export default function App({ children }) {
       <main className="public-main">{children}{notices}{content}</main>
     </div>
   ) : role === "entrepreneur" ? (
-    <div className="entrepreneur-app">
-      <header className="entrepreneur-topbar">
+    <div className="phone-app">
+      <header className="phone-topbar">
         <span className="app-area-label">Entrepreneur</span>
         <div className="row">{notificationButton}<Avatar className="size-8"><AvatarFallback>{entrepreneurInitials}</AvatarFallback></Avatar>{viewer.signed_in && <SignOutButton iconOnly />}</div>
       </header>
-      <main className="entrepreneur-content">{children}{notices}{content}</main>
-      <nav className="entrepreneur-navbar" aria-label="Entrepreneur navigation">
+      <main className="phone-content">{children}{notices}{content}</main>
+      <nav className="phone-navbar" aria-label="Entrepreneur navigation">
         {(!state?.entrepreneur ? navigation.entrepreneur.filter(([id]) => id !== "assessment") : savedExploring ? [["coach", "First steps", Compass], ...navigation.entrepreneur.filter(([id]) => id !== "assessment")] : navigation.entrepreneur).map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
       </nav>
     </div>
   ) : (
-    <div className="app-shell mentor-app">
-      <aside className="sidebar">
-        <p className="side-group">MENTOR WORKSPACE</p>
-        <nav className="nav-items" aria-label="Mentor navigation">
-          {navigation.mentor.map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-[18px]" /><span>{label}</span></Button>)}
-        </nav>
-        <div className="side-bottom">
-          {viewer.signed_in && <SignOutButton className="nav-item" iconClassName="size-[18px]" />}
-          <Separator className="my-3" />
-          <div className="user-chip"><Avatar className="size-8"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar><div><strong>{mentor.name}</strong><p>Mentor</p></div></div>
-        </div>
-      </aside>
-      <main className="main">
-        <header className="topbar">
-          <div className="crumb">Workspace <span>/</span> <strong>Mentor workspace</strong></div>
-          <div className="top-actions">
-            <Avatar className="size-8 top-avatar"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar>
-          </div>
-        </header>
-        <div className="content">{children}{notices}{content}</div>
-      </main>
+    <div className="phone-app">
+      <header className="phone-topbar">
+        <span className="app-area-label">Mentor</span>
+        <div className="row"><Avatar className="size-8"><AvatarFallback>{mentorInitials}</AvatarFallback></Avatar>{viewer.signed_in && <SignOutButton iconOnly />}</div>
+      </header>
+      <main className="phone-content">{children}{notices}{content}</main>
+      <nav className="phone-navbar" aria-label="Mentor navigation">
+        {navigation.mentor.map(([id, label, Icon]) => <Button key={id} variant="ghost" className={`app-nav-item ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon className="size-5" strokeWidth={1.7} /><span>{label}</span></Button>)}
+      </nav>
     </div>
   );
 }
