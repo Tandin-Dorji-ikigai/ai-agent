@@ -83,7 +83,7 @@ export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { la
 }
 
 /** Signs this device out and goes to the sign-in page. */
-export function SignOutButton() {
+export function SignOutButton({ className = "", iconClassName = "size-4", iconOnly = false }: { className?: string; iconClassName?: string; iconOnly?: boolean }) {
   const [busy, setBusy] = useState(false);
   async function signOut() {
     setBusy(true);
@@ -94,9 +94,17 @@ export function SignOutButton() {
     }
   }
   return (
-    <Button type="button" variant="ghost" size="sm" className="sign-out-button" disabled={busy} onClick={() => void signOut()}>
-      <LogOut className="size-4" />
-      <span>{busy ? "Signing out…" : "Sign out"}</span>
+    <Button
+      type="button"
+      variant="ghost"
+      size={iconOnly ? "icon" : "default"}
+      className={className}
+      aria-label={iconOnly ? "Sign out" : undefined}
+      disabled={busy}
+      onClick={() => void signOut()}
+    >
+      <LogOut className={iconClassName} />
+      {!iconOnly && <span>Sign out</span>}
     </Button>
   );
 }
