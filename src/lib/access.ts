@@ -107,6 +107,9 @@ export const SIGN_IN_PATH = "/login";
 export const OLD_SIGN_IN_PATHS = ["/access", "/entrepreneur/login", "/mentor/login"] as const;
 /** Pages anyone may open without signing in. */
 export const SIGN_IN_PAGES = [SIGN_IN_PATH, ...OLD_SIGN_IN_PATHS] as const;
+// Personal accounts are separate from the existing shared-password demo roles.
+export const ACCOUNT_PAGES = ["/account", "/account/login"] as const;
+export const REGISTRATION_PAGES = ["/get-started", "/entrepreneur/sign-up/idea", "/entrepreneur/sign-up/exploring"] as const;
 
 type Rule = "public" | "any" | readonly ViewerRole[];
 
@@ -119,6 +122,11 @@ const TEAM_ONLY = [] as const;
 /** Every API route and who may call it. A route missing here is team-only (a test checks none is missing). */
 export const API_RULES: Record<string, Rule> = {
   "/api/access": "public",
+  "/api/auth/signup": "public",
+  "/api/auth/signin": "public",
+  "/api/auth/signout": "public",
+  "/api/auth/resend": "public",
+  "/api/auth/me": "public",
   "/api/state": "any",
   // Entrepreneur
   "/api/assessment": ENTREPRENEUR,
@@ -161,6 +169,9 @@ function under(pathname: string, area: string): boolean {
 }
 
 export function ruleFor(pathname: string): Rule {
+  // These pages expose only a shell. Account data is independently validated
+  // by Supabase Auth in /api/auth/me; no demo role or privileges are granted.
+  if ((ACCOUNT_PAGES as readonly string[]).includes(pathname) || (REGISTRATION_PAGES as readonly string[]).includes(pathname)) return "public";
   if ((SIGN_IN_PAGES as readonly string[]).includes(pathname)) return "public";
   if (pathname.startsWith("/api/")) return API_RULES[pathname] ?? TEAM_ONLY;
   if (under(pathname, "/entrepreneur")) return ENTREPRENEUR;

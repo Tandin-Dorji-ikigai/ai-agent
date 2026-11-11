@@ -1,5 +1,10 @@
 # MentorFlow screens: how they connect to the backend
 
+Personal entrepreneur registration is integrated separately at `/get-started`,
+`/account/login` and `/account`. It preserves shared role-password login,
+mentor workflows and calls. See [registration setup](entrepreneur-registration.md)
+for migration 010, email confirmation and account boundaries.
+
 The MentorFlow design from PR #2 (`src/components/mentorflow-app.jsx`, shadcn/ui,
 TanStack Query) is the app's UI. Every screen uses the real API; the
 browser-only preview mode from the PR was retired once the screens were

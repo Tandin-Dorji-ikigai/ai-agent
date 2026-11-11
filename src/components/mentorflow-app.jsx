@@ -38,6 +38,7 @@ import { MentorProgress } from "@/components/mentor-progress";
 import { SignInForm, SignOutButton } from "@/components/sign-in-form";
 import { CallAlerts } from "@/components/push/call-alerts";
 import { BeginnerCoach } from "@/components/coach/beginner-coach";
+import { registrationDefaults, registrationFromForm } from "@/lib/auth/registration-form";
 
 const DAY_NAME = { sun: "Sunday", mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday" };
 const firstName = name => (name ?? "").split(" ")[0];
@@ -64,7 +65,8 @@ export default function App({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const page = pageForPath(pathname);
-  const { state, error, busy, act, refresh, lastError, clearLastError } = useDemo();
+  const { state, account, authLoading, error, busy, act, refresh, lastError, clearLastError } = useDemo();
+  const [signupEmail, setSignupEmail] = useState("");
   const [wizard, setWizard] = useState({ page: null, step: 0 });
   const step = wizard.page === page ? wizard.step : 0;
   const setStep = value => setWizard({ page, step: value });
@@ -108,11 +110,12 @@ export default function App({ children }) {
   const mentorInitials = (mentorRecord?.full_name ?? "Mentor").split(" ").map(part => part[0]).slice(0, 2).join("");
   const match = state?.matches.find(item => item.mentor.id === mentorRecord?.id);
   // Saved needs once assessed; before that the demo defaults (an exploring founder starts with idea development).
-  const supportNeeds = supportDraft ?? (state?.entrepreneur?.assessment_completed_at ? state.entrepreneur.expertise_needs : null) ?? (signupPath === "exploring" || page === "register-without-idea" ? ["idea_development"] : PEMA_ASSESSMENT_ANSWERS.expertise_needs);
+  const supportNeeds = supportDraft ?? (["register-entrepreneur", "register-without-idea"].includes(page) ? [] : (state?.entrepreneur?.assessment_completed_at ? state.entrepreneur.expertise_needs : null) ?? (signupPath === "exploring" || page === "register-without-idea" ? ["idea_development"] : PEMA_ASSESSMENT_ANSWERS.expertise_needs));
   const drafts = state?.actions.filter(item => item.status === "draft") ?? [];
   const role = pagePaths[page]?.startsWith("/mentor/") ? "mentor" : "entrepreneur";
-  const isPublic = ["welcome", "signup-choice", "register-entrepreneur", "register-without-idea", "register-mentor", "mentor-submitted", "login"].includes(page);
-  const isLogin = page === "login";
+  const isPublic = ["welcome", "signup-choice", "register-entrepreneur", "register-without-idea", "register-mentor", "mentor-submitted", "login", "account-login"].includes(page);
+  const isAccountLogin = page === "account-login";
+  const isLogin = page === "login" || isAccountLogin;
   const isCall = page === "video-call" || page === "mentor-call";
   // The mentor's usual weekly times (requests offer the next of these).
   const savedWeekly = (mentorRecord?.weekly_slots ?? []).map((slot, index) => ({ id: `${slot.day}-${slot.time}-${index}`, day: slot.day, time: slot.time }));
@@ -130,6 +133,11 @@ export default function App({ children }) {
 
   useEffect(() => {
     function onLocationChange() {
+      if (window.location.pathname === "/account/login" && (window.location.hash.includes("access_token=") || window.location.hash.includes("error_description="))) {
+        window.history.replaceState(null, "", window.location.pathname);
+        setPreviewNotice("Email confirmation link opened. Sign in to continue, or request a new confirmation email if the link expired.");
+        return;
+      }
       const legacyPath = window.location.hash.slice(1);
       if (pageForPath(legacyPath)) router.replace(legacyPath);
     }
@@ -182,6 +190,18 @@ export default function App({ children }) {
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Please check your answers.");
     }
+  }
+
+  async function registerEntrepreneur() {
+    setFormError("");
+    try {
+      const input = registrationFromForm({ ...registrationDefaults(), ...draft }, supportNeeds, exploring);
+      const result = await act("signup", "/api/auth/signup", input);
+      if (!result.ok) return;
+      setDraft({}); setSupportDraft(null); setSignupEmail(input.email);
+      go(result.signed_in ? "account" : "account-login");
+      setPreviewNotice(result.signed_in ? "Your entrepreneur account has been created." : "If this address can be registered, a confirmation email has been requested. Check your inbox, confirm your email, then sign in. If you already have an account, sign in instead.");
+    } catch (error) { setFormError(error instanceof Error ? error.message : "Please check your registration."); }
   }
 
   /** The voice intro's answers fill the full form below, so both show the same thing. */
@@ -285,7 +305,7 @@ export default function App({ children }) {
     const steps = isMentor ? mentorSteps : exploring ? explorerSteps : entrepreneurSteps;
     const activeStep = Math.min(step, steps.length - 1);
     const fields = registering ? steps[activeStep].fields : exploring ? explorerSteps.slice(1).flatMap(item => item.fields) : assessmentFields;
-    const values = isMentor ? { ...mentorApplication, ...mentorDraft } : { ...profile, ...draft };
+    const values = isMentor ? { ...mentorApplication, ...mentorDraft } : { ...(registering ? registrationDefaults() : profile), ...draft };
     const updateValue = (name, value) => isMentor ? setMentorDraft(current => ({ ...current, [name]: value })) : setDraft(current => ({ ...current, [name]: value }));
 
     content = <>
@@ -297,12 +317,14 @@ export default function App({ children }) {
       {page === "assessment" && <VoiceIntro live={state?.ai_mode === "live"} onAnswers={applyVoiceAnswers} onSave={saveFromVoice} />}
       <Card className="form-card"><CardContent><form onSubmit={event => {
         event.preventDefault();
+        if (registering && !isMentor && activeStep === 0 && values.password !== values.confirmPassword) { setFormError("Your passwords do not match."); return; }
+        setFormError("");
         if (registering && activeStep < steps.length - 1) setStep(activeStep + 1);
         else if (isMentor) go("mentor-submitted");
+        else if (registering) void registerEntrepreneur();
         else void saveAssessment();
       }}>
-        {registering && <Alert className="mb-6"><AlertTitle>{isMentor ? "Mentor application preview" : "Demo onboarding"}</AlertTitle><AlertDescription>{isMentor ? "This form is a design preview. No application is sent for review." : "No new account is created in this demo. Your business answers are saved to the demo profile; contact details and extra preferences stay in this tab."}</AlertDescription></Alert>}
-        {!isMentor && registering && state && !state.seeded && <Alert className="mb-6"><AlertTitle>Load the demo before saving</AlertTitle><AlertDescription>The connected assessment needs the fictional demo profile.{canLoadDemo ? <Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => act("reset", "/api/demo/reset")}>{busy === "reset" ? "Loading…" : "Load demo data"}</Button> : ` ${loadDemoHint}`}</AlertDescription></Alert>}
+        {registering && <Alert className="mb-6"><AlertTitle>{isMentor ? "Mentor application preview" : "Create your entrepreneur account"}</AlertTitle><AlertDescription>{isMentor ? "This form is a design preview. No application is sent for review." : "Your account and mentorship profile will be saved. You may need to confirm your email before signing in."}</AlertDescription></Alert>}
         {registering && <><div className="signup-step-summary"><span>Step {activeStep + 1} of {steps.length}</span><strong>{steps[activeStep].title}</strong></div><div className="stepper" aria-label="Registration progress">
           {steps.map((item, index) => <div key={item.title} className={`registration-step ${index === step ? "current" : index < step ? "done" : ""}`} aria-current={index === step ? "step" : undefined}>
             <span className="step-bubble">{index < step ? <Check className="size-3.5" /> : index + 1}</span><span>{item.title}</span>
@@ -318,7 +340,7 @@ export default function App({ children }) {
               </Select>
             ) : field.type === "textarea" ? (
               <Textarea id={field.name} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} required={field.required} maxLength={1000} rows={3} />
-            ) : <Input id={field.name} type={field.type || "text"} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} required={field.required} min={field.type === "number" ? 0 : undefined} max={field.name === "budget" ? 100000 : undefined} maxLength={field.name === "productName" ? 120 : 200} />}
+            ) : <Input id={field.name} type={field.type || "text"} autoComplete={field.type === "password" ? "new-password" : field.type === "email" ? "email" : undefined} value={values[field.name] ?? ""} onChange={event => updateValue(field.name, event.target.value)} required={field.required} minLength={field.type === "password" ? 8 : undefined} min={field.type === "number" ? 0 : undefined} max={field.name === "budget" ? 100000 : undefined} maxLength={field.name === "productName" ? 120 : field.type === "password" ? 128 : 200} />}
           </div>)}
         </div>
         {!isMentor && (!registering || activeStep === steps.length - 1) && <fieldset className="mt-6"><legend className="text-sm font-semibold">Where would you like support? (choose 1–5)</legend><div className="form-grid mt-3">{EXPERTISE.map(key => <div className="checkbox-row" key={key}><Checkbox id={`support-${key}`} checked={supportNeeds.includes(key)} disabled={!supportNeeds.includes(key) && supportNeeds.length >= 5} onCheckedChange={checked => setSupportDraft(current => { const selected = current ?? supportNeeds; return checked ? [...selected, key] : selected.filter(item => item !== key); })} /><Label htmlFor={`support-${key}`}>{expertiseLabel(key)}</Label></div>)}</div></fieldset>}
@@ -330,7 +352,7 @@ export default function App({ children }) {
         <div className="form-nav">
           <Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => registering && activeStep > 0 ? setStep(activeStep - 1) : go(registering ? isMentor ? "welcome" : "signup-choice" : "connect")}><ArrowLeft className="size-4" />{registering && activeStep > 0 ? "Previous" : "Back"}</Button>
           <Button type="submit" disabled={Boolean(busy)}>
-            {busy === "assessment" ? "Saving…" : busy === "matches" ? "Finding a mentor…" : registering && activeStep < steps.length - 1 ? "Continue" : isMentor ? "Preview application" : registering ? "Save assessment" : "Save needs & find mentor"}<ArrowRight className="size-4" />
+            {busy === "signup" ? "Creating account…" : busy === "assessment" ? "Saving…" : busy === "matches" ? "Finding a mentor…" : registering && activeStep < steps.length - 1 ? "Continue" : isMentor ? "Preview application" : registering ? "Create account" : "Save needs & find mentor"}<ArrowRight className="size-4" />
           </Button>
         </div>
       </form></CardContent></Card>
@@ -428,9 +450,10 @@ export default function App({ children }) {
   } else if (isLogin) {
     content = <div className="login-screen">
       <Button variant="ghost" className="self-start mb-5" onClick={() => go("welcome")}><ArrowLeft className="size-4" />Back</Button>
-      <div className="page-header"><div><p className="kicker">SIGN IN</p><h1>Welcome back.</h1><p className="subtitle">One sign-in for everyone. Your password opens your workspace.</p></div></div>
-      <Card><CardHeader><CardTitle>Sign in</CardTitle><CardDescription>Enter the password the team gave you. It takes you to your workspace: entrepreneur, mentor or YDF staff. This test version has no personal accounts, so please don’t enter real personal details anywhere in it.</CardDescription></CardHeader><CardContent>
-        <SignInForm />
+      <div className="page-header"><div><p className="kicker">{isAccountLogin ? "YOUR ENTREPRENEUR ACCOUNT" : "SIGN IN"}</p><h1>Welcome back.</h1><p className="subtitle">{isAccountLogin ? "Sign in with your email and password." : "Your team password opens your workspace."}</p></div></div>
+      <Card><CardHeader><CardTitle>{isAccountLogin ? "Entrepreneur / mentee sign in" : "Team and mentor sign in"}</CardTitle><CardDescription>{isAccountLogin ? "Use the account you created during registration." : "Enter the password the team gave you. It takes you to your demo workspace: entrepreneur, mentor or YDF staff."}</CardDescription></CardHeader><CardContent>
+        <SignInForm key={isAccountLogin ? "account" : "role"} accountMode={isAccountLogin} defaultEmail={signupEmail} />
+        <Button variant="link" className="mt-4" asChild><Link href={isAccountLogin ? "/login" : "/account/login"}>{isAccountLogin ? "Team or mentor sign in" : "Entrepreneur account sign in"}</Link></Button>
       </CardContent></Card>
       <div className="login-footer"><p className="subtitle">New here? There’s a place for you.</p><Button variant="link" onClick={() => go("signup-choice")}>Start your journey<ArrowRight className="size-3.5" /></Button></div>
     </div>;
@@ -474,6 +497,18 @@ export default function App({ children }) {
     return pathname === "/ydf" ? <main className="legacy-demo mx-auto w-full max-w-6xl px-4 py-6"><div className="row wrap mb-6"><Button variant="outline" asChild><Link href="/">MentorFlow home</Link></Button><Button variant="outline" asChild><Link href="/entrepreneur/connect">Entrepreneur</Link></Button><Button variant="outline" asChild><Link href="/mentor/dashboard">Mentor workspace</Link></Button></div>{children}</main> : children;
   }
 
+  if (page === "account") {
+    return <main className="entrepreneur-content mx-auto max-w-xl">{children}
+      <div className="page-header"><div><p className="kicker">YOUR ENTREPRENEUR ACCOUNT</p><h1>{account ? `Welcome, ${firstName(account.entrepreneur.full_name)}` : "Your account"}</h1><p className="subtitle">{account ? "Your mentorship profile is saved." : authLoading ? "Loading your account…" : "Sign in to view your saved profile."}</p></div></div>
+      {(lastError || error) && <Alert variant="destructive" className="mb-6"><AlertTitle>Account unavailable</AlertTitle><AlertDescription>{(lastError || error).message}<Button variant="link" onClick={refresh}>Try again</Button></AlertDescription></Alert>}
+      {account ? <Card><CardHeader><CardTitle>Registration complete</CardTitle><CardDescription>{account.path === "exploring" ? "Exploring your first business idea" : account.entrepreneur.business_name}</CardDescription></CardHeader><CardContent className="stack"><Badge variant="secondary">Entrepreneur / mentee</Badge>
+        {[["Full name", account.entrepreneur.full_name], ["Email", account.email], ["Phone", account.phone || "Not provided"], ["Dzongkhag", account.entrepreneur.location], ["Preferred language", LANGUAGE_LABEL[account.entrepreneur.preferred_language]], ["Industry", sectorLabel(account.entrepreneur.sector)], ["Mentorship goals", account.entrepreneur.goals.join(", ")], ["Session budget", formatNu(account.entrepreneur.budget)]].map(([label, value]) => <div className="info-pair" key={label}><span>{label}</span><strong>{value}</strong></div>)}
+        <div><h3>Support you requested</h3><div className="tag-list mt-2">{account.entrepreneur.expertise_needs.map(item => <Badge key={item} variant="outline">{expertiseLabel(item)}</Badge>)}</div></div>
+        <Button variant="outline" disabled={Boolean(busy)} onClick={async () => { const result = await act("signout", "/api/auth/signout"); if (result.ok) { setDraft({}); setSupportDraft(null); go("account-login"); } }}>{busy === "signout" ? "Signing out…" : "Sign out"}</Button>
+      </CardContent></Card> : !authLoading && <Button asChild><Link href="/account/login">Sign in</Link></Button>}
+    </main>;
+  }
+
   if (isCall) return <>{children}{content}</>;
 
   if (!isPublic && (!state || !state.seeded)) {
@@ -493,7 +528,7 @@ export default function App({ children }) {
 
   return isPublic ? (
     <div className="public">
-      <header className="public-top">{page !== "welcome" && <Button variant="ghost" className="brand-button" onClick={() => go("welcome")} aria-label="MentorFlow home">{brand}</Button>}{!isLogin && <nav aria-label="Public navigation"><Button variant="ghost" size="sm" onClick={() => go("login")}>Sign in<ArrowRight className="size-3.5" /></Button></nav>}</header>
+      <header className="public-top">{page !== "welcome" && <Button variant="ghost" className="brand-button" onClick={() => go("welcome")} aria-label="MentorFlow home">{brand}</Button>}{!isLogin && <nav aria-label="Public navigation"><Button variant="ghost" size="sm" onClick={() => go(["signup-choice", "register-entrepreneur", "register-without-idea"].includes(page) ? "account-login" : "login")}>Sign in<ArrowRight className="size-3.5" /></Button></nav>}</header>
       <main className="public-main">{children}{notices}{content}</main>
     </div>
   ) : role === "entrepreneur" ? (

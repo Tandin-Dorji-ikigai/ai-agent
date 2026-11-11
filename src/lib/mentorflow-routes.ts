@@ -4,6 +4,8 @@ export const pagePaths: Record<string, string> = {
   "register-entrepreneur": "/entrepreneur/sign-up/idea",
   "register-without-idea": "/entrepreneur/sign-up/exploring",
   login: "/login",
+  "account-login": "/account/login",
+  account: "/account",
   "video-call": "/entrepreneur/call",
   "mentor-call": "/mentor/call",
   connect: "/entrepreneur/connect",

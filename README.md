@@ -24,6 +24,12 @@ Show Me Your Agent Hackathon 2026 (Innovate Bhutan / YDF). Problem focus: contin
 
 **Screens (MentorFlow UI, from PR #2, connected to the backend):** entrepreneur screens start at `/entrepreneur/connect`, mentor screens at `/mentor/dashboard`, and YDF stays at `/ydf`. Every screen uses the real API (there is no sample-data mode). See `docs/ui-integration.md`.
 
+**Personal entrepreneur signup:** `/get-started` now creates Supabase Auth accounts
+and saves both idea/exploring profiles. Personal sign-in is `/account/login`,
+with the saved profile at `/account`. The existing shared mentor/YDF/demo sign-in
+stays at `/login`. Apply migration 010 and configure confirmation redirects before
+using signup; see [registration setup](docs/entrepreneur-registration.md).
+
 **Video calls (optional, free):** create a project at cloud.livekit.io (no card needed) and add `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` to `.env.local`. Without them, calls work with no video (recording and transcripts still work). For local testing: `docker run --rm -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server:v1.9.1 --dev --bind 0.0.0.0 --node-ip 127.0.0.1`, then `LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`, `LIVEKIT_API_SECRET=secret`.
 
 ```bash
@@ -237,7 +243,7 @@ These rules are enforced in code (`tools.ts`, `policy.ts`), not only in prompts.
 
 The source of truth is `supabase/migrations/20261110000001_schema.sql`. The tables from the original plan are all there, with these changes:
 
-- `profiles` no longer references `auth.users`, because the prototype has no user accounts (sign-in is by role password).
+- Demo profiles remain separate from Auth. Migration 010 adds nullable `profiles.auth_user_id` for new personal entrepreneur accounts; shared demo sign-in still uses role passwords.
 - `entrepreneur_profiles` adds `expertise_needs`, `languages` and `assessment_completed_at`.
 - `mentor_profiles` adds `slots_remaining`, `sessions_delivered`, `headline` and `weekly_slots` (usual times, migration 005).
 - `action_items` adds `owner`, `due_in_days` and a `draft` status. Drafts become `pending` only after human confirmation.

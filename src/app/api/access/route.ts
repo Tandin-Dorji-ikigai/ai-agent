@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ACCESS_COOKIE, ACCESS_DAYS, accessCookieValue, gateOn, nextAfterSignIn, roleForPassword, rolePasswords } from "@/lib/access";
 import { fail, ok, parseBody } from "@/lib/http";
+import { ACCOUNT_COOKIES } from "@/lib/auth/cookie-names";
 
 // POST /api/access { password, next? }: sign in with a role password (see
 // src/lib/access.ts). The password decides the role; `next` is the page they
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
   const body = await parseBody(req, Body);
   if ("error" in body) return body.error;
   const passwords = rolePasswords();
-  if (!gateOn(passwords)) return ok({ role: null, next: nextAfterSignIn(null, body.data.next) });
+  if (!gateOn(passwords)) return clearPersonalSession(ok({ role: null, next: nextAfterSignIn(null, body.data.next) }), req);
 
   const role = await roleForPassword(body.data.password, passwords);
   if (!role) {
@@ -30,6 +31,12 @@ export async function POST(req: Request) {
   }
   const res = ok({ role, next: nextAfterSignIn(role, body.data.next) });
   res.headers.append("Set-Cookie", cookie(await accessCookieValue(role, passwords[role]!), ACCESS_DAYS * 86400));
+  return clearPersonalSession(res, req);
+}
+
+function clearPersonalSession(res: Response, req: Request) {
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  for (const name of ACCOUNT_COOKIES) res.headers.append("Set-Cookie", `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`);
   return res;
 }
 

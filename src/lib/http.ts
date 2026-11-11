@@ -36,6 +36,7 @@ export async function parseBody<S extends z.ZodType>(
 }
 
 const USER_MESSAGES: Record<string, [number, string]> = {
+  REGISTERED_ACCOUNTS_EXIST: [409, "Demo reset is disabled because registered accounts exist. Their data has been preserved."],
   MENTOR_NOT_BOOKABLE: [409, "This mentor cannot be booked."],
   MENTOR_FULLY_BOOKED: [409, "This mentor is fully booked."],
   BOOKING_ALREADY_ACTIVE: [409, "You already have an active booking with this mentor."],

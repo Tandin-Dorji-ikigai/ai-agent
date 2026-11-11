@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, LogOut } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useDemo } from "@/components/demo-state";
 import { ROLE_LABEL, SIGN_IN_PATH, VIEWER_ROLES, type ViewerRole } from "@/lib/access";
 
 /**
@@ -14,12 +16,17 @@ import { ROLE_LABEL, SIGN_IN_PATH, VIEWER_ROLES, type ViewerRole } from "@/lib/a
  * decides who you are, and the server sends you to your workspace (or to the
  * page you were trying to open, if your role may open it).
  */
-export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { label?: string; submitLabel?: string }) {
+export function SignInForm({ label = "Password", submitLabel = "Sign in", accountMode = false, defaultEmail = "" }: { label?: string; submitLabel?: string; accountMode?: boolean; defaultEmail?: string }) {
+  const { act } = useDemo();
+  const router = useRouter();
   const params = useSearchParams();
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState(defaultEmail);
+  const [remember, setRemember] = useState(false);
+  const [notice, setNotice] = useState("");
   const signedInAs = params.get("signed_in_as") as ViewerRole | null;
   const wrongRole = signedInAs && VIEWER_ROLES.includes(signedInAs) ? signedInAs : null;
 
@@ -28,6 +35,12 @@ export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { la
     setBusy(true);
     setError(null);
     try {
+      if (accountMode) {
+        const result = await act("signin", "/api/auth/signin", { email, password, remember });
+        if (result.ok) { setPassword(""); router.push("/account"); return; }
+        setBusy(false);
+        return;
+      }
       const res = await fetch("/api/access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,12 +60,14 @@ export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { la
 
   return (
     <form className="stack" onSubmit={(e) => void submit(e)}>
-      {wrongRole && (
+      {!accountMode && wrongRole && (
         <Alert>
           <AlertTitle>You are signed in as {ROLE_LABEL[wrongRole]}</AlertTitle>
           <AlertDescription>The page you opened needs a different password. Sign in with it to switch this device.</AlertDescription>
         </Alert>
       )}
+      {notice && <Alert className=""><AlertDescription className="">{notice}</AlertDescription></Alert>}
+      {accountMode && <div className="field"><Label htmlFor="account-email" className="">Email address</Label><Input id="account-email" className="" type="email" autoComplete="username" value={email} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setEmail(event.target.value)} required /></div>}
       <div className="field">
         <Label htmlFor="sign-in-password">{label}</Label>
         <div className="password-field">
@@ -63,12 +78,14 @@ export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { la
             value={password}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
             required
+            maxLength={accountMode ? 128 : 200}
           />
           <Button type="button" variant="ghost" size="icon" className="password-toggle" aria-label={visible ? "Hide password" : "Show password"} onClick={() => setVisible((v) => !v)}>
             {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </Button>
         </div>
       </div>
+      {accountMode && <div className="checkbox-row"><Checkbox id="account-remember" className="" checked={remember} onCheckedChange={(checked: boolean | "indeterminate") => setRemember(checked === true)} /><Label htmlFor="account-remember" className="">Remember me</Label></div>}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -78,6 +95,7 @@ export function SignInForm({ label = "Password", submitLabel = "Sign in" }: { la
         {busy ? "Checking…" : submitLabel}
         <ArrowRight className="size-4" />
       </Button>
+      {accountMode && <Button type="button" variant="link" className="" disabled={busy || !email.trim()} onClick={async () => { setBusy(true); const result = await act("resend", "/api/auth/resend", { email }); if (result.ok) setNotice(String(result.message)); setBusy(false); }}>Resend confirmation email</Button>}
     </form>
   );
 }

@@ -6,6 +6,8 @@ export const districts = ["Bumthang", "Chhukha", "Dagana", "Gasa", "Haa", "Lhuen
 export const entrepreneurSteps = [
   { title: "About you", fields: [
     { name: "fullName", label: "Full name", required: true }, { name: "email", label: "Email address", type: "email", required: true },
+    { name: "password", label: "Password (at least 8 characters)", type: "password", required: true },
+    { name: "confirmPassword", label: "Confirm password", type: "password", required: true },
     { name: "phone", label: "Phone number", type: "tel" }, { name: "district", label: "Dzongkhag", options: districts, required: true },
     { name: "language", label: "Preferred language", options: ["Dzongkha", "English"] },
   ] },
